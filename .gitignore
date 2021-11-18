@@ -1,0 +1,16 @@
+# Package directories
+/node_modules
+/.serverless
+
+# IDE specific files
+.vscode
+
+# Log files
+*.log
+
+# ENV variables and secrets
+.env
+
+# Config files
+**/config.json
+**/secrets.env
