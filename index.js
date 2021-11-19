@@ -143,31 +143,10 @@ var handler = function (event) {
                                                     console.log("Error: failed to extract data from API response");
                                                     return [2 /*return*/];
                                                 }
-                                                // **************************************************************************
-                                                // 4. Read beacon
-                                                // **************************************************************************
-                                                // HACK: whitelisting the requester for now just for testing against local eth node
-                                                //       RrpBeaconServer.readerCanReadBeacon() will be updated to also check if the
-                                                //       reader is the airnode in the template
-                                                //       another option could be to just read UpdatedBeacon events
-                                                // TODO-TEST: REMOVE THIS HACK AFTER FIRST RUN
-                                                return [4 /*yield*/, rrpBeaconServer
-                                                        .connect(airnodeWallet)
-                                                        .setIndefiniteWhitelistStatus(templateId, airnodeWallet.address, true)];
-                                            case 2:
-                                                // **************************************************************************
-                                                // 4. Read beacon
-                                                // **************************************************************************
-                                                // HACK: whitelisting the requester for now just for testing against local eth node
-                                                //       RrpBeaconServer.readerCanReadBeacon() will be updated to also check if the
-                                                //       reader is the airnode in the template
-                                                //       another option could be to just read UpdatedBeacon events
-                                                // TODO-TEST: REMOVE THIS HACK AFTER FIRST RUN
-                                                _b.sent();
                                                 return [4 /*yield*/, rrpBeaconServer
                                                         .connect(airnodeWallet)
                                                         .readBeacon(templateId)];
-                                            case 3:
+                                            case 2:
                                                 beaconResponse = _b.sent();
                                                 // const beaconResponse = { value: ethers.BigNumber.from("683392028") };
                                                 if (!beaconResponse) {
@@ -197,7 +176,7 @@ var handler = function (event) {
                                                 return [4 /*yield*/, rrpBeaconServer
                                                         .connect(airnodeWallet)
                                                         .requestBeaconUpdate(templateId, airnodeWallet.address, sponsorWalletAddress)];
-                                            case 4:
+                                            case 3:
                                                 // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
                                                 // When using config.json.example we must pass a "from" parameter and the only
                                                 // way to get this request to work is if we add it a fixedParameter in the node

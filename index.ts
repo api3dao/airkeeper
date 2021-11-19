@@ -114,19 +114,6 @@ export const handler = async (event: any = {}): Promise<any> => {
             // **************************************************************************
             // 4. Read beacon
             // **************************************************************************
-            // HACK: whitelisting the requester for now just for testing against local eth node
-            //       RrpBeaconServer.readerCanReadBeacon() will be updated to also check if the
-            //       reader is the airnode in the template
-            //       another option could be to just read UpdatedBeacon events
-            // TODO-TEST: REMOVE THIS HACK AFTER FIRST RUN
-            // await rrpBeaconServer
-            //   .connect(airnodeWallet)
-            //   .setIndefiniteWhitelistStatus(
-            //     templateId,
-            //     airnodeWallet.address,
-            //     true
-            //   );
-
             //TODO: check if templateId exists?
 
             //TODO: call readerCanReadBeacon() first?
