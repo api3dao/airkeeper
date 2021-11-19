@@ -72,6 +72,8 @@ var evm_provider_1 = require("./node/evm-provider");
 var parameters_1 = require("./node/parameters");
 //TODO: remove and use @api3/airnode-node import
 var object_utils_1 = require("./node/object-utils");
+//TODO: remove and use @api3/airnode-node import
+var wallet_1 = require("./node/wallet");
 //TODO: remove and use "@api3/airnode-protocol" import;
 var RrpBeaconServer_json_1 = __importDefault(require("./RrpBeaconServer.json"));
 var handler = function (event) {
@@ -92,124 +94,121 @@ var handler = function (event) {
                 .forEach(function (chain) { return __awaiter(void 0, void 0, void 0, function () {
                 return __generator(this, function (_a) {
                     (0, lodash_1.each)(chain.providers, function (_, providerName) { return __awaiter(void 0, void 0, void 0, function () {
-                        var chainProviderUrl, provider, address, abi, rrpBeaconServer, airnodeWallet, templateId, beaconResponse, endpoint, reservedParameters, apiCredentials, options, apiResponse, apiValue, extracted, delta, deviation, tolerance, _a, _b, _c, sponsorWalletAddress;
-                        return __generator(this, function (_d) {
-                            switch (_d.label) {
-                                case 0:
-                                    chainProviderUrl = chain.providers[providerName].url || "";
-                                    provider = (0, evm_provider_1.buildEVMProvider)(chainProviderUrl, chain.id);
-                                    address = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
-                                    abi = RrpBeaconServer_json_1.default.abi;
-                                    rrpBeaconServer = new ethers.Contract(address, abi, provider);
-                                    airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic).connect(provider);
-                                    templateId = "0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d";
-                                    // HACK: whitelisting the requester for now just for testing against local eth node
-                                    //       workaround could be to update RrpBeaconServer.readerCanReadBeacon() to also
-                                    //       check if the reader is the airnode in the template
-                                    //       another option is to just read UpdatedBeacon events and get the latests one
-                                    // TODO-TEST: REMOVE THIS HACK AFTER FIRST RUN
-                                    return [4 /*yield*/, rrpBeaconServer
-                                            .connect(airnodeWallet)
-                                            .setIndefiniteWhitelistStatus(templateId, airnodeWallet.address, true)];
-                                case 1:
-                                    // HACK: whitelisting the requester for now just for testing against local eth node
-                                    //       workaround could be to update RrpBeaconServer.readerCanReadBeacon() to also
-                                    //       check if the reader is the airnode in the template
-                                    //       another option is to just read UpdatedBeacon events and get the latests one
-                                    // TODO-TEST: REMOVE THIS HACK AFTER FIRST RUN
-                                    _d.sent();
-                                    return [4 /*yield*/, rrpBeaconServer
-                                            .connect(airnodeWallet)
-                                            .readBeacon(templateId)];
-                                case 2:
-                                    beaconResponse = _d.sent();
-                                    // const beaconResponse = { value: ethers.BigNumber.from("683392028") };
-                                    if (!beaconResponse) {
-                                        console.log("Error: failed to fetch data from beacon server");
-                                        return [2 /*return*/];
-                                    }
-                                    console.log("Info: beacon server value", beaconResponse.value);
-                                    endpoint = config.ois[0].endpoints[0];
-                                    reservedParameters = (0, parameters_1.getReservedParameters)(endpoint, {});
-                                    if (!reservedParameters._type) {
-                                        console.log("Error: missing type reserved parameter");
-                                        return [2 /*return*/];
-                                    }
-                                    apiCredentials = config.apiCredentials.map(function (c) { return (0, object_utils_1.removeKey)(c, "oisTitle"); });
-                                    options = {
-                                        endpointName: endpoint.name,
-                                        parameters: { to: "USD", from: "ETH" },
-                                        metadataParameters: {},
-                                        ois: config.ois[0],
-                                        apiCredentials: apiCredentials,
-                                    };
-                                    return [4 /*yield*/, adapter.buildAndExecuteRequest(options)];
-                                case 3:
-                                    apiResponse = _d.sent();
-                                    if (!apiResponse || !apiResponse.data) {
-                                        console.log("Error: failed to fetch data from API");
-                                        return [2 /*return*/];
-                                    }
-                                    console.log("Info: API server value", apiResponse.data);
-                                    if (apiResponse.data === 0) {
-                                        console.log("Error: API responded with value of 0");
-                                        return [2 /*return*/];
-                                    }
-                                    try {
-                                        extracted = adapter.extractAndEncodeResponse(apiResponse.data, reservedParameters);
-                                        apiValue = ethers.BigNumber.from(adapter.bigNumberToString(extracted.value));
-                                    }
-                                    catch (e) {
-                                        console.log("Error: failed to extract data from API response");
-                                        return [2 /*return*/];
-                                    }
-                                    delta = beaconResponse.value.sub(apiValue).abs();
-                                    if (delta.eq(0)) {
-                                        console.log("Info: beacon is up-to-date. skipping update");
-                                        return [2 /*return*/];
-                                    }
-                                    deviation = delta
-                                        .mul(100 * Number(reservedParameters._times)) // TODO: can _times be null or 0?
-                                        .div(apiValue);
-                                    console.log("Info: deviation %", deviation.toNumber() / Number(reservedParameters._times));
-                                    tolerance = 5;
-                                    if (deviation.lte(tolerance * Number(reservedParameters._times))) {
-                                        console.log("Info: delta between beacon and api value is within tolerance range. skipping update");
-                                        return [2 /*return*/];
-                                    }
-                                    /*
-                                     * 1. Airnode must first call setSponsorshipStatus(rrpBeaconServer.address, true) to
-                                     *    enable the beacon server to make requests to AirnodeRrp
-                                     * 2. Sponsor should then call setUpdatePermissionStatus(airnodeWallet.address, true)
-                                     *    to allow requester to update beacon
-                                     */
-                                    _b = (_a = console).log;
-                                    _c = ["🚀 ~ file: index.ts ~ line 161 ~ handler ~ await rrpBeaconServer.sponsorToUpdateRequesterToPermissionStatus()"];
-                                    return [4 /*yield*/, rrpBeaconServer.sponsorToUpdateRequesterToPermissionStatus(airnodeWallet.address, airnodeWallet.address)];
-                                case 4:
-                                    /*
-                                     * 1. Airnode must first call setSponsorshipStatus(rrpBeaconServer.address, true) to
-                                     *    enable the beacon server to make requests to AirnodeRrp
-                                     * 2. Sponsor should then call setUpdatePermissionStatus(airnodeWallet.address, true)
-                                     *    to allow requester to update beacon
-                                     */
-                                    _b.apply(_a, _c.concat([_d.sent()]));
-                                    sponsorWalletAddress = "0x2f492fA825f351427315378e8449a7A4D2a2565d";
-                                    // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
-                                    // When using config.json.example we must pass a "from" parameter and the only
-                                    // way to get this request to work is if we add it a fixedParameter in the node
-                                    // config file
-                                    return [4 /*yield*/, rrpBeaconServer
-                                            .connect(airnodeWallet)
-                                            .requestBeaconUpdate(templateId, airnodeWallet.address, sponsorWalletAddress)];
-                                case 5:
-                                    // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
-                                    // When using config.json.example we must pass a "from" parameter and the only
-                                    // way to get this request to work is if we add it a fixedParameter in the node
-                                    // config file
-                                    _d.sent();
-                                    return [2 /*return*/];
-                            }
+                        var chainProviderUrl, provider, abi, rrpBeaconServer, airnodeWallet;
+                        return __generator(this, function (_a) {
+                            chainProviderUrl = chain.providers[providerName].url || "";
+                            provider = (0, evm_provider_1.buildEVMProvider)(chainProviderUrl, chain.id);
+                            abi = RrpBeaconServer_json_1.default.abi;
+                            rrpBeaconServer = new ethers.Contract(chain.contracts.RrpBeaconServer, abi, provider);
+                            airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic).connect(provider);
+                            config.triggers.rrp.forEach(function (_a) {
+                                var templateId = _a.templateId, endpointId = _a.endpointId, oisTitle = _a.oisTitle, endpointName = _a.endpointName;
+                                return __awaiter(void 0, void 0, void 0, function () {
+                                    var ois, endpoint, reservedParameters, apiCredentials, options, apiResponse, apiValue, extracted, beaconResponse, delta, deviation, tolerance, sponsorWalletAddress;
+                                    return __generator(this, function (_b) {
+                                        switch (_b.label) {
+                                            case 0:
+                                                ois = config.ois.find(function (o) { return o.title === oisTitle; });
+                                                endpoint = ois.endpoints.find(function (e) { return e.name === endpointName; });
+                                                reservedParameters = (0, parameters_1.getReservedParameters)(endpoint, {});
+                                                if (!reservedParameters._type) {
+                                                    console.log("Error: missing type reserved parameter");
+                                                    return [2 /*return*/];
+                                                }
+                                                apiCredentials = config.apiCredentials.map(function (c) { return (0, object_utils_1.removeKey)(c, "oisTitle"); });
+                                                options = {
+                                                    endpointName: endpointName,
+                                                    parameters: { to: "USD", from: "ETH" },
+                                                    metadataParameters: {},
+                                                    ois: ois,
+                                                    apiCredentials: apiCredentials,
+                                                };
+                                                return [4 /*yield*/, adapter.buildAndExecuteRequest(options)];
+                                            case 1:
+                                                apiResponse = _b.sent();
+                                                if (!apiResponse || !apiResponse.data) {
+                                                    console.log("Error: failed to fetch data from API");
+                                                    return [2 /*return*/];
+                                                }
+                                                console.log("Info: API server value", apiResponse.data);
+                                                if (apiResponse.data === 0) {
+                                                    console.log("Error: API responded with value of 0");
+                                                    return [2 /*return*/];
+                                                }
+                                                try {
+                                                    extracted = adapter.extractAndEncodeResponse(apiResponse.data, reservedParameters);
+                                                    apiValue = ethers.BigNumber.from(adapter.bigNumberToString(extracted.value));
+                                                }
+                                                catch (e) {
+                                                    console.log("Error: failed to extract data from API response");
+                                                    return [2 /*return*/];
+                                                }
+                                                // **************************************************************************
+                                                // 4. Read beacon
+                                                // **************************************************************************
+                                                // HACK: whitelisting the requester for now just for testing against local eth node
+                                                //       RrpBeaconServer.readerCanReadBeacon() will be updated to also check if the
+                                                //       reader is the airnode in the template
+                                                //       another option could be to just read UpdatedBeacon events
+                                                // TODO-TEST: REMOVE THIS HACK AFTER FIRST RUN
+                                                return [4 /*yield*/, rrpBeaconServer
+                                                        .connect(airnodeWallet)
+                                                        .setIndefiniteWhitelistStatus(templateId, airnodeWallet.address, true)];
+                                            case 2:
+                                                // **************************************************************************
+                                                // 4. Read beacon
+                                                // **************************************************************************
+                                                // HACK: whitelisting the requester for now just for testing against local eth node
+                                                //       RrpBeaconServer.readerCanReadBeacon() will be updated to also check if the
+                                                //       reader is the airnode in the template
+                                                //       another option could be to just read UpdatedBeacon events
+                                                // TODO-TEST: REMOVE THIS HACK AFTER FIRST RUN
+                                                _b.sent();
+                                                return [4 /*yield*/, rrpBeaconServer
+                                                        .connect(airnodeWallet)
+                                                        .readBeacon(templateId)];
+                                            case 3:
+                                                beaconResponse = _b.sent();
+                                                // const beaconResponse = { value: ethers.BigNumber.from("683392028") };
+                                                if (!beaconResponse) {
+                                                    console.log("Error: failed to fetch data from beacon server");
+                                                    return [2 /*return*/];
+                                                }
+                                                console.log("Info: beacon server value", beaconResponse.value);
+                                                delta = beaconResponse.value.sub(apiValue).abs();
+                                                if (delta.eq(0)) {
+                                                    console.log("Info: beacon is up-to-date. skipping update");
+                                                    return [2 /*return*/];
+                                                }
+                                                deviation = delta
+                                                    .mul(100 * Number(reservedParameters._times)) // TODO: can _times be null or 0?
+                                                    .div(apiValue);
+                                                console.log("Info: deviation %", deviation.toNumber() / Number(reservedParameters._times));
+                                                tolerance = 5;
+                                                if (deviation.lte(tolerance * Number(reservedParameters._times))) {
+                                                    console.log("Info: delta between beacon and api value is within tolerance range. skipping update");
+                                                    return [2 /*return*/];
+                                                }
+                                                sponsorWalletAddress = (0, wallet_1.deriveSponsorWallet)(ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic), airnodeWallet.address).address;
+                                                // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
+                                                // When using config.json.example we must pass a "from" parameter and the only
+                                                // way to get this request to work is if we add it a fixedParameter in the node
+                                                // config file
+                                                return [4 /*yield*/, rrpBeaconServer
+                                                        .connect(airnodeWallet)
+                                                        .requestBeaconUpdate(templateId, airnodeWallet.address, sponsorWalletAddress)];
+                                            case 4:
+                                                // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
+                                                // When using config.json.example we must pass a "from" parameter and the only
+                                                // way to get this request to work is if we add it a fixedParameter in the node
+                                                // config file
+                                                _b.sent();
+                                                return [2 /*return*/];
+                                        }
+                                    });
+                                });
+                            });
+                            return [2 /*return*/];
                         });
                     }); });
                     return [2 /*return*/];
