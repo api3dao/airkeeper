@@ -1,4 +1,15 @@
 "use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
@@ -60,18 +71,20 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handler = void 0;
 var adapter = __importStar(require("@api3/airnode-adapter"));
+var node = __importStar(require("@api3/airnode-node"));
+var airnode_protocol_1 = require("@api3/airnode-protocol");
 var dotenv = __importStar(require("dotenv"));
 var ethers = __importStar(require("ethers"));
 var fs = __importStar(require("fs"));
-var path = __importStar(require("path"));
-var node = __importStar(require("@api3/airnode-node"));
 var lodash_1 = require("lodash");
+var path = __importStar(require("path"));
+var abi_encoding_1 = require("./node/abi-encoding");
 //TODO: remove and use @api3/airnode-node import
 var evm_provider_1 = require("./node/evm-provider");
 //TODO: remove and use @api3/airnode-node import
-var parameters_1 = require("./node/parameters");
-//TODO: remove and use @api3/airnode-node import
 var object_utils_1 = require("./node/object-utils");
+//TODO: remove and use @api3/airnode-node import
+var parameters_1 = require("./node/parameters");
 //TODO: remove and use @api3/airnode-node import
 var wallet_1 = require("./node/wallet");
 //TODO: remove and use "@api3/airnode-protocol" import;
@@ -79,13 +92,13 @@ var RrpBeaconServer_json_1 = __importDefault(require("./RrpBeaconServer.json"));
 var handler = function (event) {
     if (event === void 0) { event = {}; }
     return __awaiter(void 0, void 0, void 0, function () {
-        var secretsPath, secrets, configPath, config, chains, response;
+        var secretsPath, secrets, configPath, config, chains, nodeSettings, triggers, ois, apiCredentials, response;
         return __generator(this, function (_a) {
             secretsPath = path.resolve(__dirname + "/config/secrets.env");
             secrets = dotenv.parse(fs.readFileSync(secretsPath));
             configPath = path.resolve(__dirname + "/config/config.json");
             config = node.config.parseConfig(configPath, secrets);
-            chains = config.chains;
+            chains = config.chains, nodeSettings = config.nodeSettings, triggers = config.triggers, ois = config.ois, apiCredentials = config.apiCredentials;
             if ((0, lodash_1.isEmpty)(chains)) {
                 throw new Error("One or more chains must be defined in the provided config");
             }
@@ -94,37 +107,47 @@ var handler = function (event) {
                 .forEach(function (chain) { return __awaiter(void 0, void 0, void 0, function () {
                 return __generator(this, function (_a) {
                     (0, lodash_1.each)(chain.providers, function (_, providerName) { return __awaiter(void 0, void 0, void 0, function () {
-                        var chainProviderUrl, provider, abi, rrpBeaconServer, airnodeWallet;
+                        var chainProviderUrl, provider, airnodeRrp, abi, rrpBeaconServer, airnodeWallet;
                         return __generator(this, function (_a) {
                             chainProviderUrl = chain.providers[providerName].url || "";
                             provider = (0, evm_provider_1.buildEVMProvider)(chainProviderUrl, chain.id);
+                            airnodeRrp = airnode_protocol_1.AirnodeRrpFactory.connect(chain.contracts.AirnodeRrp, provider);
                             abi = RrpBeaconServer_json_1.default.abi;
                             rrpBeaconServer = new ethers.Contract(chain.contracts.RrpBeaconServer, abi, provider);
-                            airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic).connect(provider);
-                            config.triggers.rrp.forEach(function (_a) {
+                            airnodeWallet = ethers.Wallet.fromMnemonic(nodeSettings.airnodeWalletMnemonic).connect(provider);
+                            // TODO: should templateId come from triggers
+                            triggers.rrp.forEach(function (_a) {
                                 var templateId = _a.templateId, endpointId = _a.endpointId, oisTitle = _a.oisTitle, endpointName = _a.endpointName;
                                 return __awaiter(void 0, void 0, void 0, function () {
-                                    var ois, endpoint, reservedParameters, apiCredentials, options, apiResponse, apiValue, extracted, beaconResponse, delta, deviation, tolerance, sponsorWalletAddress;
+                                    var oisByTitle, endpoint, adapterApiCredentials, reservedParameters, template, templateParameters, sanitizedParameters, options, apiResponse, apiValue, response_1, beaconResponse, delta, deviation, tolerance, sponsorWalletAddress;
                                     return __generator(this, function (_b) {
                                         switch (_b.label) {
                                             case 0:
-                                                ois = config.ois.find(function (o) { return o.title === oisTitle; });
-                                                endpoint = ois.endpoints.find(function (e) { return e.name === endpointName; });
+                                                oisByTitle = ois.find(function (o) { return o.title === oisTitle; });
+                                                endpoint = oisByTitle.endpoints.find(function (e) { return e.name === endpointName; });
+                                                adapterApiCredentials = config.apiCredentials.map(function (c) { return (0, object_utils_1.removeKey)(c, "oisTitle"); });
                                                 reservedParameters = (0, parameters_1.getReservedParameters)(endpoint, {});
                                                 if (!reservedParameters._type) {
                                                     console.log("Error: missing type reserved parameter");
                                                     return [2 /*return*/];
                                                 }
-                                                apiCredentials = config.apiCredentials.map(function (c) { return (0, object_utils_1.removeKey)(c, "oisTitle"); });
+                                                return [4 /*yield*/, airnodeRrp.templates(templateId)];
+                                            case 1:
+                                                template = _b.sent();
+                                                if (!template) {
+                                                    console.log("Error: template not found");
+                                                }
+                                                templateParameters = (0, abi_encoding_1.safeDecode)(template.parameters);
+                                                sanitizedParameters = (0, object_utils_1.removeKeys)(templateParameters || {}, parameters_1.RESERVED_PARAMETERS);
                                                 options = {
                                                     endpointName: endpointName,
-                                                    parameters: { to: "USD", from: "ETH" },
+                                                    parameters: __assign(__assign({}, sanitizedParameters), { from: "ETH" }),
                                                     metadataParameters: {},
-                                                    ois: ois,
-                                                    apiCredentials: apiCredentials,
+                                                    ois: oisByTitle,
+                                                    apiCredentials: adapterApiCredentials,
                                                 };
                                                 return [4 /*yield*/, adapter.buildAndExecuteRequest(options)];
-                                            case 1:
+                                            case 2:
                                                 apiResponse = _b.sent();
                                                 if (!apiResponse || !apiResponse.data) {
                                                     console.log("Error: failed to fetch data from API");
@@ -136,8 +159,8 @@ var handler = function (event) {
                                                     return [2 /*return*/];
                                                 }
                                                 try {
-                                                    extracted = adapter.extractAndEncodeResponse(apiResponse.data, reservedParameters);
-                                                    apiValue = ethers.BigNumber.from(adapter.bigNumberToString(extracted.value));
+                                                    response_1 = adapter.extractAndEncodeResponse(apiResponse.data, reservedParameters);
+                                                    apiValue = ethers.BigNumber.from(adapter.bigNumberToString(response_1.value));
                                                 }
                                                 catch (e) {
                                                     console.log("Error: failed to extract data from API response");
@@ -146,7 +169,7 @@ var handler = function (event) {
                                                 return [4 /*yield*/, rrpBeaconServer
                                                         .connect(airnodeWallet)
                                                         .readBeacon(templateId)];
-                                            case 2:
+                                            case 3:
                                                 beaconResponse = _b.sent();
                                                 // const beaconResponse = { value: ethers.BigNumber.from("683392028") };
                                                 if (!beaconResponse) {
@@ -168,7 +191,7 @@ var handler = function (event) {
                                                     console.log("Info: delta between beacon and api value is within tolerance range. skipping update");
                                                     return [2 /*return*/];
                                                 }
-                                                sponsorWalletAddress = (0, wallet_1.deriveSponsorWallet)(ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic), airnodeWallet.address).address;
+                                                sponsorWalletAddress = (0, wallet_1.deriveSponsorWallet)(ethers.utils.HDNode.fromMnemonic(nodeSettings.airnodeWalletMnemonic), airnodeWallet.address).address;
                                                 // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
                                                 // When using config.json.example we must pass a "from" parameter and the only
                                                 // way to get this request to work is if we add it a fixedParameter in the node
@@ -176,7 +199,7 @@ var handler = function (event) {
                                                 return [4 /*yield*/, rrpBeaconServer
                                                         .connect(airnodeWallet)
                                                         .requestBeaconUpdate(templateId, airnodeWallet.address, sponsorWalletAddress)];
-                                            case 3:
+                                            case 4:
                                                 // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
                                                 // When using config.json.example we must pass a "from" parameter and the only
                                                 // way to get this request to work is if we add it a fixedParameter in the node

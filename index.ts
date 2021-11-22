@@ -1,16 +1,18 @@
 import * as adapter from "@api3/airnode-adapter";
+import * as node from "@api3/airnode-node";
+import { AirnodeRrpFactory } from "@api3/airnode-protocol";
 import * as dotenv from "dotenv";
 import * as ethers from "ethers";
 import * as fs from "fs";
-import * as path from "path";
-import * as node from "@api3/airnode-node";
 import { each, isEmpty } from "lodash";
+import * as path from "path";
+import { safeDecode } from "./node/abi-encoding";
 //TODO: remove and use @api3/airnode-node import
 import { buildEVMProvider } from "./node/evm-provider";
 //TODO: remove and use @api3/airnode-node import
-import { getReservedParameters } from "./node/parameters";
+import { removeKey, removeKeys } from "./node/object-utils";
 //TODO: remove and use @api3/airnode-node import
-import { removeKey } from "./node/object-utils";
+import { getReservedParameters, RESERVED_PARAMETERS } from "./node/parameters";
 //TODO: remove and use @api3/airnode-node import
 import { deriveSponsorWallet } from "./node/wallet";
 //TODO: remove and use "@api3/airnode-protocol" import;
@@ -26,7 +28,7 @@ export const handler = async (event: any = {}): Promise<any> => {
   const configPath = path.resolve(`${__dirname}/config/config.json`);
   const config = node.config.parseConfig(configPath, secrets);
 
-  const { chains } = config;
+  const { chains, nodeSettings, triggers, ois, apiCredentials } = config;
   if (isEmpty(chains)) {
     throw new Error(
       "One or more chains must be defined in the provided config"
@@ -37,10 +39,15 @@ export const handler = async (event: any = {}): Promise<any> => {
     .forEach(async (chain: node.ChainConfig) => {
       each(chain.providers, async (_, providerName) => {
         // **************************************************************************
-        // 2. Init provider, RrpBeaconServer and airnode wallet
+        // 2. Init provider, AirnodeRrp, RrpBeaconServer and Airnode wallet
         // **************************************************************************
         const chainProviderUrl = chain.providers[providerName].url || "";
         const provider = buildEVMProvider(chainProviderUrl, chain.id);
+
+        const airnodeRrp = AirnodeRrpFactory.connect(
+          chain.contracts.AirnodeRrp,
+          provider
+        );
 
         // TODO: use factory class to create contract instead
         //   const rrpBeaconServer = RrpBeaconServerFactory.connect(RrpBeaconServer.address, provider);
@@ -52,18 +59,22 @@ export const handler = async (event: any = {}): Promise<any> => {
         );
 
         const airnodeWallet = ethers.Wallet.fromMnemonic(
-          config.nodeSettings.airnodeWalletMnemonic
+          nodeSettings.airnodeWalletMnemonic
         ).connect(provider);
 
-        config.triggers.rrp.forEach(
+        // TODO: should templateId come from triggers or somewhere else?
+        triggers.rrp.forEach(
           async ({ templateId, endpointId, oisTitle, endpointName }: any) => {
             // **************************************************************************
             // 3. Make API request
             // **************************************************************************
-            const ois = config.ois.find((o) => o.title === oisTitle)!;
-            const endpoint = ois.endpoints.find(
+            const oisByTitle = ois.find((o) => o.title === oisTitle)!;
+            const endpoint = oisByTitle.endpoints.find(
               (e) => e.name === endpointName
             )!;
+            const adapterApiCredentials = apiCredentials.map(
+              (c) => removeKey(c, "oisTitle") as adapter.ApiCredentials
+            );
 
             const reservedParameters = getReservedParameters(endpoint, {});
             if (!reservedParameters._type) {
@@ -71,16 +82,22 @@ export const handler = async (event: any = {}): Promise<any> => {
               return;
             }
 
-            const apiCredentials = config.apiCredentials.map(
-              (c) => removeKey(c, "oisTitle") as adapter.ApiCredentials
+            const template = await airnodeRrp.templates(templateId);
+            if (!template) {
+              console.log("Error: template not found");
+            }
+            const templateParameters = safeDecode(template.parameters);
+            const sanitizedParameters: adapter.Parameters = removeKeys(
+              templateParameters || {},
+              RESERVED_PARAMETERS
             );
 
             const options: adapter.BuildRequestOptions = {
               endpointName,
-              parameters: { to: "USD", from: "ETH" }, // TODO: fix hardcoded values
+              parameters: { ...sanitizedParameters, from: "ETH" }, // TODO: fix hardcoded from param
               metadataParameters: {}, // TODO: fix hardcoded values
-              ois,
-              apiCredentials,
+              ois: oisByTitle,
+              apiCredentials: adapterApiCredentials,
             };
 
             const apiResponse = await adapter.buildAndExecuteRequest(options);
@@ -96,15 +113,12 @@ export const handler = async (event: any = {}): Promise<any> => {
 
             let apiValue: ethers.BigNumber;
             try {
-              const extracted: {
-                value: adapter.ValueType;
-                encodedValue: string;
-              } = adapter.extractAndEncodeResponse(
+              const response = adapter.extractAndEncodeResponse(
                 apiResponse.data,
                 reservedParameters as adapter.ReservedParameters
               );
               apiValue = ethers.BigNumber.from(
-                adapter.bigNumberToString(extracted.value as any)
+                adapter.bigNumberToString(response.value as any)
               );
             } catch (e) {
               console.log("Error: failed to extract data from API response");
@@ -114,10 +128,6 @@ export const handler = async (event: any = {}): Promise<any> => {
             // **************************************************************************
             // 4. Read beacon
             // **************************************************************************
-            //TODO: check if templateId exists?
-
-            //TODO: call readerCanReadBeacon() first?
-
             const beaconResponse = await rrpBeaconServer
               .connect(airnodeWallet)
               .readBeacon(templateId);
@@ -181,7 +191,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             // it's kinda weird to have to derive the sponsor wallet for the airnode wallet
             const sponsorWalletAddress = deriveSponsorWallet(
               ethers.utils.HDNode.fromMnemonic(
-                config.nodeSettings.airnodeWalletMnemonic
+                nodeSettings.airnodeWalletMnemonic
               ),
               airnodeWallet.address
             ).address;
