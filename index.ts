@@ -128,8 +128,13 @@ export const handler = async (event: any = {}): Promise<any> => {
             // **************************************************************************
             // 4. Read beacon
             // **************************************************************************
+            // address(0) is considered whitelisted
+            const voidSigner = new ethers.VoidSigner(
+              ethers.constants.AddressZero,
+              provider
+            );
             const beaconResponse = await rrpBeaconServer
-              .connect(airnodeWallet)
+              .connect(voidSigner)
               .readBeacon(templateId);
             // const beaconResponse = { value: ethers.BigNumber.from("683392028") };
 
