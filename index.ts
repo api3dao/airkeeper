@@ -78,13 +78,13 @@ export const handler = async (event: any = {}): Promise<any> => {
 
             const reservedParameters = getReservedParameters(endpoint, {});
             if (!reservedParameters._type) {
-              console.log("Error: missing type reserved parameter");
+              console.log("[ERROR] missing type reserved parameter");
               return;
             }
 
             const template = await airnodeRrp.templates(templateId);
             if (!template) {
-              console.log("Error: template not found");
+              console.log("[ERROR] template not found");
             }
             const templateParameters = safeDecode(template.parameters);
             const sanitizedParameters: adapter.Parameters = removeKeys(
@@ -102,12 +102,12 @@ export const handler = async (event: any = {}): Promise<any> => {
 
             const apiResponse = await adapter.buildAndExecuteRequest(options);
             if (!apiResponse || !apiResponse.data) {
-              console.log("Error: failed to fetch data from API");
+              console.log("[ERROR] failed to fetch data from API");
               return;
             }
-            console.log("Info: API server value", apiResponse.data);
+            console.log("[INFO] API server response data:", apiResponse.data);
             if (apiResponse.data === 0) {
-              console.log("Error: API responded with value of 0");
+              console.log("[ERROR] API responded with value of 0");
               return;
             }
 
@@ -120,8 +120,10 @@ export const handler = async (event: any = {}): Promise<any> => {
               apiValue = ethers.BigNumber.from(
                 adapter.bigNumberToString(response.value as any)
               );
+
+              console.log("[INFO] API server value:", apiValue.toNumber());
             } catch (e) {
-              console.log("Error: failed to extract data from API response");
+              console.log("[ERROR] failed to extract data from API response");
               return;
             }
 
@@ -136,29 +138,31 @@ export const handler = async (event: any = {}): Promise<any> => {
             const beaconResponse = await rrpBeaconServer
               .connect(voidSigner)
               .readBeacon(templateId);
-            // const beaconResponse = { value: ethers.BigNumber.from("683392028") };
 
             if (!beaconResponse) {
-              console.log("Error: failed to fetch data from beacon server");
+              console.log("[ERROR] failed to fetch data from beacon server");
               return;
             }
-            console.log("Info: beacon server value", beaconResponse.value);
+            console.log(
+              "[INFO] beacon server value:",
+              beaconResponse.value.toNumber()
+            );
 
             // **************************************************************************
             // 5. Check deviation
             // **************************************************************************
             const delta = beaconResponse.value.sub(apiValue).abs();
             if (delta.eq(0)) {
-              console.log("Info: beacon is up-to-date. skipping update");
+              console.log("[INFO] beacon is up-to-date. skipping update");
               return;
             }
 
-            const deviation = delta
-              .mul(100 * Number(reservedParameters._times)) // TODO: can _times be null or 0?
-              .div(apiValue);
+            const times = ethers.BigNumber.from(reservedParameters._times || 1);
+            const basisPoints = ethers.utils.parseEther("1.0").div(100);
+            const deviation = delta.mul(basisPoints).div(apiValue).div(times);
             console.log(
-              "Info: deviation %",
-              deviation.toNumber() / Number(reservedParameters._times)
+              "[INFO] deviation (%):",
+              deviation.toNumber() / times.mul(100).toNumber()
             );
 
             // **************************************************************************
@@ -170,10 +174,10 @@ export const handler = async (event: any = {}): Promise<any> => {
             // track of the pending requests using a templateId
 
             // TODO: 5% is hardcoded, should this be read from config?
-            const tolerance = 5;
-            if (deviation.lte(tolerance * Number(reservedParameters._times))) {
+            const tolerance = ethers.BigNumber.from(5).mul(times.mul(100));
+            if (deviation.lte(tolerance)) {
               console.log(
-                "Info: delta between beacon and api value is within tolerance range. skipping update"
+                "[INFO] delta between beacon and api value is within tolerance range. skipping update"
               );
               return;
             }
@@ -217,6 +221,6 @@ export const handler = async (event: any = {}): Promise<any> => {
       });
     });
 
-  const response = { ok: true, data: { message: "Beacon update completed" } };
+  const response = { ok: true, data: { message: "Beacon update requested" } };
   return { statusCode: 200, body: JSON.stringify(response) };
 };
