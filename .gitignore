@@ -1,5 +1,6 @@
 # Package directories
 /node_modules
+/dist
 /.serverless
 
 # IDE specific files

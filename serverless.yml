@@ -7,5 +7,5 @@ provider:
 
 functions:
   updateBeacon:
-    handler: index.handler
+    handler: dist/index.handler
     name: airkeeper-update-beacon

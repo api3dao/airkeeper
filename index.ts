@@ -22,10 +22,10 @@ export const handler = async (event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
-  const secretsPath = path.resolve(`${__dirname}/config/secrets.env`);
+  const secretsPath = path.resolve(`${__dirname}/../config/secrets.env`);
   const secrets = dotenv.parse(fs.readFileSync(secretsPath));
 
-  const configPath = path.resolve(`${__dirname}/config/config.json`);
+  const configPath = path.resolve(`${__dirname}/../config/config.json`);
   const config = node.config.parseConfig(configPath, secrets);
 
   const { chains, nodeSettings, triggers, ois, apiCredentials } = config;
