@@ -3,13 +3,14 @@ service: airkeeper
 provider:
   name: aws
   runtime: nodejs12.x
+  memorySize: 512
   lambdaHashingVersion: 20201221
 
 functions:
   updateBeacon:
     handler: dist/index.handler
     name: airkeeper-update-beacon
-    timeout: 60
-    reservedConcurrency: 1
-    events:
-      - schedule: rate(1 minute)
+    # timeout: 60
+    # reservedConcurrency: 1
+    # events:
+    #   - schedule: rate(1 minute)

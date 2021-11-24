@@ -4,29 +4,38 @@ import { AirnodeRrpFactory } from "@api3/airnode-protocol";
 import * as dotenv from "dotenv";
 import * as ethers from "ethers";
 import * as fs from "fs";
-import { each, isEmpty } from "lodash";
+import { each, isEmpty, merge } from "lodash";
 import * as path from "path";
-import { safeDecode } from "./node/abi-encoding";
 //TODO: remove and use @api3/airnode-node import
-import { buildEVMProvider } from "./node/evm-provider";
+import { safeDecode } from "./../node/abi-encoding";
 //TODO: remove and use @api3/airnode-node import
-import { removeKey, removeKeys } from "./node/object-utils";
+import { buildEVMProvider } from "./../node/evm-provider";
 //TODO: remove and use @api3/airnode-node import
-import { getReservedParameters, RESERVED_PARAMETERS } from "./node/parameters";
+import { removeKey, removeKeys } from "./../node/object-utils";
 //TODO: remove and use @api3/airnode-node import
-import { deriveSponsorWallet } from "./node/wallet";
+import {
+  getReservedParameters,
+  RESERVED_PARAMETERS,
+} from "./../node/parameters";
+//TODO: remove and use @api3/airnode-node import
+import {
+  deriveSponsorWallet,
+  deriveWalletPathFromSponsorAddress,
+} from "./../node/wallet";
 //TODO: remove and use "@api3/airnode-protocol" import;
-import RrpBeaconServer from "./RrpBeaconServer.json";
+import RrpBeaconServer from "./../RrpBeaconServer.json";
+import { Config } from "./types";
 
 export const handler = async (event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
-  const secretsPath = path.resolve(`${__dirname}/../config/secrets.env`);
+  const secretsPath = path.resolve(`${__dirname}/../../config/secrets.env`);
   const secrets = dotenv.parse(fs.readFileSync(secretsPath));
-
-  const configPath = path.resolve(`${__dirname}/../config/config.json`);
-  const config = node.config.parseConfig(configPath, secrets);
+  const nodeConfigPath = path.resolve(`${__dirname}/../../config/airnode.json`);
+  const nodeConfig = node.config.parseConfig(nodeConfigPath, secrets);
+  const keeperConfig = loadAirkeeperConfig();
+  const config = merge(nodeConfig, keeperConfig);
 
   const { chains, nodeSettings, triggers, ois, apiCredentials } = config;
   if (isEmpty(chains)) {
@@ -35,8 +44,8 @@ export const handler = async (event: any = {}): Promise<any> => {
     );
   }
   chains
-    .filter((chain: node.ChainConfig) => chain.type === "evm")
-    .forEach(async (chain: node.ChainConfig) => {
+    .filter((chain) => chain.type === "evm")
+    .forEach(async (chain) => {
       each(chain.providers, async (_, providerName) => {
         // **************************************************************************
         // 2. Init provider, AirnodeRrp, RrpBeaconServer and Airnode wallet
@@ -53,18 +62,20 @@ export const handler = async (event: any = {}): Promise<any> => {
         //   const rrpBeaconServer = RrpBeaconServerFactory.connect(RrpBeaconServer.address, provider);
         const abi = RrpBeaconServer.abi;
         const rrpBeaconServer = new ethers.Contract(
-          chain.contracts.RrpBeaconServer,
+          (chain.contracts as any).RrpBeaconServer, // TODO: fix ChainConfig type in node
           abi,
           provider
         );
 
-        const airnodeWallet = ethers.Wallet.fromMnemonic(
-          nodeSettings.airnodeWalletMnemonic
-        ).connect(provider);
-
-        // TODO: should templateId come from triggers or somewhere else?
-        triggers.rrp.forEach(
-          async ({ templateId, endpointId, oisTitle, endpointName }: any) => {
+        triggers.rrpBeaconServerKeeperJobs.forEach(
+          async ({
+            templateId,
+            oisTitle,
+            endpointName,
+            deviationPercentage,
+            keeperSponsor,
+            requestSponsor,
+          }: any) => {
             // **************************************************************************
             // 3. Make API request
             // **************************************************************************
@@ -173,8 +184,9 @@ export const handler = async (event: any = {}): Promise<any> => {
             // the same request more that once? RrpBeaconServer.requestIdToTemplateId keeps
             // track of the pending requests using a templateId
 
-            // TODO: 5% is hardcoded, should this be read from config?
-            const tolerance = ethers.BigNumber.from(5).mul(times.mul(100));
+            const tolerance = ethers.BigNumber.from(deviationPercentage).mul(
+              times.mul(100)
+            );
             if (deviation.lte(tolerance)) {
               console.log(
                 "[INFO] delta between beacon and api value is within tolerance range. skipping update"
@@ -185,36 +197,35 @@ export const handler = async (event: any = {}): Promise<any> => {
             /*
              * 1. Airnode must first call setSponsorshipStatus(rrpBeaconServer.address, true) to
              *    enable the beacon server to make requests to AirnodeRrp
-             * 2. Sponsor should then call setUpdatePermissionStatus(airnodeWallet.address, true)
+             * 2. Request sponsor should then call setUpdatePermissionStatus(keeperSponsorWallet.address, true)
              *    to allow requester to update beacon
              */
-            // console.log(
-            //   "🚀 ~ file: index.ts ~ line 161 ~ handler ~ await rrpBeaconServer.sponsorToUpdateRequesterToPermissionStatus()",
-            //   await rrpBeaconServer.sponsorToUpdateRequesterToPermissionStatus(
-            //     airnodeWallet.address,
-            //     airnodeWallet.address
-            //   )
-            // );
-
-            // TODO: who should be the sponsor?
-            // it's kinda weird to have to derive the sponsor wallet for the airnode wallet
-            const sponsorWalletAddress = deriveSponsorWallet(
-              ethers.utils.HDNode.fromMnemonic(
-                nodeSettings.airnodeWalletMnemonic
-              ),
-              airnodeWallet.address
-            ).address;
-
+            const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(
+              nodeSettings.airnodeWalletMnemonic
+            );
+            const keeperSponsorWallet = deriveKeeperSponsorWallet(
+              airnodeHDNode,
+              keeperSponsor,
+              provider
+            );
+            const requestSponsorWallet = deriveSponsorWallet(
+              airnodeHDNode,
+              requestSponsor
+            );
             // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
             // When using config.json.example we must pass a "from" parameter and the only
-            // way to get this request to work is if we add it a fixedParameter in the node
+            // way to get this request to work is if we add it as fixedParameter in the node
             // config file
+            console.log(
+              "🚀 ~ file: index.ts ~ line 222 ~ each ~ keeperSponsorWallet",
+              keeperSponsorWallet.address
+            );
             await rrpBeaconServer
-              .connect(airnodeWallet)
+              .connect(keeperSponsorWallet)
               .requestBeaconUpdate(
                 templateId,
-                airnodeWallet.address,
-                sponsorWalletAddress
+                requestSponsor,
+                requestSponsorWallet.address
               );
           }
         );
@@ -224,3 +235,19 @@ export const handler = async (event: any = {}): Promise<any> => {
   const response = { ok: true, data: { message: "Beacon update requested" } };
   return { statusCode: 200, body: JSON.stringify(response) };
 };
+
+export function loadAirkeeperConfig(): Config {
+  const configPath = path.resolve(`${__dirname}/../config/airkeeper.json`);
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
+}
+
+export function deriveKeeperSponsorWallet(
+  airnodeHdNode: ethers.utils.HDNode,
+  sponsorAddress: string,
+  provider: ethers.providers.Provider
+): ethers.Wallet {
+  const sponsorWalletHdNode = airnodeHdNode.derivePath(
+    `m/44'/60'/12345'/${deriveWalletPathFromSponsorAddress(sponsorAddress)}`
+  );
+  return new ethers.Wallet(sponsorWalletHdNode.privateKey).connect(provider);
+}

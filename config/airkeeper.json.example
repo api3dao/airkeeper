@@ -1,0 +1,21 @@
+{
+  "chains": [
+    {
+      "contracts": {
+        "RrpBeaconServer": "0x610178dA211FEF7D417bC0e6FeD39F05609AD788"
+      }
+    }
+  ],
+  "triggers": {
+    "rrpBeaconServerKeeperJobs": [
+      {
+        "templateId": "0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d",
+        "oisTitle": "Currency Converter API",
+        "endpointName": "convertToUSD",
+        "deviationPercentage": "5",
+        "keeperSponsor": "0x2479808b1216E998309A727df8A0A98A1130A162",
+        "requestSponsor": "0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec"
+      }
+    ]
+  }
+}
