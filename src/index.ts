@@ -14,14 +14,14 @@ import { buildEVMProvider } from "./node/evm-provider";
 import { removeKey, removeKeys } from "./node/object-utils";
 //TODO: remove and use @api3/airnode-node import
 import { getReservedParameters, RESERVED_PARAMETERS } from "./node/parameters";
+//TODO: remove and use "@api3/airnode-protocol" import;
+import RrpBeaconServer from "./node/RrpBeaconServer.json";
 //TODO: remove and use @api3/airnode-node import
 import {
   deriveSponsorWallet,
   deriveWalletPathFromSponsorAddress,
 } from "./node/wallet";
-//TODO: remove and use "@api3/airnode-protocol" import;
-import RrpBeaconServer from "./node/RrpBeaconServer.json";
-import { Config } from "./types";
+import { ChainConfig, Config } from "./types";
 
 export const handler = async (event: any = {}): Promise<any> => {
   // **************************************************************************
@@ -41,7 +41,7 @@ export const handler = async (event: any = {}): Promise<any> => {
     );
   }
   chains
-    .filter((chain) => chain.type === "evm")
+    .filter((chain: node.ChainConfig & ChainConfig) => chain.type === "evm")
     .forEach(async (chain) => {
       each(chain.providers, async (_, providerName) => {
         // **************************************************************************
@@ -57,12 +57,12 @@ export const handler = async (event: any = {}): Promise<any> => {
 
         // TODO: use factory class to create contract instead
         // const rrpBeaconServer = RrpBeaconServerFactory.connect(
-        //   (chain as any).contracts.RrpBeaconServer, // TODO: fix ChainConfig type
+        //   chain.contracts.RrpBeaconServer,
         //   provider
         // );
         const abi = RrpBeaconServer.abi;
         const rrpBeaconServer = new ethers.Contract(
-          (chain as any).contracts.RrpBeaconServer, // TODO: fix ChainConfig type
+          chain.contracts.RrpBeaconServer,
           abi,
           provider
         );
