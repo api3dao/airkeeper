@@ -4,7 +4,7 @@ import { AirnodeRrpFactory } from "@api3/airnode-protocol";
 import * as dotenv from "dotenv";
 import * as ethers from "ethers";
 import * as fs from "fs";
-import { each, isEmpty, merge } from "lodash";
+import { each, isEmpty, isNil, merge } from "lodash";
 import * as path from "path";
 //TODO: remove and use @api3/airnode-node import
 import { safeDecode } from "./../node/abi-encoding";
@@ -30,9 +30,9 @@ export const handler = async (event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
-  const secretsPath = path.resolve(`${__dirname}/../../config/secrets.env`);
+  const secretsPath = path.resolve(`${__dirname}/../config/secrets.env`);
   const secrets = dotenv.parse(fs.readFileSync(secretsPath));
-  const nodeConfigPath = path.resolve(`${__dirname}/../../config/airnode.json`);
+  const nodeConfigPath = path.resolve(`${__dirname}/../config/airnode.json`);
   const nodeConfig = node.config.parseConfig(nodeConfigPath, secrets);
   const keeperConfig = loadAirkeeperConfig();
   const config = merge(nodeConfig, keeperConfig);
@@ -62,7 +62,7 @@ export const handler = async (event: any = {}): Promise<any> => {
         //   const rrpBeaconServer = RrpBeaconServerFactory.connect(RrpBeaconServer.address, provider);
         const abi = RrpBeaconServer.abi;
         const rrpBeaconServer = new ethers.Contract(
-          (chain.contracts as any).RrpBeaconServer, // TODO: fix ChainConfig type in node
+          (chain as any).contracts.RrpBeaconServer, // TODO: fix ChainConfig type
           abi,
           provider
         );
@@ -180,10 +180,6 @@ export const handler = async (event: any = {}): Promise<any> => {
             // 6. Update beacon if necessary (call makeRequest)
             // **************************************************************************
 
-            // TODO: should we calculate the requestId hash or find a way to prevent sending
-            // the same request more that once? RrpBeaconServer.requestIdToTemplateId keeps
-            // track of the pending requests using a templateId
-
             const tolerance = ethers.BigNumber.from(deviationPercentage).mul(
               times.mul(100)
             );
@@ -212,14 +208,65 @@ export const handler = async (event: any = {}): Promise<any> => {
               airnodeHDNode,
               requestSponsor
             );
-            // TODO: why can't we send encoded parameters to be forwarded to AirnodeRrp?
-            // When using config.json.example we must pass a "from" parameter and the only
+
+            // TODO: should we calculate the requestId hash or find a way to prevent sending
+            // the same request more that once? RrpBeaconServer.requestIdToTemplateId keeps
+            // track of the pending requests using a templateId
+            // ANSWER: yes.
+
+            // 1. fetch RequestedBeaconUpdate events by templateId, sponsor and sponsorWallet
+            //TODO: do we want to put a limit to the number of blocks to query for?
+            const requestedBeaconUpdateFilter =
+              rrpBeaconServer.filters.RequestedBeaconUpdate(
+                templateId,
+                requestSponsor,
+                keeperSponsorWallet.address
+              );
+            const requestedBeaconUpdateEvents =
+              await rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter);
+
+            // 2. fetch UpdatedBeacon events by templateId, sponsor and sponsorWallet
+            const updatedBeaconFilter =
+              rrpBeaconServer.filters.UpdatedBeacon(templateId);
+            const updatedBeaconEvents = await rrpBeaconServer.queryFilter(
+              updatedBeaconFilter
+            );
+
+            // 3. match them by requestId
+            const [pendingRequest] = requestedBeaconUpdateEvents.filter(
+              (rbue) =>
+                !updatedBeaconEvents.some(
+                  (ub) => rbue.args!["requestId"] === ub.args!["requestId"]
+                )
+            );
+            if (!isNil(pendingRequest)) {
+              // `requestIdToTemplateId` is private so we must use AirnodeRrp instead
+              // const y = await rrpBeaconServer.requestIdToTemplateId(
+              //   pendingRequest.args!["requestId"]
+              // );
+
+              // 4. check if RequestedBeaconUpdate event is awaiting fulfillment by
+              //    calling requestIsAwaitingFulfillment in AirnodeRrp with requestId
+              //    and check if it's fresh enough and skip if it is
+              const requestIsAwaitingFulfillment =
+                await airnodeRrp.requestIsAwaitingFulfillment(
+                  pendingRequest.args!["requestId"]
+                );
+              //TODO: timestamp check
+              if (requestIsAwaitingFulfillment) {
+                console.log(
+                  "[INFO] request is awaiting fulfillment. skipping update"
+                );
+                return;
+              }
+            }
+
+            // RrpBeaconServer expects that all parameters are defined in the template.
+            // There's a Jira issue to try adding user-defined parameters to the RrpBeaconServer.
+            // https://api3dao.atlassian.net/browse/A3P-48
+            // When using config.json.example we must pass a `from` parameter and the only
             // way to get this request to work is if we add it as fixedParameter in the node
             // config file
-            console.log(
-              "🚀 ~ file: index.ts ~ line 222 ~ each ~ keeperSponsorWallet",
-              keeperSponsorWallet.address
-            );
             await rrpBeaconServer
               .connect(keeperSponsorWallet)
               .requestBeaconUpdate(

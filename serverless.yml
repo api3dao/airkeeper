@@ -8,7 +8,7 @@ provider:
 
 functions:
   updateBeacon:
-    handler: dist/index.handler
+    handler: dist/src/index.handler
     name: airkeeper-update-beacon
     # timeout: 60
     # reservedConcurrency: 1
