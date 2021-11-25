@@ -103,10 +103,12 @@ export const handler = async (event: any = {}): Promise<any> => {
               RESERVED_PARAMETERS
             );
 
+            // HACK: hardcoding `from: ETH` param since test template does not include it
+            // TODO: do we need metadata params? api might be using them for authentiation
             const options: adapter.BuildRequestOptions = {
               endpointName,
-              parameters: { ...sanitizedParameters, from: "ETH" }, // TODO: fix hardcoded from param
-              metadataParameters: {}, // TODO: fix hardcoded values
+              parameters: { ...sanitizedParameters, from: "ETH" },
+              metadataParameters: {},
               ois: oisByTitle,
               apiCredentials: adapterApiCredentials,
             };
@@ -162,7 +164,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             // **************************************************************************
             // 5. Check deviation
             // **************************************************************************
-            const delta = beaconResponse.value.sub(apiValue).abs();
+            const delta = beaconResponse.value.sub(apiValue.mul(10000)).abs();
             if (delta.eq(0)) {
               console.log("[INFO] beacon is up-to-date. skipping update");
               return;
@@ -179,7 +181,6 @@ export const handler = async (event: any = {}): Promise<any> => {
             // **************************************************************************
             // 6. Update beacon if necessary (call makeRequest)
             // **************************************************************************
-
             const tolerance = ethers.BigNumber.from(deviationPercentage).mul(
               times.mul(100)
             );
@@ -190,7 +191,7 @@ export const handler = async (event: any = {}): Promise<any> => {
               return;
             }
 
-            /*
+            /**
              * 1. Airnode must first call setSponsorshipStatus(rrpBeaconServer.address, true) to
              *    enable the beacon server to make requests to AirnodeRrp
              * 2. Request sponsor should then call setUpdatePermissionStatus(keeperSponsorWallet.address, true)
@@ -209,10 +210,11 @@ export const handler = async (event: any = {}): Promise<any> => {
               requestSponsor
             );
 
-            /*
+            /**
              * Check to prevent sending the same request for beacon update more than once
              */
-            // 1. fetch RequestedBeaconUpdate events by templateId, sponsor and sponsorWallet
+
+            // 1. Fetch RequestedBeaconUpdate events by templateId, sponsor and sponsorWallet
             //TODO: do we want to put a limit to the number of blocks to query for?
             const requestedBeaconUpdateFilter =
               rrpBeaconServer.filters.RequestedBeaconUpdate(
@@ -223,35 +225,37 @@ export const handler = async (event: any = {}): Promise<any> => {
             const requestedBeaconUpdateEvents =
               await rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter);
 
-            // 2. fetch UpdatedBeacon events by templateId
+            // 2. Fetch UpdatedBeacon events by templateId
             const updatedBeaconFilter =
               rrpBeaconServer.filters.UpdatedBeacon(templateId);
             const updatedBeaconEvents = await rrpBeaconServer.queryFilter(
               updatedBeaconFilter
             );
 
-            // 3. match these events by requestId
-            //    unmatched events are the ones that are still waiting to be fulfilled
-            const [pendingRequest] = requestedBeaconUpdateEvents.filter(
-              (rbue) =>
-                !updatedBeaconEvents.some(
-                  (ub) => rbue.args!["requestId"] === ub.args!["requestId"]
-                )
-            );
-            if (!isNil(pendingRequest)) {
+            // 3. Match these events by requestId and unmatched events
+            //    are the ones that are still waiting to be fulfilled
+            const [pendingRequestedBeaconUpdateEvent] =
+              requestedBeaconUpdateEvents.filter(
+                (rbue) =>
+                  !updatedBeaconEvents.some(
+                    (ub) => rbue.args!["requestId"] === ub.args!["requestId"]
+                  )
+              );
+            if (!isNil(pendingRequestedBeaconUpdateEvent)) {
+              // 4. Check if RequestedBeaconUpdate event is awaiting fulfillment by
+              //    calling AirnodeRrp.requestIsAwaitingFulfillment with requestId
+              //    and check if beacon value is fresh enough and skip if it is
+
               // `requestIdToTemplateId` is private so we must use AirnodeRrp instead
-              // const y = await rrpBeaconServer.requestIdToTemplateId(
+              // const requestIsAwaitingFulfillment = await rrpBeaconServer.requestIdToTemplateId(
               //   pendingRequest.args!["requestId"]
               // );
 
-              // 4. check if RequestedBeaconUpdate event is awaiting fulfillment by
-              //    calling requestIsAwaitingFulfillment in AirnodeRrp with requestId
-              //    and check if it's fresh enough and skip if it is
               const requestIsAwaitingFulfillment =
                 await airnodeRrp.requestIsAwaitingFulfillment(
-                  pendingRequest.args!["requestId"]
+                  pendingRequestedBeaconUpdateEvent.args!["requestId"]
                 );
-              //TODO: timestamp check
+              //TODO: Add timestamp check?
               if (requestIsAwaitingFulfillment) {
                 console.log(
                   "[INFO] request is awaiting fulfillment. skipping update"
@@ -264,8 +268,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             // There's a Jira issue to try adding user-defined parameters to the RrpBeaconServer.
             // https://api3dao.atlassian.net/browse/A3P-48
             // When using config.json.example we must pass a `from` parameter and the only
-            // way to get this request to work is if we add it as fixedParameter in the node
-            // config file
+            // way to get this request to work is by adding it as fixedParameter in the node config file
             await rrpBeaconServer
               .connect(keeperSponsorWallet)
               .requestBeaconUpdate(
