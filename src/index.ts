@@ -7,23 +7,20 @@ import * as fs from "fs";
 import { each, isEmpty, isNil, merge } from "lodash";
 import * as path from "path";
 //TODO: remove and use @api3/airnode-node import
-import { safeDecode } from "./../node/abi-encoding";
+import { safeDecode } from "./node/abi-encoding";
 //TODO: remove and use @api3/airnode-node import
-import { buildEVMProvider } from "./../node/evm-provider";
+import { buildEVMProvider } from "./node/evm-provider";
 //TODO: remove and use @api3/airnode-node import
-import { removeKey, removeKeys } from "./../node/object-utils";
+import { removeKey, removeKeys } from "./node/object-utils";
 //TODO: remove and use @api3/airnode-node import
-import {
-  getReservedParameters,
-  RESERVED_PARAMETERS,
-} from "./../node/parameters";
+import { getReservedParameters, RESERVED_PARAMETERS } from "./node/parameters";
 //TODO: remove and use @api3/airnode-node import
 import {
   deriveSponsorWallet,
   deriveWalletPathFromSponsorAddress,
-} from "./../node/wallet";
+} from "./node/wallet";
 //TODO: remove and use "@api3/airnode-protocol" import;
-import RrpBeaconServer from "./../RrpBeaconServer.json";
+import RrpBeaconServer from "./node/RrpBeaconServer.json";
 import { Config } from "./types";
 
 export const handler = async (event: any = {}): Promise<any> => {
@@ -59,7 +56,10 @@ export const handler = async (event: any = {}): Promise<any> => {
         );
 
         // TODO: use factory class to create contract instead
-        //   const rrpBeaconServer = RrpBeaconServerFactory.connect(RrpBeaconServer.address, provider);
+        // const rrpBeaconServer = RrpBeaconServerFactory.connect(
+        //   (chain as any).contracts.RrpBeaconServer, // TODO: fix ChainConfig type
+        //   provider
+        // );
         const abi = RrpBeaconServer.abi;
         const rrpBeaconServer = new ethers.Contract(
           (chain as any).contracts.RrpBeaconServer, // TODO: fix ChainConfig type
@@ -209,11 +209,9 @@ export const handler = async (event: any = {}): Promise<any> => {
               requestSponsor
             );
 
-            // TODO: should we calculate the requestId hash or find a way to prevent sending
-            // the same request more that once? RrpBeaconServer.requestIdToTemplateId keeps
-            // track of the pending requests using a templateId
-            // ANSWER: yes.
-
+            /*
+             * Check to prevent sending the same request for beacon update more than once
+             */
             // 1. fetch RequestedBeaconUpdate events by templateId, sponsor and sponsorWallet
             //TODO: do we want to put a limit to the number of blocks to query for?
             const requestedBeaconUpdateFilter =
@@ -225,14 +223,15 @@ export const handler = async (event: any = {}): Promise<any> => {
             const requestedBeaconUpdateEvents =
               await rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter);
 
-            // 2. fetch UpdatedBeacon events by templateId, sponsor and sponsorWallet
+            // 2. fetch UpdatedBeacon events by templateId
             const updatedBeaconFilter =
               rrpBeaconServer.filters.UpdatedBeacon(templateId);
             const updatedBeaconEvents = await rrpBeaconServer.queryFilter(
               updatedBeaconFilter
             );
 
-            // 3. match them by requestId
+            // 3. match these events by requestId
+            //    unmatched events are the ones that are still waiting to be fulfilled
             const [pendingRequest] = requestedBeaconUpdateEvents.filter(
               (rbue) =>
                 !updatedBeaconEvents.some(
