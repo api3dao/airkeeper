@@ -1,5 +1,7 @@
 service: airkeeper
 
+variablesResolutionMode: 20210219
+
 provider:
   name: aws
   # region: ${opt:region}
@@ -8,7 +10,7 @@ provider:
   memorySize: 512
   lambdaHashingVersion: 20201221
   logRetentionInDays: 14
-  # environment: ${file(secrets.json)}
+  environment: ${file(load-secrets-env.js)}
   iamRoleStatements:
     - Effect: "Allow"
       Action: "lambda:InvokeFunction"

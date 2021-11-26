@@ -1,7 +1,6 @@
 import * as adapter from "@api3/airnode-adapter";
 import * as node from "@api3/airnode-node";
 import * as protocol from "@api3/airnode-protocol";
-import * as dotenv from "dotenv";
 import * as ethers from "ethers";
 import * as fs from "fs";
 import { isEmpty, isNil, merge } from "lodash";
@@ -28,10 +27,8 @@ export const handler = async (event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
-  const secretsPath = path.resolve(`${__dirname}/../config/secrets.env`);
-  const secrets = dotenv.parse(fs.readFileSync(secretsPath));
   const nodeConfigPath = path.resolve(`${__dirname}/../config/airnode.json`);
-  const nodeConfig = node.config.parseConfig(nodeConfigPath, secrets);
+  const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
   const keeperConfig = loadAirkeeperConfig();
   const config = merge(nodeConfig, keeperConfig);
 
