@@ -2,15 +2,23 @@ service: airkeeper
 
 provider:
   name: aws
+  # region: ${opt:region}
+  # stage: ${opt:stage}
   runtime: nodejs12.x
   memorySize: 512
   lambdaHashingVersion: 20201221
+  logRetentionInDays: 14
+  # environment: ${file(secrets.json)}
+  iamRoleStatements:
+    - Effect: "Allow"
+      Action: "lambda:InvokeFunction"
+      Resource: "*"
 
 functions:
   updateBeacon:
     handler: dist/index.handler
     name: airkeeper-update-beacon
-    # timeout: 60
-    # reservedConcurrency: 1
-    # events:
-    #   - schedule: rate(1 minute)
+    timeout: 60
+    reservedConcurrency: 1
+    events:
+      - schedule: rate(1 minute)
