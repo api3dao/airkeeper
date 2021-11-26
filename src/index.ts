@@ -113,12 +113,11 @@ export const handler = async (event: any = {}): Promise<any> => {
           (c) => removeKey(c, "oisTitle") as adapter.ApiCredentials
         );
 
-        // HACK: hardcoding `from: ETH` param since test template does not include it
         // TODO: do we need metadata params? api might be using them for authentiation
         const options: adapter.BuildRequestOptions = {
           ois: oisByTitle,
           endpointName,
-          parameters: { ...sanitizedParameters, from: "ETH" },
+          parameters: sanitizedParameters,
           metadataParameters: {},
           apiCredentials: adapterApiCredentials,
         };
