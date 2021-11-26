@@ -23,6 +23,7 @@ import {
 import { ChainConfig, Config } from "./types";
 
 export const handler = async (event: any = {}): Promise<any> => {
+  const startedAt = new Date();
   console.log("[DEBUG]\tstarting beaconUpdate lamdba...");
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
@@ -294,7 +295,11 @@ export const handler = async (event: any = {}): Promise<any> => {
 
   await Promise.all(providerPromises);
 
-  console.log("[DEBUG]\tfinishing beaconUpdate lamdba...");
+  const completedAt = new Date();
+  const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
+  console.log(
+    `[DEBUG]\tfinishing beaconUpdate lamdba after ${durationMs}ms...`
+  );
 
   const response = { ok: true, data: { message: "Beacon update requested" } };
   return { statusCode: 200, body: JSON.stringify(response) };
