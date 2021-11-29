@@ -24,7 +24,7 @@ import { ChainConfig, Config } from "./types";
 
 export const handler = async (event: any = {}): Promise<any> => {
   const startedAt = new Date();
-  console.log("[DEBUG]\tstarting beaconUpdate lamdba...");
+  console.log("[DEBUG]\tstarting beaconUpdate...");
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
@@ -94,30 +94,32 @@ export const handler = async (event: any = {}): Promise<any> => {
           // 5. Make API request
           // **************************************************************************
           console.log("[DEBUG]\tmaking API request...");
-          const oisByTitle = ois.find((o) => o.title === oisTitle)!;
-          const endpoint = oisByTitle.endpoints.find(
+          const configOis = ois.find((o) => o.title === oisTitle)!;
+          const configEndpoint = configOis.endpoints.find(
             (e) => e.name === endpointName
           )!;
-          const reservedParameters = getReservedParameters(endpoint, {});
+          const templateParameters = safeDecode(template.parameters);
+          const reservedParameters = getReservedParameters(
+            configEndpoint,
+            templateParameters || {}
+          );
           if (!reservedParameters._type) {
-            console.log("[ERROR]\tmissing type reserved parameter");
+            console.log("[ERROR]\treserved parameter 'type' is missing");
             return;
           }
-          const templateParameters = safeDecode(template.parameters);
           const sanitizedParameters: adapter.Parameters = removeKeys(
             templateParameters || {},
             RESERVED_PARAMETERS
           );
-          const adapterApiCredentials = apiCredentials.map(
-            (c) => removeKey(c, "oisTitle") as adapter.ApiCredentials
-          );
+          const adapterApiCredentials = apiCredentials
+            .filter((c) => c.oisTitle === oisTitle)
+            .map((c) => removeKey(c, "oisTitle") as adapter.ApiCredentials);
 
-          // TODO: do we need metadata params? api might be using them for authentiation
           const options: adapter.BuildRequestOptions = {
-            ois: oisByTitle,
+            ois: configOis,
             endpointName,
             parameters: sanitizedParameters,
-            metadataParameters: {},
+            metadataParameters: {}, // TODO: https://github.com/api3dao/airnode/pull/697
             apiCredentials: adapterApiCredentials,
           };
 
@@ -127,6 +129,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             return;
           }
           console.log("[INFO]\tAPI server response data:", apiResponse.data);
+          // TODO: should we really return here or 0 could be a valid response?
           if (apiResponse.data === 0) {
             console.log("[ERROR]\tAPI responded with value of 0");
             return;
@@ -297,9 +300,7 @@ export const handler = async (event: any = {}): Promise<any> => {
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  console.log(
-    `[DEBUG]\tfinishing beaconUpdate lamdba after ${durationMs}ms...`
-  );
+  console.log(`[DEBUG]\tfinishing beaconUpdate after ${durationMs}ms...`);
 
   const response = { ok: true, data: { message: "Beacon update requested" } };
   return { statusCode: 200, body: JSON.stringify(response) };
