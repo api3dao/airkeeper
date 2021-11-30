@@ -1,2 +1,50 @@
-# airkeeper
-A tool to update a beacon server value on a time interval
+# Airkeeper
+
+> A tool to update a beacon server value on a time interval
+
+This project is basically a makeshift version of the PSP protocol and it will be used to trigger beacon values updates on a fixed time interval of 1 minute.
+
+Airkeeper will fetch the value from the API (similarly to Airnode) and will also read the current beacon value onchain from the beacon contract state. If the delta between the two values is greater than a threshold, the beacon value will be updated onchain by submitting an RRP request that will be fulfilled by the Airnode.
+
+## Setup
+
+- Airkeeper will require a configuration file that matches the one being used by the Airnode that should be used to update the beacon server value. You can just copy over the config.json file from the Airnode repo and put it in the /config directory of this repo. You'll also need to rename it to airnode.json.
+
+- Airkeeper will also require an additional configuration file that will be merged with the one mentioned above and it will contain the configuration specific to Airkeeper. This file needs to be called airkeeper.json and you can find an example in the /config directory of this repo.
+
+## Instructions
+
+Make sure to have the following dependencies installed:
+
+- npm
+- serverless framework (https://serverless.com/)
+
+### Running Airkeeper locally
+
+In order to run Airkeeper with sample configuration files locally, you will need to follow these steps:
+
+1. Open a new terminal and navigate to the root directory of the Airnode repo.
+2. Run `yarn run bootstrap && yarn build` to build the project.
+3. Add the config.json and secrets.env files to the packages/airnode-node/config directory.
+4. Run `yarn run dev:background` to start a local ethereum node and a sample REST API.
+5. Run `yarn run dev:eth-deploy` to deploy and configure the required contracts.
+6. Finally run `npm run sls:invoke-local` in the Airkeeper root directory to invoke the updateBeacon function.
+
+### Running Airkeeper on AWS Lambda
+
+Airkeeper is meant to be deployed to AWS lambda service and for this you will need to setup your AWS credentials. This credentials should be added to the .env file in the root directory of the Airkeeper repo. Then you can use the export-env.sh script to load them into the environment.
+
+1. (Optional) Run `npm run sls:config` to configure the AWS lambda service.
+2. Run `npm run sls:deploy` to deploy the Airkeeper lambda function.
+3. Run `npm run sls:invoke` to invoke the Airkeeper lambda function.
+4. Run `npm run sls:remove` to remove the Airkeeper lambda function.
+
+## Additional considerations
+
+- Request sponsor account must first call `AirnodeRrp.setSponsorshipStatus(rrpBeaconServer.address, true)` to allow the RrpBeaconServer contract to make requests to AirnodeRrp contract.
+
+- A `keeperSponsorWallet` needs to be derived for the sponsor-airnode pair. This is a similar process to deriving the sponsor wallet used by Airnode to fulfill requests but in this case the wallet derivation path is slightly different. These wallet needs to be funded with ETH in order for Airkeeper to use it to submit beacon updates requests.
+
+- Request sponsor account must also call `RrpBeaconServer.setUpdatePermissionStatus(keeperSponsorWallet.address, true)` to allow the `keeperSponsorWallet` to update beacon server value.
+
+- The template used by the RrpBeaconServer contract is expected to contain all the parameteres required in the API call.
