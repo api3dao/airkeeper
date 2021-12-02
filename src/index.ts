@@ -168,29 +168,31 @@ export const handler = async (event: any = {}): Promise<any> => {
           // 7. Check deviation
           // **************************************************************************
           console.log("[DEBUG]\tchecking deviation...");
-          const delta = beaconResponse.value.sub(apiValue).abs();
+          let beaconValue = beaconResponse.value;
+          const delta = beaconValue.sub(apiValue).abs();
           if (delta.eq(0)) {
             console.log("[INFO]\tbeacon is up-to-date. skipping update");
             return;
           }
 
-          const times = ethers.BigNumber.from(reservedParameters._times || 1);
-          const basisPoints = ethers.utils.parseEther("1.0").div(100);
-          const deviation = delta.mul(basisPoints).div(apiValue).div(times);
+          beaconValue = beaconResponse.value.isZero()
+            ? ethers.constants.One
+            : beaconResponse.value;
+          const basisPoints = ethers.utils.parseUnits("1", 16);
+          const deviation = delta.mul(basisPoints).mul(100).div(beaconValue);
           console.log(
             "[INFO]\tdeviation (%):",
-            deviation.toNumber() / times.mul(100).toNumber()
+            ethers.utils.formatUnits(deviation, 16)
           );
 
           // **************************************************************************
           // 8. Update beacon if necessary (call makeRequest)
           // **************************************************************************
-          const tolerance = ethers.BigNumber.from(deviationPercentage).mul(
-            times.mul(100)
-          );
-          if (deviation.lte(tolerance)) {
+          const percentageThreshold =
+            ethers.BigNumber.from(deviationPercentage).mul(basisPoints);
+          if (deviation.lte(percentageThreshold)) {
             console.log(
-              "[INFO]\tdelta between beacon and api value is within tolerance range. skipping update"
+              "[INFO]\tdelta between beacon value and api value is within threshold. skipping update"
             );
             return;
           }
