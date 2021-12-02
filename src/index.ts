@@ -43,17 +43,10 @@ export const handler = async (event: any = {}): Promise<any> => {
           provider
         );
 
-        // TODO: use factory class to create contract instead
         const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(
           chain.contracts.RrpBeaconServer,
           provider
         );
-        // const abi = RrpBeaconServer.abi;
-        // const rrpBeaconServer = new ethers.Contract(
-        //   chain.contracts.RrpBeaconServer,
-        //   abi,
-        //   provider
-        // );
 
         // **************************************************************************
         // 3. Run each keeper job
