@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as ethers from "ethers";
+import * as ois from "@api3/airnode-ois";
 import * as node from "@api3/airnode-node";
 import * as adapter from "@api3/airnode-adapter";
 import * as protocol from "@api3/airnode-protocol";
@@ -18,7 +19,7 @@ export const handler = async (event: any = {}): Promise<any> => {
   const keeperConfig = loadAirkeeperConfig();
   const config = merge(nodeConfig, keeperConfig);
 
-  const { chains, nodeSettings, triggers, ois, apiCredentials } = config;
+  const { chains, nodeSettings, triggers, ois: oises, apiCredentials } = config;
   const evmChains = chains.filter(
     (chain: node.ChainConfig & ChainConfig) => chain.type === "evm"
   );
@@ -72,7 +73,7 @@ export const handler = async (event: any = {}): Promise<any> => {
           // 5. Make API request
           // **************************************************************************
           console.log("[DEBUG]\tmaking API request...");
-          const configOis = ois.find((o) => o.title === oisTitle)!;
+          const configOis = oises.find((o) => o.title === oisTitle)!;
           const configEndpoint = configOis.endpoints.find(
             (e) => e.name === endpointName
           )!;
@@ -90,7 +91,7 @@ export const handler = async (event: any = {}): Promise<any> => {
           }
           const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
             templateParameters || {},
-            node.adapters.http.parameters.RESERVED_PARAMETERS
+            ois.RESERVED_PARAMETERS
           );
           const adapterApiCredentials = apiCredentials
             .filter((c) => c.oisTitle === oisTitle)

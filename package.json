@@ -17,6 +17,7 @@
   "dependencies": {
     "@api3/airnode-adapter": "^0.2.2",
     "@api3/airnode-node": "^0.2.2",
+    "@api3/airnode-ois": "^0.2.2",
     "@api3/airnode-protocol": "^0.2.2",
     "ethers": "^5.5.2",
     "lodash": "^4.17.21",
