@@ -136,7 +136,7 @@ export const handler = async (event: any = {}): Promise<any> => {
               adapter.bigNumberToString(response.values[0] as any) // TODO: node change value to values
             );
 
-            console.log("[INFO]\tAPI server value:", apiValue.toNumber());
+            console.log("[INFO]\tAPI server value:", apiValue.toString());
           } catch (e) {
             console.log("[ERROR]\tfailed to extract data from API response");
             return;
@@ -161,7 +161,7 @@ export const handler = async (event: any = {}): Promise<any> => {
           }
           console.log(
             "[INFO]\tbeacon server value:",
-            beaconResponse.value.toNumber()
+            beaconResponse.value.toString()
           );
 
           // **************************************************************************
