@@ -1,6 +1,6 @@
 service: airkeeper
 
-variablesResolutionMode: 20210219
+variablesResolutionMode: 20210326
 
 provider:
   name: aws

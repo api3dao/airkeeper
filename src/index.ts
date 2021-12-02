@@ -1,25 +1,10 @@
-import * as adapter from "@api3/airnode-adapter";
-import * as node from "@api3/airnode-node";
-import * as protocol from "@api3/airnode-protocol";
-import * as ethers from "ethers";
 import * as fs from "fs";
-import { flatMap, isEmpty, isNil, map, merge } from "lodash";
 import * as path from "path";
-//TODO: remove and use @api3/airnode-node import
-import { safeDecode } from "./node/abi-encoding";
-//TODO: remove and use @api3/airnode-node import
-import { buildEVMProvider } from "./node/evm-provider";
-//TODO: remove and use @api3/airnode-node import
-import { removeKey, removeKeys } from "./node/object-utils";
-//TODO: remove and use @api3/airnode-node import
-import { getReservedParameters, RESERVED_PARAMETERS } from "./node/parameters";
-//TODO: remove and use "@api3/airnode-protocol" import;
-import RrpBeaconServer from "./node/RrpBeaconServer.json";
-//TODO: remove and use @api3/airnode-node import
-import {
-  deriveSponsorWallet,
-  deriveWalletPathFromSponsorAddress,
-} from "./node/wallet";
+import * as ethers from "ethers";
+import * as node from "@api3/airnode-node";
+import * as adapter from "@api3/airnode-adapter";
+import * as protocol from "@api3/airnode-protocol";
+import { flatMap, isEmpty, isNil, map, merge } from "lodash";
 import { ChainConfig, Config } from "./types";
 
 export const handler = async (event: any = {}): Promise<any> => {
@@ -51,7 +36,7 @@ export const handler = async (event: any = {}): Promise<any> => {
         // **************************************************************************
         console.log("[DEBUG]\tinitializing...");
         const chainProviderUrl = chainProvider.url || "";
-        const provider = buildEVMProvider(chainProviderUrl, chain.id);
+        const provider = node.evm.buildEVMProvider(chainProviderUrl, chain.id);
 
         const airnodeRrp = protocol.AirnodeRrpFactory.connect(
           chain.contracts.AirnodeRrp,
@@ -59,16 +44,16 @@ export const handler = async (event: any = {}): Promise<any> => {
         );
 
         // TODO: use factory class to create contract instead
-        // const rrpBeaconServer = RrpBeaconServerFactory.connect(
-        //   chain.contracts.RrpBeaconServer,
-        //   provider
-        // );
-        const abi = RrpBeaconServer.abi;
-        const rrpBeaconServer = new ethers.Contract(
+        const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(
           chain.contracts.RrpBeaconServer,
-          abi,
           provider
         );
+        // const abi = RrpBeaconServer.abi;
+        // const rrpBeaconServer = new ethers.Contract(
+        //   chain.contracts.RrpBeaconServer,
+        //   abi,
+        //   provider
+        // );
 
         // **************************************************************************
         // 3. Run each keeper job
@@ -98,29 +83,35 @@ export const handler = async (event: any = {}): Promise<any> => {
           const configEndpoint = configOis.endpoints.find(
             (e) => e.name === endpointName
           )!;
-          const templateParameters = safeDecode(template.parameters);
-          const reservedParameters = getReservedParameters(
-            configEndpoint,
-            templateParameters || {}
+          const templateParameters = node.evm.encoding.safeDecode(
+            template.parameters
           );
+          const reservedParameters =
+            node.adapters.http.parameters.getReservedParameters(
+              configEndpoint,
+              templateParameters || {}
+            );
           if (!reservedParameters._type) {
             console.log("[ERROR]\treserved parameter 'type' is missing");
             return;
           }
-          const sanitizedParameters: adapter.Parameters = removeKeys(
+          const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
             templateParameters || {},
-            RESERVED_PARAMETERS
+            node.adapters.http.parameters.RESERVED_PARAMETERS
           );
           const adapterApiCredentials = apiCredentials
             .filter((c) => c.oisTitle === oisTitle)
-            .map((c) => removeKey(c, "oisTitle") as adapter.ApiCredentials);
+            .map(
+              (c) =>
+                node.utils.removeKey(c, "oisTitle") as adapter.ApiCredentials
+            );
 
           const options: adapter.BuildRequestOptions = {
             ois: configOis,
             endpointName,
             parameters: sanitizedParameters,
-            metadataParameters: {}, // TODO: https://github.com/api3dao/airnode/pull/697
             apiCredentials: adapterApiCredentials,
+            metadata: null, // TODO: https://github.com/api3dao/airnode/pull/697
           };
 
           const apiResponse = await adapter.buildAndExecuteRequest(options);
@@ -142,7 +133,7 @@ export const handler = async (event: any = {}): Promise<any> => {
               reservedParameters as adapter.ReservedParameters
             );
             apiValue = ethers.BigNumber.from(
-              adapter.bigNumberToString(response.value as any)
+              adapter.bigNumberToString(response.values[0] as any) // TODO: node change value to values
             );
 
             console.log("[INFO]\tAPI server value:", apiValue.toNumber());
@@ -219,7 +210,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             keeperSponsor,
             provider
           );
-          const requestSponsorWallet = deriveSponsorWallet(
+          const requestSponsorWallet = node.evm.deriveSponsorWallet(
             airnodeHDNode,
             requestSponsor
           );
@@ -302,7 +293,10 @@ export const handler = async (event: any = {}): Promise<any> => {
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
   console.log(`[DEBUG]\tfinishing beaconUpdate after ${durationMs}ms...`);
 
-  const response = { ok: true, data: { message: "Beacon update requested" } };
+  const response = {
+    ok: true,
+    data: { message: "Beacon update invocation finished" },
+  };
   return { statusCode: 200, body: JSON.stringify(response) };
 };
 
@@ -317,7 +311,9 @@ export function deriveKeeperSponsorWallet(
   provider: ethers.providers.Provider
 ): ethers.Wallet {
   const sponsorWalletHdNode = airnodeHdNode.derivePath(
-    `m/44'/60'/12345'/${deriveWalletPathFromSponsorAddress(sponsorAddress)}`
+    `m/44'/60'/12345'/${node.evm.deriveWalletPathFromSponsorAddress(
+      sponsorAddress
+    )}`
   );
   return new ethers.Wallet(sponsorWalletHdNode.privateKey).connect(provider);
 }
