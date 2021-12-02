@@ -8,7 +8,7 @@ Airkeeper will fetch the value from the API (similarly to Airnode) and will also
 
 ## Setup
 
-- Airkeeper will require a configuration file that matches the one being used by the Airnode that should be used to update the beacon server value. You can just copy over the config.json file from the Airnode repo and put it in the /config directory of this repo. You'll also need to rename it to airnode.json.
+- Airkeeper will require a configuration file that matches the one being used by the Airnode that should be used to update the beacon server value. You can just copy over the config.json file from the Airnode repo and put it in the /config directory of this repo.
 
 - Airkeeper will also require an additional configuration file that will be merged with the one mentioned above and it will contain the configuration specific to Airkeeper. This file needs to be called airkeeper.json and you can find an example in the /config directory of this repo.
 

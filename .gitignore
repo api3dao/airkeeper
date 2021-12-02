@@ -14,5 +14,5 @@
 
 # Config files
 **/airkeeper.json
-**/airnode.json
+**/config.json
 **/secrets.env

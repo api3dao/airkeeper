@@ -13,7 +13,7 @@ export const handler = async (event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
-  const nodeConfigPath = path.resolve(`${__dirname}/../config/airnode.json`);
+  const nodeConfigPath = path.resolve(`${__dirname}/../config/config.json`);
   const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
   const keeperConfig = loadAirkeeperConfig();
   const config = merge(nodeConfig, keeperConfig);
