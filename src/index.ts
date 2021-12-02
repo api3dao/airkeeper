@@ -66,7 +66,7 @@ export const handler = async (event: any = {}): Promise<any> => {
           console.log("[DEBUG]\tfetching template...");
           const template = await airnodeRrp.templates(templateId);
           if (!template) {
-            console.log("[ERROR]\ttemplate not found");
+            console.log("[ERROR]\ttemplate not found:", templateId);
           }
 
           // **************************************************************************
@@ -86,7 +86,10 @@ export const handler = async (event: any = {}): Promise<any> => {
               templateParameters || {}
             );
           if (!reservedParameters._type) {
-            console.log("[ERROR]\treserved parameter 'type' is missing");
+            console.log(
+              "[ERROR]\treserved parameter 'type' is missing for endpoint:",
+              endpointName
+            );
             return;
           }
           const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
@@ -95,30 +98,25 @@ export const handler = async (event: any = {}): Promise<any> => {
           );
           const adapterApiCredentials = apiCredentials
             .filter((c) => c.oisTitle === oisTitle)
-            .map(
-              (c) =>
-                node.utils.removeKey(c, "oisTitle") as adapter.ApiCredentials
-            );
+            .map((c) => node.utils.removeKey(c, "oisTitle"));
 
           const options: adapter.BuildRequestOptions = {
             ois: configOis,
             endpointName,
             parameters: sanitizedParameters,
-            apiCredentials: adapterApiCredentials,
+            apiCredentials: adapterApiCredentials as adapter.ApiCredentials[],
             metadata: null, // TODO: https://github.com/api3dao/airnode/pull/697
           };
 
-          const apiResponse = await adapter.buildAndExecuteRequest(options);
+          const apiResponse = await adapter.buildAndExecuteRequest(options); // TODO: do we need adapter.Config param for custom timeout?
           if (!apiResponse || !apiResponse.data) {
-            console.log("[ERROR]\tfailed to fetch data from API");
+            console.log(
+              "[ERROR]\tfailed to fetch data from API for endpoint:",
+              endpointName
+            );
             return;
           }
           console.log("[INFO]\tAPI server response data:", apiResponse.data);
-          // TODO: should we really return here or 0 could be a valid response?
-          if (apiResponse.data === 0) {
-            console.log("[ERROR]\tAPI responded with value of 0");
-            return;
-          }
 
           let apiValue: ethers.BigNumber;
           try {
@@ -126,13 +124,18 @@ export const handler = async (event: any = {}): Promise<any> => {
               apiResponse.data,
               reservedParameters as adapter.ReservedParameters
             );
-            apiValue = ethers.BigNumber.from(
-              adapter.bigNumberToString(response.values[0] as any) // TODO: node change value to values
-            );
+            apiValue = ethers.BigNumber.from(response.values[0].toString());
 
             console.log("[INFO]\tAPI server value:", apiValue.toString());
-          } catch (e) {
-            console.log("[ERROR]\tfailed to extract data from API response");
+          } catch (error) {
+            console.log(
+              "[ERROR]\tfailed to extract value from API response:",
+              JSON.stringify(apiResponse.data)
+            );
+            let message;
+            if (error instanceof Error) message = error.message;
+            else message = String(error);
+            console.log("[DEBUG]\tmessage:", message);
             return;
           }
 
@@ -150,7 +153,10 @@ export const handler = async (event: any = {}): Promise<any> => {
             .readBeacon(templateId);
 
           if (!beaconResponse) {
-            console.log("[ERROR]\tfailed to fetch data from beacon server");
+            console.log(
+              "[ERROR]\tfailed to fetch value from beacon server for template:",
+              templateId
+            );
             return;
           }
           console.log(
