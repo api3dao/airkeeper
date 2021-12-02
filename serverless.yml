@@ -11,10 +11,6 @@ provider:
   lambdaHashingVersion: 20201221
   logRetentionInDays: 14
   environment: ${file(load-secrets-env.js)}
-  iamRoleStatements:
-    - Effect: "Allow"
-      Action: "lambda:InvokeFunction"
-      Resource: "*"
 
 functions:
   updateBeacon:
