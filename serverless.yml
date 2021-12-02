@@ -17,6 +17,5 @@ functions:
     handler: dist/index.handler
     name: airkeeper-update-beacon
     timeout: 60
-    reservedConcurrency: 1
     events:
       - schedule: rate(1 minute)
