@@ -9,9 +9,16 @@
   "triggers": {
     "rrpBeaconServerKeeperJobs": [
       {
-        "templateId": "0xe3214e41c4aad33825c4970025a59db034f98145f33c6bfcb8b38a6b55336584",
+        "templateId": "0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "from",
+            "value": "ETH"
+          }
+        ],
         "oisTitle": "Currency Converter API",
-        "endpointName": "convertETHToUSD",
+        "endpointName": "convertToUSD",
         "deviationPercentage": "5",
         "keeperSponsor": "0x2479808b1216E998309A727df8A0A98A1130A162",
         "requestSponsor": "0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec"

@@ -1,7 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as ethers from "ethers";
-import * as node from "@api3/airnode-node";
 import { Config } from "./types";
 
 const loadAirkeeperConfig = (): Config => {

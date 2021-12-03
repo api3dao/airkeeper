@@ -1,4 +1,5 @@
 import * as node from "@api3/airnode-node";
+import * as abi from "@api3/airnode-abi";
 
 export interface ChainConfig extends node.ChainConfig {
   readonly contracts: node.ChainContracts & {
@@ -8,6 +9,7 @@ export interface ChainConfig extends node.ChainConfig {
 
 export interface RrpBeaconServerKeeperTrigger {
   readonly templateId: string;
+  readonly parameters: abi.InputParameter[];
   readonly endpointName: string;
   readonly oisTitle: string;
   readonly deviationPercentage: string;

@@ -4,6 +4,7 @@ import * as ois from "@api3/airnode-ois";
 import * as node from "@api3/airnode-node";
 import * as adapter from "@api3/airnode-adapter";
 import * as protocol from "@api3/airnode-protocol";
+import * as abi from "@api3/airnode-abi";
 import { flatMap, isEmpty, isNil, map, merge } from "lodash";
 import { ChainConfig } from "./types";
 import { loadAirkeeperConfig, deriveKeeperSponsorWallet } from "./utils";
@@ -54,6 +55,7 @@ export const handler = async (event: any = {}): Promise<any> => {
         // **************************************************************************
         for (const {
           templateId,
+          parameters,
           oisTitle,
           endpointName,
           deviationPercentage,
@@ -77,13 +79,18 @@ export const handler = async (event: any = {}): Promise<any> => {
           const configEndpoint = configOis.endpoints.find(
             (e) => e.name === endpointName
           )!;
-          const templateParameters = node.evm.encoding.safeDecode(
-            template.parameters
+          const configParameters = parameters.reduce(
+            (acc, p) => ({ ...acc, [p.name]: p.value }),
+            {}
           );
+          const apiCallParameters = {
+            ...configParameters,
+            ...node.evm.encoding.safeDecode(template.parameters),
+          };
           const reservedParameters =
             node.adapters.http.parameters.getReservedParameters(
               configEndpoint,
-              templateParameters || {}
+              apiCallParameters || {}
             );
           if (!reservedParameters._type) {
             console.log(
@@ -93,7 +100,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             return;
           }
           const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
-            templateParameters || {},
+            apiCallParameters || {},
             ois.RESERVED_PARAMETERS
           );
           const adapterApiCredentials = apiCredentials
@@ -148,9 +155,14 @@ export const handler = async (event: any = {}): Promise<any> => {
             ethers.constants.AddressZero,
             provider
           );
+          const encodedParameters = abi.encode(parameters);
+          const beaconId = ethers.utils.solidityKeccak256(
+            ["bytes32", "bytes"],
+            [templateId, encodedParameters]
+          );
           const beaconResponse = await rrpBeaconServer
             .connect(voidSigner)
-            .readBeacon(templateId);
+            .readBeacon(beaconId);
 
           if (!beaconResponse) {
             console.log(
@@ -221,11 +233,11 @@ export const handler = async (event: any = {}): Promise<any> => {
            * Check to prevent sending the same request for beacon update more than once
            */
 
-          // 1. Fetch RequestedBeaconUpdate events by templateId, sponsor and sponsorWallet
+          // 1. Fetch RequestedBeaconUpdate events by beaconId, sponsor and sponsorWallet
           //TODO: do we want to put a limit to the number of blocks to query for?
           const requestedBeaconUpdateFilter =
             rrpBeaconServer.filters.RequestedBeaconUpdate(
-              templateId,
+              beaconId,
               requestSponsor,
               keeperSponsorWallet.address
             );
@@ -233,9 +245,9 @@ export const handler = async (event: any = {}): Promise<any> => {
             requestedBeaconUpdateFilter
           );
 
-          // 2. Fetch UpdatedBeacon events by templateId
+          // 2. Fetch UpdatedBeacon events by beaconId
           const updatedBeaconFilter =
-            rrpBeaconServer.filters.UpdatedBeacon(templateId);
+            rrpBeaconServer.filters.UpdatedBeacon(beaconId);
           const updatedBeaconEvents = await rrpBeaconServer.queryFilter(
             updatedBeaconFilter
           );
@@ -282,7 +294,8 @@ export const handler = async (event: any = {}): Promise<any> => {
             .requestBeaconUpdate(
               templateId,
               requestSponsor,
-              requestSponsorWallet.address
+              requestSponsorWallet.address,
+              encodedParameters
             );
         }
       });
