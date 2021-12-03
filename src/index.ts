@@ -1,4 +1,3 @@
-import * as fs from "fs";
 import * as path from "path";
 import * as ethers from "ethers";
 import * as ois from "@api3/airnode-ois";
@@ -6,7 +5,8 @@ import * as node from "@api3/airnode-node";
 import * as adapter from "@api3/airnode-adapter";
 import * as protocol from "@api3/airnode-protocol";
 import { flatMap, isEmpty, isNil, map, merge } from "lodash";
-import { ChainConfig, Config } from "./types";
+import { ChainConfig } from "./types";
+import { loadAirkeeperConfig, deriveKeeperSponsorWallet } from "./utils";
 
 export const handler = async (event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -105,7 +105,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             endpointName,
             parameters: sanitizedParameters,
             apiCredentials: adapterApiCredentials as adapter.ApiCredentials[],
-            metadata: null, // TODO: https://github.com/api3dao/airnode/pull/697
+            metadata: null,
           };
 
           const apiResponse = await adapter.buildAndExecuteRequest(options); // TODO: do we need adapter.Config param for custom timeout?
@@ -301,21 +301,3 @@ export const handler = async (event: any = {}): Promise<any> => {
   };
   return { statusCode: 200, body: JSON.stringify(response) };
 };
-
-export function loadAirkeeperConfig(): Config {
-  const configPath = path.resolve(`${__dirname}/../config/airkeeper.json`);
-  return JSON.parse(fs.readFileSync(configPath, "utf8"));
-}
-
-export function deriveKeeperSponsorWallet(
-  airnodeHdNode: ethers.utils.HDNode,
-  sponsorAddress: string,
-  provider: ethers.providers.Provider
-): ethers.Wallet {
-  const sponsorWalletHdNode = airnodeHdNode.derivePath(
-    `m/44'/60'/12345'/${node.evm.deriveWalletPathFromSponsorAddress(
-      sponsorAddress
-    )}`
-  );
-  return new ethers.Wallet(sponsorWalletHdNode.privateKey).connect(provider);
-}
