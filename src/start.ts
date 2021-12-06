@@ -9,13 +9,13 @@ import { flatMap, isEmpty, isNil, map, merge } from "lodash";
 import { ChainConfig } from "./types";
 import { loadAirkeeperConfig, deriveKeeperSponsorWallet } from "./utils";
 
-export const handler = async (event: any = {}): Promise<any> => {
+export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
   console.log("[DEBUG]\tstarting beaconUpdate...");
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
-  const nodeConfigPath = path.resolve(`${__dirname}/../config/config.json`);
+  const nodeConfigPath = path.resolve(`${__dirname}/../../config/config.json`);
   const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
   const keeperConfig = loadAirkeeperConfig();
   const config = merge(nodeConfig, keeperConfig);

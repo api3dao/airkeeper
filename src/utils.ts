@@ -4,7 +4,7 @@ import * as ethers from "ethers";
 import { Config } from "./types";
 
 const loadAirkeeperConfig = (): Config => {
-  const configPath = path.resolve(`${__dirname}/../config/airkeeper.json`);
+  const configPath = path.resolve(`${__dirname}/../../config/airkeeper.json`);
   return JSON.parse(fs.readFileSync(configPath, "utf8"));
 };
 

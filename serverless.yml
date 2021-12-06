@@ -1,5 +1,9 @@
 service: airkeeper
 
+plugins:
+  - serverless-plugin-typescript
+  - serverless-offline
+
 variablesResolutionMode: 20210326
 
 provider:
@@ -13,8 +17,8 @@ provider:
   environment: ${file(load-secrets-env.js)}
 
 functions:
-  updateBeacon:
-    handler: dist/index.handler
+  start:
+    handler: src/start.handler
     name: airkeeper-update-beacon
     timeout: 60
     events:
