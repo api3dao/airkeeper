@@ -286,11 +286,6 @@ export const handler = async (event: any = {}): Promise<any> => {
             }
           }
 
-          // RrpBeaconServer expects that all parameters are defined in the template.
-          // There's a Jira issue to try adding user-defined parameters to the RrpBeaconServer.
-          // https://api3dao.atlassian.net/browse/A3P-48
-          // When using config.json.example we must pass a `from` parameter and the only
-          // way to get this request to work is by adding it as fixedParameter in the node config file
           await rrpBeaconServer
             .connect(keeperSponsorWallet)
             .requestBeaconUpdate(
