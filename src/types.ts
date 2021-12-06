@@ -15,6 +15,7 @@ export interface RrpBeaconServerKeeperTrigger {
   readonly deviationPercentage: string;
   readonly keeperSponsor: string;
   readonly requestSponsor: string;
+  readonly eventLogMaxBlocks: number;
 }
 
 export interface Config extends node.Config {

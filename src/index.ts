@@ -61,6 +61,7 @@ export const handler = async (event: any = {}): Promise<any> => {
           deviationPercentage,
           keeperSponsor,
           requestSponsor,
+          eventLogMaxBlocks,
         } of triggers.rrpBeaconServerKeeperJobs) {
           // **************************************************************************
           // 4. Fetch template by ID
@@ -115,7 +116,7 @@ export const handler = async (event: any = {}): Promise<any> => {
             metadata: null,
           };
 
-          const apiResponse = await adapter.buildAndExecuteRequest(options); // TODO: do we need adapter.Config param for custom timeout?
+          const apiResponse = await adapter.buildAndExecuteRequest(options);
           if (!apiResponse || !apiResponse.data) {
             console.log(
               "[ERROR]\tfailed to fetch data from API for endpoint:",
@@ -234,7 +235,6 @@ export const handler = async (event: any = {}): Promise<any> => {
            */
 
           // 1. Fetch RequestedBeaconUpdate events by beaconId, sponsor and sponsorWallet
-          //TODO: do we want to put a limit to the number of blocks to query for?
           const requestedBeaconUpdateFilter =
             rrpBeaconServer.filters.RequestedBeaconUpdate(
               beaconId,
@@ -242,14 +242,16 @@ export const handler = async (event: any = {}): Promise<any> => {
               keeperSponsorWallet.address
             );
           const requestedBeaconUpdateEvents = await rrpBeaconServer.queryFilter(
-            requestedBeaconUpdateFilter
+            requestedBeaconUpdateFilter,
+            eventLogMaxBlocks * -1
           );
 
           // 2. Fetch UpdatedBeacon events by beaconId
           const updatedBeaconFilter =
             rrpBeaconServer.filters.UpdatedBeacon(beaconId);
           const updatedBeaconEvents = await rrpBeaconServer.queryFilter(
-            updatedBeaconFilter
+            updatedBeaconFilter,
+            eventLogMaxBlocks * -1
           );
 
           // 3. Match these events by requestId and unmatched events
