@@ -268,11 +268,6 @@ export const handler = async (event: any = {}): Promise<any> => {
             //    calling AirnodeRrp.requestIsAwaitingFulfillment with requestId
             //    and check if beacon value is fresh enough and skip if it is
 
-            // `requestIdToTemplateId` is private so we must use AirnodeRrp instead
-            // const requestIsAwaitingFulfillment = await rrpBeaconServer.requestIdToTemplateId(
-            //   pendingRequest.args!["requestId"]
-            // );
-
             const requestIsAwaitingFulfillment =
               await airnodeRrp.requestIsAwaitingFulfillment(
                 pendingRequestedBeaconUpdateEvent.args!["requestId"]

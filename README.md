@@ -43,7 +43,7 @@ Airkeeper is meant to be deployed to AWS lambda service and for this you will ne
 
 - Request sponsor account must first call `AirnodeRrp.setSponsorshipStatus(rrpBeaconServer.address, true)` to allow the RrpBeaconServer contract to make requests to AirnodeRrp contract.
 
-- A `keeperSponsorWallet` needs to be derived for the sponsor-airnode pair. This is a similar process to deriving the sponsor wallet used by Airnode to fulfill requests but in this case the wallet derivation path is slightly different. These wallet needs to be funded with ETH in order for Airkeeper to use it to submit beacon updates requests.
+- A `keeperSponsorWallet` needs to be derived for the sponsor-airnode pair. This is a similar process to deriving the sponsor wallet used by Airnode to fulfill requests but in this case the wallet derivation path is slightly different. This wallet needs to be funded with ETH in order for Airkeeper to use it to submit beacon updates requests.
 
 - Request sponsor account must also call `RrpBeaconServer.setUpdatePermissionStatus(keeperSponsorWallet.address, true)` to allow the `keeperSponsorWallet` to update beacon server value.
 
