@@ -11,6 +11,7 @@
 
 # ENV variables and secrets
 .env
+aws.env
 
 # Config files
 **/airkeeper.json

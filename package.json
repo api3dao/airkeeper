@@ -15,6 +15,7 @@
     "sls:invoke-local": "tsc && sls invoke local --function updateBeacon"
   },
   "dependencies": {
+    "@api3/airnode-abi": "^0.2.2",
     "@api3/airnode-adapter": "^0.2.2",
     "@api3/airnode-node": "^0.2.2",
     "@api3/airnode-ois": "^0.2.2",
