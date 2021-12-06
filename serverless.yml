@@ -1,6 +1,6 @@
 service: airkeeper
 
-variablesResolutionMode: 20210219
+variablesResolutionMode: 20210326
 
 provider:
   name: aws
@@ -11,16 +11,11 @@ provider:
   lambdaHashingVersion: 20201221
   logRetentionInDays: 14
   environment: ${file(load-secrets-env.js)}
-  iamRoleStatements:
-    - Effect: "Allow"
-      Action: "lambda:InvokeFunction"
-      Resource: "*"
 
 functions:
   updateBeacon:
     handler: dist/index.handler
     name: airkeeper-update-beacon
     timeout: 60
-    reservedConcurrency: 1
     events:
       - schedule: rate(1 minute)

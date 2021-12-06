@@ -1,0 +1,36 @@
+import * as fs from "fs";
+import * as path from "path";
+import * as ethers from "ethers";
+import { Config } from "./types";
+
+const loadAirkeeperConfig = (): Config => {
+  const configPath = path.resolve(`${__dirname}/../config/airkeeper.json`);
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
+};
+
+const deriveKeeperWalletPathFromSponsorAddress = (
+  sponsorAddress: string
+): string => {
+  const sponsorAddressBN = ethers.BigNumber.from(
+    ethers.utils.getAddress(sponsorAddress)
+  );
+  const paths = [];
+  for (let i = 0; i < 6; i++) {
+    const shiftedSponsorAddressBN = sponsorAddressBN.shr(31 * i);
+    paths.push(shiftedSponsorAddressBN.mask(31).toString());
+  }
+  return `12345/${paths.join("/")}`;
+};
+
+const deriveKeeperSponsorWallet = (
+  airnodeHdNode: ethers.utils.HDNode,
+  sponsorAddress: string,
+  provider: ethers.providers.Provider
+): ethers.Wallet => {
+  const sponsorWalletHdNode = airnodeHdNode.derivePath(
+    `m/44'/60'/0'/${deriveKeeperWalletPathFromSponsorAddress(sponsorAddress)}`
+  );
+  return new ethers.Wallet(sponsorWalletHdNode.privateKey).connect(provider);
+};
+
+export { loadAirkeeperConfig, deriveKeeperSponsorWallet };
