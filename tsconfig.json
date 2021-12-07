@@ -8,8 +8,6 @@
     "moduleResolution": "node",
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "outDir": "lib",
     "sourceMap": true,
   },
-  "exclude": ["node_modules"]
 }

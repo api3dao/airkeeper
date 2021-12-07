@@ -2,7 +2,6 @@ service: airkeeper
 
 plugins:
   - serverless-plugin-typescript
-  - serverless-offline
 
 variablesResolutionMode: 20210326
 

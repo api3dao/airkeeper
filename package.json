@@ -5,14 +5,11 @@
   "description": "A tool to update a beacon server value on a time interval",
   "main": "index.js",
   "scripts": {
-    "build": "npm run clean && npm run compile",
-    "clean": "rimraf -rf ./dist",
-    "compile": "tsc -p tsconfig.json",
     "sls:config": "sls config credentials --provider aws --key $AWS_ACCESS_KEY_ID --secret $AWS_SECRET_ACCESS_KEY",
     "sls:deploy": "sls deploy --region $REGION --stage $STAGE",
     "sls:remove": "sls remove --region $REGION --stage $STAGE",
     "sls:invoke": "sls invoke --function start",
-    "sls:invoke-local": "tsc && sls invoke local --function start"
+    "sls:invoke-local": "sls invoke local --function start"
   },
   "dependencies": {
     "@api3/airnode-abi": "^0.2.2",
@@ -20,19 +17,16 @@
     "@api3/airnode-node": "^0.2.2",
     "@api3/airnode-ois": "^0.2.2",
     "@api3/airnode-protocol": "^0.2.2",
+    "dotenv-safe": "^8.2.0",
     "ethers": "^5.5.2",
-    "dotenv": "^8.2.0",
-    "lodash": "^4.17.21",
-    "serverless": "^2.67.0"
+    "lodash": "^4.17.21"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.51",
     "@types/dotenv-safe": "^8.1.0",
-    "@types/lambda-tester": "^3.6.0",
     "@types/lodash": "^4.14.177",
-    "lambda-tester": "^4.0.1",
-    "rimraf": "^3.0.2",
-    "serverless-offline": "^5.12.1",
+    "@types/node": "^16.11.12",
+    "@types/serverless": "^1.78.39",
+    "serverless": "^2.68.0",
     "serverless-plugin-typescript": "^2.1.0",
     "ts-node": "^8.9.1",
     "typescript": "^4.5.2"
