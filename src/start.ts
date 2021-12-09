@@ -15,7 +15,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
-  const nodeConfigPath = path.resolve(`${__dirname}/../../config/config.json`);
+  const nodeConfigPath = path.resolve(`${__dirname}/../config/config.json`);
   const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
   const keeperConfig = loadAirkeeperConfig();
   const config = merge(nodeConfig, keeperConfig);
@@ -272,7 +272,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
               await airnodeRrp.requestIsAwaitingFulfillment(
                 pendingRequestedBeaconUpdateEvent.args!["requestId"]
               );
-            //TODO: Add timestamp check?
             if (requestIsAwaitingFulfillment) {
               console.log(
                 "[INFO]\trequest is awaiting fulfillment. skipping update"

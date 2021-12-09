@@ -15,6 +15,10 @@ provider:
   logRetentionInDays: 14
   environment: ${file(load-secrets-env.js)}
 
+package:
+  patterns:
+    - "config/*.json"
+
 functions:
   start:
     handler: src/start.handler
