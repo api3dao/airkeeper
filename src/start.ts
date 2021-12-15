@@ -8,6 +8,10 @@ import * as abi from "@api3/airnode-abi";
 import { flatMap, isEmpty, isNil, map, merge } from "lodash";
 import { ChainConfig } from "./types";
 import { loadAirkeeperConfig, deriveKeeperSponsorWallet } from "./utils";
+// TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated
+import { getGasPrice } from "./gas-prices";
+
+const GAS_LIMIT = 500_000;
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -210,13 +214,13 @@ export const handler = async (_event: any = {}): Promise<any> => {
             return;
           }
           console.log("[DEBUG]\tupdating beacon...");
-
           /**
            * 1. Airnode must first call setSponsorshipStatus(rrpBeaconServer.address, true) to
            *    enable the beacon server to make requests to AirnodeRrp
            * 2. Request sponsor should then call setUpdatePermissionStatus(keeperSponsorWallet.address, true)
            *    to allow requester to update beacon
            */
+
           const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(
             nodeSettings.airnodeWalletMnemonic
           );
@@ -230,9 +234,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             requestSponsor
           );
 
-          /**
-           * Check to prevent sending the same request for beacon update more than once
-           */
+          // Check to prevent sending the same request for beacon update more than once
 
           // 1. Fetch RequestedBeaconUpdate events by beaconId, sponsor and sponsorWallet
           const requestedBeaconUpdateFilter =
@@ -280,13 +282,23 @@ export const handler = async (_event: any = {}): Promise<any> => {
             }
           }
 
+          // Fetch current gas fee data
+          const [, gasTarget] = await getGasPrice({
+            provider,
+          });
+
           await rrpBeaconServer
             .connect(keeperSponsorWallet)
             .requestBeaconUpdate(
               templateId,
               requestSponsor,
               requestSponsorWallet.address,
-              encodedParameters
+              encodedParameters,
+              {
+                gasLimit: GAS_LIMIT,
+                ...gasTarget,
+                //nonce: TODO: BEC-40,
+              }
             );
         }
       });
