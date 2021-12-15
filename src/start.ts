@@ -285,6 +285,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
           // Fetch current gas fee data
           const [, gasTarget] = await getGasPrice({
             provider,
+            chainOptions: chain.options,
           });
 
           await rrpBeaconServer
