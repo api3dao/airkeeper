@@ -283,10 +283,21 @@ export const handler = async (_event: any = {}): Promise<any> => {
           }
 
           // Fetch current gas fee data
-          const [, gasTarget] = await getGasPrice({
+          const [gasPriceLogs, gasTarget] = await getGasPrice({
             provider,
             chainOptions: chain.options,
           });
+          if (!isEmpty(gasPriceLogs)) {
+            gasPriceLogs.forEach((log) =>
+              console.log(`[${log.level}]\t${log.message}`)
+            );
+          }
+          if (!gasTarget) {
+            console.log(
+              "[ERROR]\tunable to submit transactions without gas price. skipping update"
+            );
+            return;
+          }
 
           await rrpBeaconServer
             .connect(keeperSponsorWallet)
