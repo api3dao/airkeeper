@@ -235,6 +235,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
           );
 
           // Check to prevent sending the same request for beacon update more than once
+          // by checking if a RequestedBeaconUpdate event was emitted but no matching
+          // UpdatedBeacon event was emitted.
+          const currentBlock = await provider.getBlockNumber();
 
           // 1. Fetch RequestedBeaconUpdate events by beaconId, sponsor and sponsorWallet
           const requestedBeaconUpdateFilter =
@@ -245,7 +248,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
             );
           const requestedBeaconUpdateEvents = await rrpBeaconServer.queryFilter(
             requestedBeaconUpdateFilter,
-            eventLogMaxBlocks * -1
+            eventLogMaxBlocks * -1,
+            currentBlock
           );
 
           // 2. Fetch UpdatedBeacon events by beaconId
@@ -253,7 +257,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
             rrpBeaconServer.filters.UpdatedBeacon(beaconId);
           const updatedBeaconEvents = await rrpBeaconServer.queryFilter(
             updatedBeaconFilter,
-            eventLogMaxBlocks * -1
+            eventLogMaxBlocks * -1,
+            currentBlock
           );
 
           // 3. Match these events by requestId and unmatched events
@@ -299,19 +304,32 @@ export const handler = async (_event: any = {}): Promise<any> => {
             return;
           }
 
-          await rrpBeaconServer
-            .connect(keeperSponsorWallet)
-            .requestBeaconUpdate(
-              templateId,
-              requestSponsor,
-              requestSponsorWallet.address,
-              encodedParameters,
-              {
-                gasLimit: GAS_LIMIT,
-                ...gasTarget,
-                //nonce: TODO: BEC-40,
-              }
+          // Fetch keeperSponsorWallet transaction count
+          const keeperSponsorWalletTransactionCount =
+            await provider.getTransactionCount(
+              keeperSponsorWallet.address,
+              currentBlock
             );
+
+          try {
+            await rrpBeaconServer
+              .connect(keeperSponsorWallet)
+              .requestBeaconUpdate(
+                templateId,
+                requestSponsor,
+                requestSponsorWallet.address,
+                encodedParameters,
+                {
+                  gasLimit: GAS_LIMIT,
+                  ...gasTarget,
+                  nonce: keeperSponsorWalletTransactionCount, // TODO: what if this same wallet is being used on another provider or trigger?
+                }
+              );
+          } catch {
+            console.log(
+              `[ERROR]\tfailed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${keeperSponsorWalletTransactionCount}. skipping update`
+            );
+          }
         }
       });
     })
