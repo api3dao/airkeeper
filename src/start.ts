@@ -5,9 +5,18 @@ import * as node from "@api3/airnode-node";
 import * as adapter from "@api3/airnode-adapter";
 import * as protocol from "@api3/airnode-protocol";
 import * as abi from "@api3/airnode-abi";
-import { flatMap, groupBy, isEmpty, isNil, map, merge } from "lodash";
+import flatMap from "lodash/flatMap";
+import groupBy from "lodash/groupBy";
+import isEmpty from "lodash/isEmpty";
+import isNil from "lodash/isNil";
+import map from "lodash/map";
+import merge from "lodash/merge";
 import { ChainConfig } from "./types";
-import { loadAirkeeperConfig, deriveKeeperSponsorWallet } from "./utils";
+import {
+  loadAirkeeperConfig,
+  deriveKeeperSponsorWallet,
+  printError,
+} from "./utils";
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated
 import { getGasPrice } from "./gas-prices";
 
@@ -38,7 +47,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
     evmChains.map((chain: node.ChainConfig & ChainConfig) => {
       return map(chain.providers, async (chainProvider, _) => {
         // **************************************************************************
-        // 2. Initialize provider and contracts
+        // 2. Initialize provider specific data
         // **************************************************************************
         console.log("[DEBUG]\tinitializing...");
         const chainProviderUrl = chainProvider.url || "";
@@ -54,8 +63,22 @@ export const handler = async (_event: any = {}): Promise<any> => {
           provider
         );
 
+        const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(
+          nodeSettings.airnodeWalletMnemonic
+        );
+
+        let currentBlock: number;
+        try {
+          currentBlock = await provider.getBlockNumber();
+        } catch (error) {
+          printError(error);
+          console.log("[ERROR]\tfailed to fetch the blockNumber");
+          return;
+        }
+
         // **************************************************************************
-        // 3. Run each keeper job by keeperSponsor address sequentially
+        // 3. Run grouped by keeperSponsor address jobs in parallel
+        //    but each keeper job in the group sequentially
         // **************************************************************************
         const rrpBeaconServerKeeperJobsByKeeperSponsor = groupBy(
           triggers.rrpBeaconServerKeeperJobs,
@@ -65,18 +88,13 @@ export const handler = async (_event: any = {}): Promise<any> => {
           rrpBeaconServerKeeperJobsByKeeperSponsor
         );
 
-        const promises = keeperSponsorAddresses.map(
-          async (keeperSponsorAddress) => {
-            const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(
-              nodeSettings.airnodeWalletMnemonic
-            );
+        const keeperSponsorWalletPromises = keeperSponsorAddresses.map(
+          async (keeperSponsor) => {
             const keeperSponsorWallet = deriveKeeperSponsorWallet(
               airnodeHDNode,
-              keeperSponsorAddress,
+              keeperSponsor,
               provider
             );
-
-            const currentBlock = await provider.getBlockNumber();
 
             // Fetch keeperSponsorWallet transaction count
             let keeperSponsorWalletTransactionCount =
@@ -84,13 +102,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 keeperSponsorWallet.address,
                 currentBlock
               );
-            console.log(
-              "🚀 ~ file: start.ts ~ line 83 ~ keeperSponsorWalletTransactionCount",
-              keeperSponsorWalletTransactionCount
-            );
 
             const rrpBeaconServerKeeperJobs =
-              rrpBeaconServerKeeperJobsByKeeperSponsor[keeperSponsorAddress];
+              rrpBeaconServerKeeperJobsByKeeperSponsor[keeperSponsor];
 
             for (const {
               templateId,
@@ -105,9 +119,17 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // 4. Fetch template by ID
               // **************************************************************************
               console.log("[DEBUG]\tfetching template...");
-              const template = await airnodeRrp.templates(templateId);
-              if (!template) {
+              let template: [string, string, string] & {
+                airnode: string;
+                endpointId: string;
+                parameters: string;
+              };
+              try {
+                template = await airnodeRrp.templates(templateId);
+              } catch (error) {
+                printError(error);
                 console.log("[ERROR]\ttemplate not found:", templateId);
+                continue;
               }
 
               // **************************************************************************
@@ -156,7 +178,14 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 metadata: null,
               };
 
-              const apiResponse = await adapter.buildAndExecuteRequest(options);
+              let apiResponse: {
+                data: unknown;
+              } | null = null;
+              try {
+                apiResponse = await adapter.buildAndExecuteRequest(options);
+              } catch (error) {
+                printError(error);
+              }
               if (!apiResponse || !apiResponse.data) {
                 console.log(
                   "[ERROR]\tfailed to fetch data from API for endpoint:",
@@ -165,7 +194,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 continue;
               }
               console.log(
-                "[INFO]\tAPI server response data:",
+                "[DEBUG]\tAPI server response data:",
                 apiResponse.data
               );
 
@@ -176,19 +205,15 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   reservedParameters as adapter.ReservedParameters
                 );
                 apiValue = ethers.BigNumber.from(response.values[0].toString());
-
-                console.log("[INFO]\tAPI server value:", apiValue.toString());
               } catch (error) {
+                printError(error);
                 console.log(
                   "[ERROR]\tfailed to extract value from API response:",
                   JSON.stringify(apiResponse.data)
                 );
-                let message;
-                if (error instanceof Error) message = error.message;
-                else message = String(error);
-                console.log("[DEBUG]\tmessage:", message);
                 continue;
               }
+              console.log("[INFO]\tAPI server value:", apiValue.toString());
 
               // **************************************************************************
               // 6. Read beacon
@@ -204,14 +229,23 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 ["bytes32", "bytes"],
                 [templateId, encodedParameters]
               );
-              const beaconResponse = await rrpBeaconServer
-                .connect(voidSigner)
-                .readBeacon(beaconId);
-
-              if (!beaconResponse) {
+              let beaconResponse:
+                | ([ethers.ethers.BigNumber, number] & {
+                    value: ethers.ethers.BigNumber;
+                    timestamp: number;
+                  })
+                | null = null;
+              try {
+                beaconResponse = await rrpBeaconServer
+                  .connect(voidSigner)
+                  .readBeacon(beaconId);
+              } catch (error) {
+                printError(error);
+              }
+              if (!beaconResponse || !beaconResponse.value) {
                 console.log(
-                  "[ERROR]\tfailed to fetch value from beacon server for template:",
-                  templateId
+                  "[ERROR]\tfailed to read value for beaconId:",
+                  beaconId
                 );
                 continue;
               }
@@ -285,10 +319,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   eventLogMaxBlocks * -1,
                   currentBlock
                 );
-              console.log(
-                "🚀 ~ file: start.ts ~ line 252 ~ returnmap ~ requestedBeaconUpdateEvents",
-                requestedBeaconUpdateEvents.length
-              );
 
               // 2. Fetch UpdatedBeacon events by beaconId
               const updatedBeaconFilter =
@@ -297,10 +327,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 updatedBeaconFilter,
                 eventLogMaxBlocks * -1,
                 currentBlock
-              );
-              console.log(
-                "🚀 ~ file: start.ts ~ line 264 ~ returnmap ~ updatedBeaconEvents",
-                updatedBeaconEvents.length
               );
 
               // 3. Match these events by requestId and unmatched events
@@ -361,20 +387,17 @@ export const handler = async (_event: any = {}): Promise<any> => {
                       nonce,
                     }
                   );
-              } catch {
+              } catch (error) {
+                printError(error);
                 console.log(
                   `[ERROR]\tfailed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${nonce}. skipping update`
                 );
               }
-              console.log(
-                "PENDING AFTER:",
-                await provider.send("eth_getBlockByNumber", ["pending", true])
-              );
             }
           }
         );
 
-        await Promise.all(promises);
+        await Promise.all(keeperSponsorWalletPromises);
       });
     })
   );
