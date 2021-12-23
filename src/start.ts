@@ -17,10 +17,11 @@ import {
   deriveKeeperSponsorWallet,
   printError,
 } from "./utils";
-// TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated
+// TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
 import { getGasPrice } from "./gas-prices";
 
-const GAS_LIMIT = 500_000;
+export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
+export const GAS_LIMIT = 500_000;
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -67,11 +68,16 @@ export const handler = async (_event: any = {}): Promise<any> => {
           nodeSettings.airnodeWalletMnemonic
         );
 
-        let currentBlock: number;
-        try {
-          currentBlock = await provider.getBlockNumber();
-        } catch (error) {
-          printError(error);
+        // Fetch current block number from chain via provider
+        const retryableGetBlockNumberCall = node.utils.retryOnTimeout(
+          DEFAULT_RETRY_TIMEOUT_MS,
+          () => provider.getBlockNumber()
+        );
+        const [err, currentBlock] = await node.utils.go(
+          () => retryableGetBlockNumberCall
+        );
+        if (err || isNil(currentBlock)) {
+          printError(err);
           console.log("[ERROR]\tfailed to fetch the blockNumber");
           return;
         }
@@ -97,11 +103,24 @@ export const handler = async (_event: any = {}): Promise<any> => {
             );
 
             // Fetch keeperSponsorWallet transaction count
-            let keeperSponsorWalletTransactionCount =
-              await provider.getTransactionCount(
-                keeperSponsorWallet.address,
-                currentBlock
+            const retryableGetTransactionCountCall = node.utils.retryOnTimeout(
+              DEFAULT_RETRY_TIMEOUT_MS,
+              () =>
+                provider.getTransactionCount(
+                  keeperSponsorWallet.address,
+                  currentBlock
+                )
+            );
+            const [err, keeperSponsorWalletTransactionCount] =
+              await node.utils.go(() => retryableGetTransactionCountCall);
+            if (err || isNil(keeperSponsorWalletTransactionCount)) {
+              printError(err);
+              console.log(
+                "[ERROR]\tfailed to fetch the keeperSponsorWallet transaction count"
               );
+              return;
+            }
+            let nonce = keeperSponsorWalletTransactionCount;
 
             const rrpBeaconServerKeeperJobs =
               rrpBeaconServerKeeperJobsByKeeperSponsor[keeperSponsor];
@@ -119,15 +138,15 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // 4. Fetch template by ID
               // **************************************************************************
               console.log("[DEBUG]\tfetching template...");
-              let template: [string, string, string] & {
-                airnode: string;
-                endpointId: string;
-                parameters: string;
-              };
-              try {
-                template = await airnodeRrp.templates(templateId);
-              } catch (error) {
-                printError(error);
+              const retryableTemplatesCall = node.utils.retryOnTimeout(
+                DEFAULT_RETRY_TIMEOUT_MS,
+                () => airnodeRrp.templates(templateId)
+              );
+              const [errTemplate, template] = await node.utils.go(
+                () => retryableTemplatesCall
+              );
+              if (errTemplate || isNil(template)) {
+                printError(errTemplate);
                 console.log("[ERROR]\ttemplate not found:", templateId);
                 continue;
               }
@@ -178,15 +197,18 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 metadata: null,
               };
 
-              let apiResponse: {
-                data: unknown;
-              } | null = null;
-              try {
-                apiResponse = await adapter.buildAndExecuteRequest(options);
-              } catch (error) {
-                printError(error);
-              }
-              if (!apiResponse || !apiResponse.data) {
+              const retryableBuildAndExecuteRequestCall =
+                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
+                  adapter.buildAndExecuteRequest(options)
+                );
+              const [errBuildAndExecuteRequest, apiResponse] =
+                await node.utils.go(() => retryableBuildAndExecuteRequestCall);
+              if (
+                errBuildAndExecuteRequest ||
+                isNil(apiResponse) ||
+                isNil(apiResponse.data)
+              ) {
+                printError(errBuildAndExecuteRequest);
                 console.log(
                   "[ERROR]\tfailed to fetch data from API for endpoint:",
                   endpointName
@@ -208,7 +230,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               } catch (error) {
                 printError(error);
                 console.log(
-                  "[ERROR]\tfailed to extract value from API response:",
+                  "[ERROR]\tfailed to extract or encode value from API response:",
                   JSON.stringify(apiResponse.data)
                 );
                 continue;
@@ -229,20 +251,19 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 ["bytes32", "bytes"],
                 [templateId, encodedParameters]
               );
-              let beaconResponse:
-                | ([ethers.ethers.BigNumber, number] & {
-                    value: ethers.ethers.BigNumber;
-                    timestamp: number;
-                  })
-                | null = null;
-              try {
-                beaconResponse = await rrpBeaconServer
-                  .connect(voidSigner)
-                  .readBeacon(beaconId);
-              } catch (error) {
-                printError(error);
-              }
-              if (!beaconResponse || !beaconResponse.value) {
+              const retryableReadBeaconCall = node.utils.retryOnTimeout(
+                DEFAULT_RETRY_TIMEOUT_MS,
+                () => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId)
+              );
+              const [errReadBeacon, beaconResponse] = await node.utils.go(
+                () => retryableReadBeaconCall
+              );
+              if (
+                errReadBeacon ||
+                isNil(beaconResponse) ||
+                isNil(beaconResponse.value)
+              ) {
+                printError(errReadBeacon);
                 console.log(
                   "[ERROR]\tfailed to read value for beaconId:",
                   beaconId
@@ -313,21 +334,49 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   requestSponsor,
                   keeperSponsorWallet.address
                 );
-              const requestedBeaconUpdateEvents =
-                await rrpBeaconServer.queryFilter(
-                  requestedBeaconUpdateFilter,
-                  eventLogMaxBlocks * -1,
-                  currentBlock
+              const retryableRequestedBeaconUpdateFilterCall =
+                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
+                  rrpBeaconServer.queryFilter(
+                    requestedBeaconUpdateFilter,
+                    eventLogMaxBlocks * -1,
+                    currentBlock
+                  )
                 );
+              const [
+                errRequestedBeaconUpdateFilter,
+                requestedBeaconUpdateEvents,
+              ] = await node.utils.go(
+                () => retryableRequestedBeaconUpdateFilterCall
+              );
+              if (
+                errRequestedBeaconUpdateFilter ||
+                isNil(requestedBeaconUpdateEvents)
+              ) {
+                printError(errRequestedBeaconUpdateFilter);
+                console.log(
+                  "[ERROR]\tfailed to fetch RequestedBeaconUpdate events"
+                );
+                continue;
+              }
 
               // 2. Fetch UpdatedBeacon events by beaconId
               const updatedBeaconFilter =
                 rrpBeaconServer.filters.UpdatedBeacon(beaconId);
-              const updatedBeaconEvents = await rrpBeaconServer.queryFilter(
-                updatedBeaconFilter,
-                eventLogMaxBlocks * -1,
-                currentBlock
-              );
+              const retryableUpdatedBeaconFilterCall =
+                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
+                  rrpBeaconServer.queryFilter(
+                    updatedBeaconFilter,
+                    eventLogMaxBlocks * -1,
+                    currentBlock
+                  )
+                );
+              const [errUpdatedBeaconFilter, updatedBeaconEvents] =
+                await node.utils.go(() => retryableUpdatedBeaconFilterCall);
+              if (errUpdatedBeaconFilter || isNil(updatedBeaconEvents)) {
+                printError(errUpdatedBeaconFilter);
+                console.log("[ERROR]\tfailed to fetch UpdatedBeacon events");
+                continue;
+              }
 
               // 3. Match these events by requestId and unmatched events
               //    are the ones that are still waiting to be fulfilled
@@ -342,11 +391,25 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 // 4. Check if RequestedBeaconUpdate event is awaiting fulfillment by
                 //    calling AirnodeRrp.requestIsAwaitingFulfillment with requestId
                 //    and check if beacon value is fresh enough and skip if it is
-
-                const requestIsAwaitingFulfillment =
-                  await airnodeRrp.requestIsAwaitingFulfillment(
-                    pendingRequestedBeaconUpdateEvent.args!["requestId"]
+                const retryableRequestIsAwaitingFulfillmentCall =
+                  node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
+                    airnodeRrp.requestIsAwaitingFulfillment(
+                      pendingRequestedBeaconUpdateEvent.args!["requestId"]
+                    )
                   );
+                const [
+                  errRequestIsAwaitingFulfillment,
+                  requestIsAwaitingFulfillment,
+                ] = await node.utils.go(
+                  () => retryableRequestIsAwaitingFulfillmentCall
+                );
+                if (errRequestIsAwaitingFulfillment) {
+                  printError(errRequestIsAwaitingFulfillment);
+                  console.log(
+                    "[INFO]\tfailed to check if request is awaiting fulfillment"
+                  );
+                  continue;
+                }
                 if (requestIsAwaitingFulfillment) {
                   console.log(
                     "[INFO]\trequest is awaiting fulfillment. skipping update"
@@ -372,25 +435,31 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 continue;
               }
 
-              const nonce = keeperSponsorWalletTransactionCount++;
-              try {
-                await rrpBeaconServer
-                  .connect(keeperSponsorWallet)
-                  .requestBeaconUpdate(
-                    templateId,
-                    requestSponsor,
-                    requestSponsorWallet.address,
-                    encodedParameters,
-                    {
-                      gasLimit: GAS_LIMIT,
-                      ...gasTarget,
-                      nonce,
-                    }
-                  );
-              } catch (error) {
-                printError(error);
+              // Submit requestBeaconUpdate transaction
+              const currentNonce = nonce;
+              const retryableRequestBeaconUpdateCall =
+                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
+                  rrpBeaconServer
+                    .connect(keeperSponsorWallet)
+                    .requestBeaconUpdate(
+                      templateId,
+                      requestSponsor,
+                      requestSponsorWallet.address,
+                      encodedParameters,
+                      {
+                        gasLimit: GAS_LIMIT,
+                        ...gasTarget,
+                        nonce: nonce++,
+                      }
+                    )
+                );
+              const [errRequestBeaconUpdate] = await node.utils.go(
+                () => retryableRequestBeaconUpdateCall
+              );
+              if (errRequestBeaconUpdate) {
+                printError(errRequestBeaconUpdate);
                 console.log(
-                  `[ERROR]\tfailed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${nonce}. skipping update`
+                  `[ERROR]\tfailed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${currentNonce}. skipping update`
                 );
               }
             }
