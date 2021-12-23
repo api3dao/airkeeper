@@ -26,6 +26,7 @@
     "@types/lodash": "^4.14.177",
     "@types/node": "^16.11.12",
     "@types/serverless": "^1.78.39",
+    "rimraf": "^3.0.2",
     "serverless": "^2.68.0",
     "serverless-plugin-typescript": "^2.1.0",
     "ts-node": "^10.4.0",

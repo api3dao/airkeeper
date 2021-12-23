@@ -9,7 +9,7 @@ provider:
   name: aws
   # region: ${opt:region}
   # stage: ${opt:stage}
-  runtime: nodejs12.x
+  runtime: nodejs14.x
   memorySize: 512
   lambdaHashingVersion: 20201221
   logRetentionInDays: 14

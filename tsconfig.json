@@ -9,5 +9,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "sourceMap": true,
+    "strict": true,
   },
 }

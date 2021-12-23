@@ -33,4 +33,11 @@ const deriveKeeperSponsorWallet = (
   return new ethers.Wallet(sponsorWalletHdNode.privateKey).connect(provider);
 };
 
-export { loadAirkeeperConfig, deriveKeeperSponsorWallet };
+const printError = (error: unknown) => {
+  let message;
+  if (error instanceof Error) message = error.message;
+  else message = String(error);
+  console.log("[DEBUG]\terror message:", message);
+};
+
+export { loadAirkeeperConfig, deriveKeeperSponsorWallet, printError };
