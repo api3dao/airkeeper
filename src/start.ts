@@ -16,16 +16,16 @@ import {
   loadAirkeeperConfig,
   deriveKeeperSponsorWallet,
   printError,
+  retryGo,
 } from "./utils";
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
 import { getGasPrice } from "./gas-prices";
 
-export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
 export const GAS_LIMIT = 500_000;
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
-  console.log("[DEBUG]\tstarting beaconUpdate...");
+  console.log("[DEBUG]\tstarting Airkeeper...");
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
@@ -69,12 +69,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
         );
 
         // Fetch current block number from chain via provider
-        const retryableGetBlockNumberCall = node.utils.retryOnTimeout(
-          DEFAULT_RETRY_TIMEOUT_MS,
-          () => provider.getBlockNumber()
-        );
-        const [err, currentBlock] = await node.utils.go(
-          () => retryableGetBlockNumberCall
+        const [err, currentBlock] = await retryGo(() =>
+          provider.getBlockNumber()
         );
         if (err || isNil(currentBlock)) {
           printError(err);
@@ -103,16 +99,13 @@ export const handler = async (_event: any = {}): Promise<any> => {
             );
 
             // Fetch keeperSponsorWallet transaction count
-            const retryableGetTransactionCountCall = node.utils.retryOnTimeout(
-              DEFAULT_RETRY_TIMEOUT_MS,
+            const [err, keeperSponsorWalletTransactionCount] = await retryGo(
               () =>
                 provider.getTransactionCount(
                   keeperSponsorWallet.address,
                   currentBlock
                 )
             );
-            const [err, keeperSponsorWalletTransactionCount] =
-              await node.utils.go(() => retryableGetTransactionCountCall);
             if (err || isNil(keeperSponsorWalletTransactionCount)) {
               printError(err);
               console.log(
@@ -138,12 +131,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // 4. Fetch template by ID
               // **************************************************************************
               console.log("[DEBUG]\tfetching template...");
-              const retryableTemplatesCall = node.utils.retryOnTimeout(
-                DEFAULT_RETRY_TIMEOUT_MS,
-                () => airnodeRrp.templates(templateId)
-              );
-              const [errTemplate, template] = await node.utils.go(
-                () => retryableTemplatesCall
+              const [errTemplate, template] = await retryGo(() =>
+                airnodeRrp.templates(templateId)
               );
               if (errTemplate || isNil(template)) {
                 printError(errTemplate);
@@ -197,12 +186,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 metadata: null,
               };
 
-              const retryableBuildAndExecuteRequestCall =
-                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
-                  adapter.buildAndExecuteRequest(options)
-                );
-              const [errBuildAndExecuteRequest, apiResponse] =
-                await node.utils.go(() => retryableBuildAndExecuteRequestCall);
+              const [errBuildAndExecuteRequest, apiResponse] = await retryGo(
+                () => adapter.buildAndExecuteRequest(options)
+              );
               if (
                 errBuildAndExecuteRequest ||
                 isNil(apiResponse) ||
@@ -251,12 +237,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 ["bytes32", "bytes"],
                 [templateId, encodedParameters]
               );
-              const retryableReadBeaconCall = node.utils.retryOnTimeout(
-                DEFAULT_RETRY_TIMEOUT_MS,
-                () => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId)
-              );
-              const [errReadBeacon, beaconResponse] = await node.utils.go(
-                () => retryableReadBeaconCall
+              const [errReadBeacon, beaconResponse] = await retryGo(() =>
+                rrpBeaconServer.connect(voidSigner).readBeacon(beaconId)
               );
               if (
                 errReadBeacon ||
@@ -334,19 +316,15 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   requestSponsor,
                   keeperSponsorWallet.address
                 );
-              const retryableRequestedBeaconUpdateFilterCall =
-                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
-                  rrpBeaconServer.queryFilter(
-                    requestedBeaconUpdateFilter,
-                    eventLogMaxBlocks * -1,
-                    currentBlock
-                  )
-                );
               const [
                 errRequestedBeaconUpdateFilter,
                 requestedBeaconUpdateEvents,
-              ] = await node.utils.go(
-                () => retryableRequestedBeaconUpdateFilterCall
+              ] = await retryGo(() =>
+                rrpBeaconServer.queryFilter(
+                  requestedBeaconUpdateFilter,
+                  eventLogMaxBlocks * -1,
+                  currentBlock
+                )
               );
               if (
                 errRequestedBeaconUpdateFilter ||
@@ -362,16 +340,14 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // 2. Fetch UpdatedBeacon events by beaconId
               const updatedBeaconFilter =
                 rrpBeaconServer.filters.UpdatedBeacon(beaconId);
-              const retryableUpdatedBeaconFilterCall =
-                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
+              const [errUpdatedBeaconFilter, updatedBeaconEvents] =
+                await retryGo(() =>
                   rrpBeaconServer.queryFilter(
                     updatedBeaconFilter,
                     eventLogMaxBlocks * -1,
                     currentBlock
                   )
                 );
-              const [errUpdatedBeaconFilter, updatedBeaconEvents] =
-                await node.utils.go(() => retryableUpdatedBeaconFilterCall);
               if (errUpdatedBeaconFilter || isNil(updatedBeaconEvents)) {
                 printError(errUpdatedBeaconFilter);
                 console.log("[ERROR]\tfailed to fetch UpdatedBeacon events");
@@ -391,17 +367,13 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 // 4. Check if RequestedBeaconUpdate event is awaiting fulfillment by
                 //    calling AirnodeRrp.requestIsAwaitingFulfillment with requestId
                 //    and check if beacon value is fresh enough and skip if it is
-                const retryableRequestIsAwaitingFulfillmentCall =
-                  node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
-                    airnodeRrp.requestIsAwaitingFulfillment(
-                      pendingRequestedBeaconUpdateEvent.args!["requestId"]
-                    )
-                  );
                 const [
                   errRequestIsAwaitingFulfillment,
                   requestIsAwaitingFulfillment,
-                ] = await node.utils.go(
-                  () => retryableRequestIsAwaitingFulfillmentCall
+                ] = await retryGo(() =>
+                  airnodeRrp.requestIsAwaitingFulfillment(
+                    pendingRequestedBeaconUpdateEvent.args!["requestId"]
+                  )
                 );
                 if (errRequestIsAwaitingFulfillment) {
                   printError(errRequestIsAwaitingFulfillment);
@@ -437,24 +409,20 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
               // Submit requestBeaconUpdate transaction
               const currentNonce = nonce;
-              const retryableRequestBeaconUpdateCall =
-                node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, () =>
-                  rrpBeaconServer
-                    .connect(keeperSponsorWallet)
-                    .requestBeaconUpdate(
-                      templateId,
-                      requestSponsor,
-                      requestSponsorWallet.address,
-                      encodedParameters,
-                      {
-                        gasLimit: GAS_LIMIT,
-                        ...gasTarget,
-                        nonce: nonce++,
-                      }
-                    )
-                );
-              const [errRequestBeaconUpdate] = await node.utils.go(
-                () => retryableRequestBeaconUpdateCall
+              const [errRequestBeaconUpdate] = await retryGo(() =>
+                rrpBeaconServer
+                  .connect(keeperSponsorWallet)
+                  .requestBeaconUpdate(
+                    templateId,
+                    requestSponsor,
+                    requestSponsorWallet.address,
+                    encodedParameters,
+                    {
+                      gasLimit: GAS_LIMIT,
+                      ...gasTarget,
+                      nonce: nonce++,
+                    }
+                  )
               );
               if (errRequestBeaconUpdate) {
                 printError(errRequestBeaconUpdate);
@@ -475,11 +443,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  console.log(`[DEBUG]\tfinishing beaconUpdate after ${durationMs}ms...`);
+  console.log(`[DEBUG]\tfinishing Airkeeper after ${durationMs}ms...`);
 
   const response = {
     ok: true,
-    data: { message: "Beacon update invocation finished" },
+    data: { message: "Airkeeper invocation finished" },
   };
   return { statusCode: 200, body: JSON.stringify(response) };
 };

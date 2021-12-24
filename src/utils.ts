@@ -1,7 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as ethers from "ethers";
+import * as node from "@api3/airnode-node";
 import { Config } from "./types";
+
+export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
 
 const loadAirkeeperConfig = (): Config => {
   const configPath = path.resolve(`${__dirname}/../config/airkeeper.json`);
@@ -40,4 +43,13 @@ const printError = (error: unknown) => {
   console.log("[DEBUG]\terror message:", message);
 };
 
-export { loadAirkeeperConfig, deriveKeeperSponsorWallet, printError };
+const retryGo = <T>(
+  fn: () => Promise<T>,
+  options?: node.utils.PromiseOptions
+) =>
+  node.utils.go(
+    () => node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, fn),
+    options
+  );
+
+export { loadAirkeeperConfig, deriveKeeperSponsorWallet, printError, retryGo };
