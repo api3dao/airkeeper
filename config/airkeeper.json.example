@@ -21,8 +21,7 @@
         "endpointName": "convertToUSD",
         "deviationPercentage": "5",
         "keeperSponsor": "0x2479808b1216E998309A727df8A0A98A1130A162",
-        "requestSponsor": "0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec",
-        "eventLogMaxBlocks": "10000"
+        "requestSponsor": "0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec"
       }
     ]
   }

@@ -22,6 +22,7 @@ import {
 import { getGasPrice } from "./gas-prices";
 
 export const GAS_LIMIT = 500_000;
+export const BLOCK_COUNT_HISTORY_LIMIT = 300;
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -51,6 +52,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
         // 2. Initialize provider specific data
         // **************************************************************************
         console.log("[DEBUG]\tinitializing...");
+        const blockHistoryLimit =
+          chain.blockHistoryLimit || BLOCK_COUNT_HISTORY_LIMIT;
         const chainProviderUrl = chainProvider.url || "";
         const provider = node.evm.buildEVMProvider(chainProviderUrl, chain.id);
 
@@ -125,7 +128,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
               endpointName,
               deviationPercentage,
               requestSponsor,
-              eventLogMaxBlocks,
             } of rrpBeaconServerKeeperJobs) {
               // **************************************************************************
               // 4. Fetch template by ID
@@ -322,7 +324,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               ] = await retryGo(() =>
                 rrpBeaconServer.queryFilter(
                   requestedBeaconUpdateFilter,
-                  eventLogMaxBlocks * -1,
+                  blockHistoryLimit * -1,
                   currentBlock
                 )
               );
@@ -344,7 +346,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 await retryGo(() =>
                   rrpBeaconServer.queryFilter(
                     updatedBeaconFilter,
-                    eventLogMaxBlocks * -1,
+                    blockHistoryLimit * -1,
                     currentBlock
                   )
                 );
