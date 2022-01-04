@@ -8,16 +8,79 @@ Airkeeper will fetch the value from the API (similarly to Airnode) and will also
 
 ## Setup
 
-- Airkeeper will require a configuration file that matches the one being used by the Airnode that should be used to update the beacon server value. You can just copy over the config.json file from the Airnode repo and put it in the /config directory of this repo.
+- Airkeeper will require a configuration file that matches the one being used by the Airnode that should be used to update the beacon server value. You can just copy over the config.json file from the Airnode repo and put it in the /config directory of this repo. Same goes for sectrets.env file from the Airnode repo. Examples of these two files can be found in the /config directory of this repo.
 
 - Airkeeper will also require an additional configuration file that will be merged with the one mentioned above and it will contain the configuration specific to Airkeeper. This file needs to be called airkeeper.json and you can find an example in the /config directory of this repo.
 
-## Instructions
+- Another requirement is to have an AWS account and cloud provider credentials must be provided in the aws.env file. An example of this file can be found in the /config directory of this repo.
+
+## Docker instructions
+
+Use the docker image to deploy or remove an Airkeeper to and from a cloud provider such as AWS.
+
+The docker image supports two commands.
+
+- `deploy`: Deploys an Airkeeper using configuration files.
+- `remove`: Removes an Airkeeper previously deployed.
+
+### Build docker image
+
+You can build the docker image by running the following command from the root directory:
+
+```
+docker build . -t api3/airkeeper
+```
+
+### deploy command
+
+The `deploy` command will create a new AWS lambda function and a new AWS cloud scheduler.
+
+```sh
+docker run -it --rm \
+--env-file config/aws.env \
+--env COMMAND=deploy \
+-v "$(pwd)/config:/airkeeper/config" \
+api3/airkeeper:latest
+```
+
+For Windows, use CMD (and not PowerShell).
+
+```sh
+docker run -it --rm ^
+--env-file config/aws.env ^
+--env COMMAND=deploy ^
+-v "$(pwd)/config:/airkeeper/config" ^
+api3/airkeeper:latest
+```
+
+### remove command
+
+The `remove` command will delete the previously deployed AWS lambda function and its AWS cloud scheduler.
+
+```sh
+docker run -it --rm \
+--env-file config/aws.env \
+--env COMMAND=remove \
+-v "$(pwd)/config:/airkeeper/config" \
+api3/airkeeper:latest
+```
+
+For Windows, use CMD (and not PowerShell).
+
+```sh
+docker run -it --rm ^
+--env-file config/aws.env ^
+--env COMMAND=remove ^
+-v "$(pwd)/config:/airkeeper/config" ^
+api3/airkeeper:latest
+```
+
+## Manual instructions
 
 Make sure to have the following dependencies installed:
 
 - npm
-- serverless framework (https://serverless.com/)
+- serverless framework (https://www.serverless.com/framework/docs/getting-started)
 
 ### Running Airkeeper locally
 
@@ -28,7 +91,8 @@ In order to run Airkeeper with sample configuration files locally, you will need
 3. Add the config.json and secrets.env files to the packages/airnode-node/config directory.
 4. Run `yarn run dev:background` to start a local ethereum node and a sample REST API.
 5. Run `yarn run dev:eth-deploy` to deploy and configure the required contracts.
-6. Finally run `npm run sls:invoke-local` in the Airkeeper root directory to invoke the updateBeacon function.
+6. Switch to the Airkeeper root directory and run `npm install`
+7. Finally run `npm run sls:invoke-local` to invoke the updateBeacon function.
 
 ### Running Airkeeper on AWS Lambda
 
