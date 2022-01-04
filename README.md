@@ -39,9 +39,7 @@ The `deploy` command will create a new AWS lambda function and a new AWS cloud s
 docker run -it --rm \
 --env-file config/aws.env \
 --env COMMAND=deploy \
--v "$(pwd)/config/airkeeper.json:/airkeeper/config/airkeeper.json" \
--v "$(pwd)/config/config.json:/airkeeper/config/config.json" \
--v "$(pwd)/config/secrets.env:/airkeeper/config/secrets.env" \
+-v "$(pwd)/config:/airkeeper/config" \
 api3/airkeeper:latest
 ```
 
@@ -51,9 +49,7 @@ For Windows, use CMD (and not PowerShell).
 docker run -it --rm ^
 --env-file config/aws.env ^
 --env COMMAND=deploy ^
--v "%cd%/config/airkeeper.json:/airkeeper/config/airkeeper.json" ^
--v "%cd%/config/config.json:/airkeeper/config/config.json" ^
--v "%cd%/config/secrets.env:/airkeeper/config/secrets.env" ^
+-v "$(pwd)/config:/airkeeper/config" ^
 api3/airkeeper:latest
 ```
 
@@ -65,9 +61,7 @@ The `remove` command will delete the previously deployed AWS lambda function and
 docker run -it --rm \
 --env-file config/aws.env \
 --env COMMAND=remove \
--v "$(pwd)/config/airkeeper.json:/airkeeper/config/airkeeper.json" \
--v "$(pwd)/config/config.json:/airkeeper/config/config.json" \
--v "$(pwd)/config/secrets.env:/airkeeper/config/secrets.env" \
+-v "$(pwd)/config:/airkeeper/config" \
 api3/airkeeper:latest
 ```
 
@@ -77,9 +71,7 @@ For Windows, use CMD (and not PowerShell).
 docker run -it --rm ^
 --env-file config/aws.env ^
 --env COMMAND=remove ^
--v "%cd%/config/airkeeper.json:/airkeeper/config/airkeeper.json" ^
--v "%cd%/config/config.json:/airkeeper/config/config.json" ^
--v "%cd%/config/secrets.env:/airkeeper/config/secrets.env" ^
+-v "$(pwd)/config:/airkeeper/config" ^
 api3/airkeeper:latest
 ```
 
@@ -88,7 +80,7 @@ api3/airkeeper:latest
 Make sure to have the following dependencies installed:
 
 - npm
-- serverless framework (https://serverless.com/)
+- serverless framework (https://www.serverless.com/framework/docs/getting-started)
 
 ### Running Airkeeper locally
 
@@ -99,7 +91,8 @@ In order to run Airkeeper with sample configuration files locally, you will need
 3. Add the config.json and secrets.env files to the packages/airnode-node/config directory.
 4. Run `yarn run dev:background` to start a local ethereum node and a sample REST API.
 5. Run `yarn run dev:eth-deploy` to deploy and configure the required contracts.
-6. Finally run `npm run sls:invoke-local` in the Airkeeper root directory to invoke the updateBeacon function.
+6. Switch to the Airkeeper root directory and run `npm install`
+7. Finally run `npm run sls:invoke-local` to invoke the updateBeacon function.
 
 ### Running Airkeeper on AWS Lambda
 
