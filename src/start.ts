@@ -155,8 +155,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 {}
               );
               const apiCallParameters = {
-                ...configParameters,
                 ...node.evm.encoding.safeDecode(template.parameters),
+                ...configParameters
               };
               const reservedParameters =
                 node.adapters.http.parameters.getReservedParameters(
