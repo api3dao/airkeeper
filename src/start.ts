@@ -160,36 +160,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
               deviationPercentage,
               requestSponsor,
             } of rrpBeaconServerKeeperJobs) {
-              // **************************************************************************
-              // 4. Fetch template by ID
-              // **************************************************************************
-              node.logger.debug(
-                "fetching template...",
-                keeperSponsorWalletLogOptions
-              );
-              const [errTemplate, template] = await retryGo(() =>
-                airnodeRrp.templates(templateId)
-              );
-              if (errTemplate || isNil(template)) {
-                node.logger.error(`template not found: ${templateId}`, {
-                  ...keeperSponsorWalletLogOptions,
-                  error: errTemplate,
-                });
-                continue;
-              }
-
-              // **************************************************************************
-              // 5. Read beacon
-              // **************************************************************************
-              node.logger.debug(
-                "reading beacon value from server...",
-                keeperSponsorWalletLogOptions
-              );
-              // address(0) is considered whitelisted
-              const voidSigner = new ethers.VoidSigner(
-                ethers.constants.AddressZero,
-                provider
-              );
               const encodedParameters = abi.encode(parameters);
               const beaconId = ethers.utils.solidityKeccak256(
                 ["bytes32", "bytes"],
@@ -204,6 +174,44 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 },
               };
 
+              if (
+                isNaN(Number(deviationPercentage)) ||
+                Number(deviationPercentage) <= 0 ||
+                Number(deviationPercentage) > 100 ||
+                !Number.isInteger(Number(deviationPercentage) * 100)
+              ) {
+                node.logger.error(
+                  `deviationPercentage '${deviationPercentage}' must be a number larger than 0 and less or equal than 100 with no more than 2 decimal places`,
+                  beaconIdLogOptions
+                );
+                continue;
+              }
+
+              // **************************************************************************
+              // 4. Fetch template by ID
+              // **************************************************************************
+              node.logger.debug("fetching template...", beaconIdLogOptions);
+              const [errTemplate, template] = await retryGo(() =>
+                airnodeRrp.templates(templateId)
+              );
+              if (errTemplate || isNil(template)) {
+                node.logger.error(`template not found: ${templateId}`, {
+                  ...beaconIdLogOptions,
+                  error: errTemplate,
+                });
+                continue;
+              }
+
+              // **************************************************************************
+              // 5. Read beacon
+              // **************************************************************************
+              node.logger.debug("reading beacon value...", beaconIdLogOptions);
+
+              // address(0) is considered whitelisted
+              const voidSigner = new ethers.VoidSigner(
+                ethers.constants.AddressZero,
+                provider
+              );
               const [errReadBeacon, beaconResponse] = await retryGo(() =>
                 rrpBeaconServer.connect(voidSigner).readBeacon(beaconId)
               );
@@ -345,9 +353,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // **************************************************************************
               // 8. Update beacon if necessary (call makeRequest)
               // **************************************************************************
-              const percentageThreshold =
-                ethers.BigNumber.from(deviationPercentage).mul(basisPoints);
-              if (deviation.lte(percentageThreshold)) {
+              const percentageThreshold = basisPoints.mul(
+                Number(deviationPercentage) * 100 // support for percentages up to 2 decimal places
+              );
+              if (deviation.lte(percentageThreshold.div(100))) {
                 node.logger.warn(
                   "delta between beacon value and api value is within threshold. skipping update",
                   beaconIdLogOptions
