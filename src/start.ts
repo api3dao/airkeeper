@@ -15,7 +15,6 @@ import { ChainConfig } from "./types";
 import {
   loadAirkeeperConfig,
   deriveKeeperSponsorWallet,
-  printError,
   retryGo,
 } from "./utils";
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
@@ -26,7 +25,7 @@ export const BLOCK_COUNT_HISTORY_LIMIT = 300;
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
-  console.log("[DEBUG]\tstarting Airkeeper...");
+
   // **************************************************************************
   // 1. Load config (this file must be the same as the one used by the node)
   // **************************************************************************
@@ -34,6 +33,14 @@ export const handler = async (_event: any = {}): Promise<any> => {
   const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
   const keeperConfig = loadAirkeeperConfig();
   const config = merge(nodeConfig, keeperConfig);
+
+  const baseLogOptions = node.logger.buildBaseOptions(config, {
+    coordinatorId: node.utils.randomString(8),
+  });
+  node.logger.info(
+    `Airkeeper started at ${node.utils.formatDateTime(startedAt)}`,
+    baseLogOptions
+  );
 
   const { chains, nodeSettings, triggers, ois: oises, apiCredentials } = config;
   const evmChains = chains.filter(
@@ -47,11 +54,20 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const providerPromises = flatMap(
     evmChains.map((chain: node.ChainConfig & ChainConfig) => {
-      return map(chain.providers, async (chainProvider, _) => {
+      return map(chain.providers, async (chainProvider, providerName) => {
+        const providerLogOptions = {
+          ...baseLogOptions,
+          meta: {
+            ...baseLogOptions.meta,
+            providerName,
+            chainId: chain.id,
+          },
+        };
+
         // **************************************************************************
         // 2. Initialize provider specific data
         // **************************************************************************
-        console.log("[DEBUG]\tinitializing...");
+        node.logger.debug("initializing...", providerLogOptions);
         const blockHistoryLimit =
           chain.blockHistoryLimit || BLOCK_COUNT_HISTORY_LIMIT;
         const chainProviderUrl = chainProvider.url || "";
@@ -76,8 +92,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
           provider.getBlockNumber()
         );
         if (err || isNil(currentBlock)) {
-          printError(err);
-          console.log("[ERROR]\tfailed to fetch the blockNumber");
+          node.logger.error("failed to fetch the blockNumber", {
+            ...providerLogOptions,
+            error: err,
+          });
           return;
         }
 
@@ -101,6 +119,16 @@ export const handler = async (_event: any = {}): Promise<any> => {
               provider
             );
 
+            const keeperSponsorWalletLogOptions = {
+              ...providerLogOptions,
+              additional: {
+                keeperSponsorWallet: keeperSponsorWallet.address.replace(
+                  keeperSponsorWallet.address.substring(5, 38),
+                  "..."
+                ),
+              },
+            };
+
             // Fetch keeperSponsorWallet transaction count
             const [err, keeperSponsorWalletTransactionCount] = await retryGo(
               () =>
@@ -110,9 +138,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 )
             );
             if (err || isNil(keeperSponsorWalletTransactionCount)) {
-              printError(err);
-              console.log(
-                "[ERROR]\tfailed to fetch the keeperSponsorWallet transaction count"
+              node.logger.error(
+                "failed to fetch the keeperSponsorWallet transaction count",
+                {
+                  ...keeperSponsorWalletLogOptions,
+                  error: err,
+                }
               );
               return;
             }
@@ -132,20 +163,73 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // **************************************************************************
               // 4. Fetch template by ID
               // **************************************************************************
-              console.log("[DEBUG]\tfetching template...");
+              node.logger.debug(
+                "fetching template...",
+                keeperSponsorWalletLogOptions
+              );
               const [errTemplate, template] = await retryGo(() =>
                 airnodeRrp.templates(templateId)
               );
               if (errTemplate || isNil(template)) {
-                printError(errTemplate);
-                console.log("[ERROR]\ttemplate not found:", templateId);
+                node.logger.error(`template not found: ${templateId}`, {
+                  ...keeperSponsorWalletLogOptions,
+                  error: errTemplate,
+                });
                 continue;
               }
 
               // **************************************************************************
-              // 5. Make API request
+              // 5. Read beacon
               // **************************************************************************
-              console.log("[DEBUG]\tmaking API request...");
+              node.logger.debug(
+                "reading beacon value from server...",
+                keeperSponsorWalletLogOptions
+              );
+              // address(0) is considered whitelisted
+              const voidSigner = new ethers.VoidSigner(
+                ethers.constants.AddressZero,
+                provider
+              );
+              const encodedParameters = abi.encode(parameters);
+              const beaconId = ethers.utils.solidityKeccak256(
+                ["bytes32", "bytes"],
+                [templateId, encodedParameters]
+              );
+
+              const beaconIdLogOptions = {
+                ...keeperSponsorWalletLogOptions,
+                additional: {
+                  ...keeperSponsorWalletLogOptions.additional,
+                  beaconId,
+                },
+              };
+
+              const [errReadBeacon, beaconResponse] = await retryGo(() =>
+                rrpBeaconServer.connect(voidSigner).readBeacon(beaconId)
+              );
+              if (
+                errReadBeacon ||
+                isNil(beaconResponse) ||
+                isNil(beaconResponse.value)
+              ) {
+                node.logger.error(
+                  `failed to read value for beaconId: ${beaconId}`,
+                  {
+                    ...beaconIdLogOptions,
+                    error: errReadBeacon,
+                  }
+                );
+                continue;
+              }
+              node.logger.info(
+                `beacon server value: ${beaconResponse.value.toString()}`,
+                beaconIdLogOptions
+              );
+
+              // **************************************************************************
+              // 6. Make API request
+              // **************************************************************************
+              node.logger.debug("making API request...", beaconIdLogOptions);
               const configOis = oises.find((o) => o.title === oisTitle)!;
               const configEndpoint = configOis.endpoints.find(
                 (e) => e.name === endpointName
@@ -164,9 +248,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   apiCallParameters || {}
                 );
               if (!reservedParameters._type) {
-                console.log(
-                  "[ERROR]\treserved parameter 'type' is missing for endpoint:",
-                  endpointName
+                node.logger.error(
+                  `reserved parameter 'type' is missing for endpoint: ${endpointName}`,
+                  beaconIdLogOptions
                 );
                 continue;
               }
@@ -196,16 +280,18 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 isNil(apiResponse) ||
                 isNil(apiResponse.data)
               ) {
-                printError(errBuildAndExecuteRequest);
-                console.log(
-                  "[ERROR]\tfailed to fetch data from API for endpoint:",
-                  endpointName
+                node.logger.error(
+                  `failed to fetch data from API for endpoint: ${endpointName}`,
+                  {
+                    ...beaconIdLogOptions,
+                    error: errBuildAndExecuteRequest,
+                  }
                 );
                 continue;
               }
-              console.log(
-                "[DEBUG]\tAPI server response data:",
-                apiResponse.data
+              node.logger.info(
+                `API server response data: ${JSON.stringify(apiResponse.data)}`,
+                beaconIdLogOptions
               );
 
               let apiValue: ethers.BigNumber;
@@ -216,57 +302,30 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 );
                 apiValue = ethers.BigNumber.from(response.values[0].toString());
               } catch (error) {
-                printError(error);
-                console.log(
-                  "[ERROR]\tfailed to extract or encode value from API response:",
-                  JSON.stringify(apiResponse.data)
+                node.logger.error(
+                  `failed to extract or encode value from API response: ${JSON.stringify(
+                    apiResponse.data
+                  )}`,
+                  { ...beaconIdLogOptions, error: error as any }
                 );
                 continue;
               }
-              console.log("[INFO]\tAPI server value:", apiValue.toString());
-
-              // **************************************************************************
-              // 6. Read beacon
-              // **************************************************************************
-              console.log("[DEBUG]\treading beacon value from server...");
-              // address(0) is considered whitelisted
-              const voidSigner = new ethers.VoidSigner(
-                ethers.constants.AddressZero,
-                provider
-              );
-              const encodedParameters = abi.encode(parameters);
-              const beaconId = ethers.utils.solidityKeccak256(
-                ["bytes32", "bytes"],
-                [templateId, encodedParameters]
-              );
-              const [errReadBeacon, beaconResponse] = await retryGo(() =>
-                rrpBeaconServer.connect(voidSigner).readBeacon(beaconId)
-              );
-              if (
-                errReadBeacon ||
-                isNil(beaconResponse) ||
-                isNil(beaconResponse.value)
-              ) {
-                printError(errReadBeacon);
-                console.log(
-                  "[ERROR]\tfailed to read value for beaconId:",
-                  beaconId
-                );
-                continue;
-              }
-              console.log(
-                "[INFO]\tbeacon server value:",
-                beaconResponse.value.toString()
+              node.logger.info(
+                `API server value: ${apiValue.toString()}`,
+                beaconIdLogOptions
               );
 
               // **************************************************************************
               // 7. Check deviation
               // **************************************************************************
-              console.log("[DEBUG]\tchecking deviation...");
+              node.logger.debug("checking deviation...", beaconIdLogOptions);
               let beaconValue = beaconResponse.value;
               const delta = beaconValue.sub(apiValue).abs();
               if (delta.eq(0)) {
-                console.log("[INFO]\tbeacon is up-to-date. skipping update");
+                node.logger.warn(
+                  "beacon is up-to-date. skipping update",
+                  beaconIdLogOptions
+                );
                 continue;
               }
 
@@ -278,9 +337,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 .mul(basisPoints)
                 .mul(100)
                 .div(beaconValue);
-              console.log(
-                "[INFO]\tdeviation (%):",
-                ethers.utils.formatUnits(deviation, 16)
+              node.logger.info(
+                `deviation (%): ${ethers.utils.formatUnits(deviation, 16)}`,
+                beaconIdLogOptions
               );
 
               // **************************************************************************
@@ -289,12 +348,13 @@ export const handler = async (_event: any = {}): Promise<any> => {
               const percentageThreshold =
                 ethers.BigNumber.from(deviationPercentage).mul(basisPoints);
               if (deviation.lte(percentageThreshold)) {
-                console.log(
-                  "[INFO]\tdelta between beacon value and api value is within threshold. skipping update"
+                node.logger.warn(
+                  "delta between beacon value and api value is within threshold. skipping update",
+                  beaconIdLogOptions
                 );
                 continue;
               }
-              console.log("[DEBUG]\tupdating beacon...");
+              node.logger.debug("updating beacon...", beaconIdLogOptions);
               /**
                * 1. Airnode must first call setSponsorshipStatus(rrpBeaconServer.address, true) to
                *    enable the beacon server to make requests to AirnodeRrp
@@ -332,9 +392,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 errRequestedBeaconUpdateFilter ||
                 isNil(requestedBeaconUpdateEvents)
               ) {
-                printError(errRequestedBeaconUpdateFilter);
-                console.log(
-                  "[ERROR]\tfailed to fetch RequestedBeaconUpdate events"
+                node.logger.error(
+                  "failed to fetch RequestedBeaconUpdate events",
+                  {
+                    ...beaconIdLogOptions,
+                    error: errRequestedBeaconUpdateFilter,
+                  }
                 );
                 continue;
               }
@@ -351,8 +414,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   )
                 );
               if (errUpdatedBeaconFilter || isNil(updatedBeaconEvents)) {
-                printError(errUpdatedBeaconFilter);
-                console.log("[ERROR]\tfailed to fetch UpdatedBeacon events");
+                node.logger.error("failed to fetch UpdatedBeacon events", {
+                  ...beaconIdLogOptions,
+                  error: errUpdatedBeaconFilter,
+                });
                 continue;
               }
 
@@ -378,15 +443,19 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   )
                 );
                 if (errRequestIsAwaitingFulfillment) {
-                  printError(errRequestIsAwaitingFulfillment);
-                  console.log(
-                    "[INFO]\tfailed to check if request is awaiting fulfillment"
+                  node.logger.error(
+                    "failed to check if request is awaiting fulfillment",
+                    {
+                      ...beaconIdLogOptions,
+                      error: errRequestIsAwaitingFulfillment,
+                    }
                   );
                   continue;
                 }
                 if (requestIsAwaitingFulfillment) {
-                  console.log(
-                    "[INFO]\trequest is awaiting fulfillment. skipping update"
+                  node.logger.warn(
+                    "request is awaiting fulfillment. skipping update",
+                    beaconIdLogOptions
                   );
                   continue;
                 }
@@ -398,13 +467,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 chainOptions: chain.options,
               });
               if (!isEmpty(gasPriceLogs)) {
-                gasPriceLogs.forEach((log) =>
-                  console.log(`[${log.level}]\t${log.message}`)
-                );
+                node.logger.logPending(gasPriceLogs, beaconIdLogOptions);
               }
               if (!gasTarget) {
-                console.log(
-                  "[ERROR]\tunable to submit transactions without gas price. skipping update"
+                node.logger.error(
+                  "unable to submit transactions without gas price. skipping update",
+                  beaconIdLogOptions
                 );
                 continue;
               }
@@ -427,9 +495,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   )
               );
               if (errRequestBeaconUpdate) {
-                printError(errRequestBeaconUpdate);
-                console.log(
-                  `[ERROR]\tfailed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${currentNonce}. skipping update`
+                node.logger.error(
+                  `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${currentNonce}. skipping update`,
+                  {
+                    ...beaconIdLogOptions,
+                    error: errRequestBeaconUpdate,
+                  }
                 );
               }
             }
@@ -445,7 +516,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  console.log(`[DEBUG]\tfinishing Airkeeper after ${durationMs}ms...`);
+  node.logger.info(
+    `Airkeeper finished at ${node.utils.formatDateTime(
+      completedAt
+    )}. Total time: ${durationMs}ms`,
+    baseLogOptions
+  );
 
   const response = {
     ok: true,
