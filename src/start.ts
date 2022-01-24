@@ -178,10 +178,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 isNaN(Number(deviationPercentage)) ||
                 Number(deviationPercentage) <= 0 ||
                 Number(deviationPercentage) > 100 ||
-                !Number.isInteger(Number(deviationPercentage) * 100)
+                !Number.isInteger(Number(deviationPercentage) * 100) // Only 2 decimal places is allowed
               ) {
                 node.logger.error(
-                  `deviationPercentage '${deviationPercentage}' must be a number larger than 0 and less or equal than 100 with no more than 2 decimal places`,
+                  `deviationPercentage '${deviationPercentage}' must be a number larger than 0 and less then or equal to 100 with no more than 2 decimal places`,
                   beaconIdLogOptions
                 );
                 continue;
@@ -534,7 +534,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const response = {
     ok: true,
-    data: { message: "Airkeeper invocation finished" },
+    data: { message: "Airkeeper invocation has finished" },
   };
   return { statusCode: 200, body: JSON.stringify(response) };
 };
