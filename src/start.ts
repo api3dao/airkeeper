@@ -155,6 +155,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             for (const {
               templateId,
               parameters,
+              templateParameters,
               oisTitle,
               endpointName,
               deviationPercentage,
@@ -188,22 +189,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               }
 
               // **************************************************************************
-              // 4. Fetch template by ID
-              // **************************************************************************
-              node.logger.debug("fetching template...", beaconIdLogOptions);
-              const [errTemplate, template] = await retryGo(() =>
-                airnodeRrp.templates(templateId)
-              );
-              if (errTemplate || isNil(template)) {
-                node.logger.error(`template not found: ${templateId}`, {
-                  ...beaconIdLogOptions,
-                  error: errTemplate,
-                });
-                continue;
-              }
-
-              // **************************************************************************
-              // 5. Read beacon
+              // 4. Read beacon
               // **************************************************************************
               node.logger.debug("reading beacon value...", beaconIdLogOptions);
 
@@ -235,21 +221,17 @@ export const handler = async (_event: any = {}): Promise<any> => {
               );
 
               // **************************************************************************
-              // 6. Make API request
+              // 5. Make API request
               // **************************************************************************
               node.logger.debug("making API request...", beaconIdLogOptions);
               const configOis = oises.find((o) => o.title === oisTitle)!;
               const configEndpoint = configOis.endpoints.find(
                 (e) => e.name === endpointName
               )!;
-              const configParameters = parameters.reduce(
-                (acc, p) => ({ ...acc, [p.name]: p.value }),
-                {}
-              );
-              const apiCallParameters = {
-                ...node.evm.encoding.safeDecode(template.parameters),
-                ...configParameters,
-              };
+              const apiCallParameters = [
+                ...parameters,
+                ...templateParameters,
+              ].reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
               const reservedParameters =
                 node.adapters.http.parameters.getReservedParameters(
                   configEndpoint,
@@ -267,6 +249,33 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   apiCallParameters || {},
                   ois.RESERVED_PARAMETERS
                 );
+
+              // Verify templateId
+              const airnodeAddress = airnodeHDNode.derivePath(
+                ethers.utils.defaultPath
+              ).address;
+              const endpointId = ethers.utils.keccak256(
+                ethers.utils.defaultAbiCoder.encode(
+                  ["string", "string"],
+                  [oisTitle, endpointName]
+                )
+              );
+              const encodedTemplateParameters = abi.encode(templateParameters);
+              const expectedTemplateId =
+                node.evm.templates.getExpectedTemplateId({
+                  airnodeAddress,
+                  endpointId,
+                  encodedParameters: encodedTemplateParameters,
+                  id: templateId,
+                });
+              if (expectedTemplateId !== templateId) {
+                node.logger.error(
+                  `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`,
+                  beaconIdLogOptions
+                );
+                continue;
+              }
+
               const adapterApiCredentials = apiCredentials
                 .filter((c) => c.oisTitle === oisTitle)
                 .map((c) => node.utils.removeKey(c, "oisTitle"));
@@ -324,7 +333,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               );
 
               // **************************************************************************
-              // 7. Check deviation
+              // 6. Check deviation
               // **************************************************************************
               node.logger.debug("checking deviation...", beaconIdLogOptions);
               let beaconValue = beaconResponse.value;
@@ -351,7 +360,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               );
 
               // **************************************************************************
-              // 8. Update beacon if necessary (call makeRequest)
+              // 7. Update beacon if necessary (call makeRequest)
               // **************************************************************************
               const percentageThreshold = basisPoints.mul(
                 Number(deviationPercentage) * 100 // support for percentages up to 2 decimal places
