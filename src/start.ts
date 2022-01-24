@@ -154,14 +154,14 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
             for (const {
               templateId,
-              parameters,
+              overrideParameters,
               templateParameters,
               oisTitle,
               endpointName,
               deviationPercentage,
               requestSponsor,
             } of rrpBeaconServerKeeperJobs) {
-              const encodedParameters = abi.encode(parameters);
+              const encodedParameters = abi.encode(overrideParameters);
               const beaconId = ethers.utils.solidityKeccak256(
                 ["bytes32", "bytes"],
                 [templateId, encodedParameters]
@@ -229,8 +229,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 (e) => e.name === endpointName
               )!;
               const apiCallParameters = [
-                ...parameters,
                 ...templateParameters,
+                ...overrideParameters,
               ].reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
               const reservedParameters =
                 node.adapters.http.parameters.getReservedParameters(

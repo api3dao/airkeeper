@@ -40,8 +40,8 @@ export interface ChainConfig extends node.ChainConfig {
 
 export interface RrpBeaconServerKeeperTrigger {
   readonly templateId: string;
-  readonly parameters: abi.InputParameter[];
   readonly templateParameters: abi.InputParameter[];
+  readonly overrideParameters: abi.InputParameter[];
   readonly endpointName: string;
   readonly oisTitle: string;
   readonly deviationPercentage: string;
