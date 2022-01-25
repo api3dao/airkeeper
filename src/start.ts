@@ -161,7 +161,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
               deviationPercentage,
               requestSponsor,
             } of rrpBeaconServerKeeperJobs) {
-              const encodedParameters = abi.encode(overrideParameters);
+              const configParameters = [
+                ...templateParameters,
+                ...overrideParameters,
+              ];
+              const encodedParameters = abi.encode(configParameters);
               const beaconId = ethers.utils.solidityKeccak256(
                 ["bytes32", "bytes"],
                 [templateId, encodedParameters]
@@ -175,6 +179,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 },
               };
 
+              // Verify deviationPercentage is between 0 and 100 and has only 2 decimal places
               if (
                 isNaN(Number(deviationPercentage)) ||
                 Number(deviationPercentage) <= 0 ||
@@ -183,6 +188,32 @@ export const handler = async (_event: any = {}): Promise<any> => {
               ) {
                 node.logger.error(
                   `deviationPercentage '${deviationPercentage}' must be a number larger than 0 and less then or equal to 100 with no more than 2 decimal places`,
+                  beaconIdLogOptions
+                );
+                continue;
+              }
+
+              // Verify templateId matches data in rrpBeaconServerKeeperJob
+              const airnodeAddress = airnodeHDNode.derivePath(
+                ethers.utils.defaultPath
+              ).address;
+              const endpointId = ethers.utils.keccak256(
+                ethers.utils.defaultAbiCoder.encode(
+                  ["string", "string"],
+                  [oisTitle, endpointName]
+                )
+              );
+              const encodedTemplateParameters = abi.encode(templateParameters);
+              const expectedTemplateId =
+                node.evm.templates.getExpectedTemplateId({
+                  airnodeAddress,
+                  endpointId,
+                  encodedParameters: encodedTemplateParameters,
+                  id: templateId,
+                });
+              if (expectedTemplateId !== templateId) {
+                node.logger.error(
+                  `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`,
                   beaconIdLogOptions
                 );
                 continue;
@@ -228,10 +259,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
               const configEndpoint = configOis.endpoints.find(
                 (e) => e.name === endpointName
               )!;
-              const apiCallParameters = [
-                ...templateParameters,
-                ...overrideParameters,
-              ].reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+              const apiCallParameters = configParameters.reduce(
+                (acc, p) => ({ ...acc, [p.name]: p.value }),
+                {}
+              );
               const reservedParameters =
                 node.adapters.http.parameters.getReservedParameters(
                   configEndpoint,
@@ -249,33 +280,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
                   apiCallParameters || {},
                   ois.RESERVED_PARAMETERS
                 );
-
-              // Verify templateId
-              const airnodeAddress = airnodeHDNode.derivePath(
-                ethers.utils.defaultPath
-              ).address;
-              const endpointId = ethers.utils.keccak256(
-                ethers.utils.defaultAbiCoder.encode(
-                  ["string", "string"],
-                  [oisTitle, endpointName]
-                )
-              );
-              const encodedTemplateParameters = abi.encode(templateParameters);
-              const expectedTemplateId =
-                node.evm.templates.getExpectedTemplateId({
-                  airnodeAddress,
-                  endpointId,
-                  encodedParameters: encodedTemplateParameters,
-                  id: templateId,
-                });
-              if (expectedTemplateId !== templateId) {
-                node.logger.error(
-                  `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`,
-                  beaconIdLogOptions
-                );
-                continue;
-              }
-
               const adapterApiCredentials = apiCredentials
                 .filter((c) => c.oisTitle === oisTitle)
                 .map((c) => node.utils.removeKey(c, "oisTitle"));
