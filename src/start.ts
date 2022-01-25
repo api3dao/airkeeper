@@ -1,6 +1,5 @@
 import * as path from "path";
 import * as ethers from "ethers";
-import * as ois from "@api3/airnode-ois";
 import * as node from "@api3/airnode-node";
 import * as adapter from "@api3/airnode-adapter";
 import * as protocol from "@api3/airnode-protocol";
@@ -11,17 +10,132 @@ import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
 import map from "lodash/map";
 import merge from "lodash/merge";
-import { ChainConfig } from "./types";
+import {ChainConfig, RrpBeaconServerKeeperTrigger} from "./types";
 import {
   loadAirkeeperConfig,
   deriveKeeperSponsorWallet,
   retryGo,
 } from "./utils";
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
-import { getGasPrice } from "./gas-prices";
+import {getGasPrice} from "./gas-prices";
+import {BigNumber} from "ethers";
+import {Config} from "@api3/airnode-node";
+import {RESERVED_PARAMETERS} from "@api3/airnode-ois";
 
 export const GAS_LIMIT = 500_000;
 export const BLOCK_COUNT_HISTORY_LIMIT = 300;
+
+const readApiValue = async (trigger: RrpBeaconServerKeeperTrigger, config: Config, airnodeHDNode: ethers.ethers.utils.HDNode) => {
+  const {ois, apiCredentials} = config;
+  const {oisTitle, templateId, endpointName, templateParameters, overrideParameters} = trigger;
+  // node.logger.debug("making API request...", beaconIdLogOptions);
+  const configOis = ois.find((o) => o.title === oisTitle)!;
+  const configEndpoint = configOis.endpoints.find(
+    (e) => e.name === endpointName
+  )!;
+  const apiCallParameters = [
+    ...templateParameters,
+    ...overrideParameters,
+  ].reduce((acc, p) => ({...acc, [p.name]: p.value}), {});
+  const reservedParameters =
+    node.adapters.http.parameters.getReservedParameters(
+      configEndpoint,
+      apiCallParameters || {}
+    );
+  if (!reservedParameters._type) {
+    // node.logger.error(
+    //   `reserved parameter 'type' is missing for endpoint: ${endpointName}`,
+    //   beaconIdLogOptions
+    // );
+    return null;
+  }
+  const sanitizedParameters: adapter.Parameters =
+    node.utils.removeKeys(
+      apiCallParameters || {},
+      RESERVED_PARAMETERS
+    );
+
+  // Verify templateId
+  const airnodeAddress = airnodeHDNode.derivePath(
+    ethers.utils.defaultPath
+  ).address;
+  const endpointId = ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(
+      ["string", "string"],
+      [oisTitle, endpointName]
+    )
+  );
+  const encodedTemplateParameters = abi.encode(templateParameters);
+  const expectedTemplateId =
+    node.evm.templates.getExpectedTemplateId({
+      airnodeAddress,
+      endpointId,
+      encodedParameters: encodedTemplateParameters,
+      id: templateId,
+    });
+  if (expectedTemplateId !== templateId) {
+    // node.logger.error(
+    //   `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`,
+    //   beaconIdLogOptions
+    // );
+    return null;
+  }
+
+  const adapterApiCredentials = apiCredentials
+    .filter((c) => c.oisTitle === oisTitle)
+    .map((c) => node.utils.removeKey(c, "oisTitle"));
+
+  const options: adapter.BuildRequestOptions = {
+    ois: configOis,
+    endpointName,
+    parameters: sanitizedParameters,
+    apiCredentials:
+      adapterApiCredentials as adapter.ApiCredentials[],
+    metadata: null,
+  };
+
+  const [errBuildAndExecuteRequest, apiResponse] = await retryGo(
+    () => adapter.buildAndExecuteRequest(options)
+  );
+  if (
+    errBuildAndExecuteRequest ||
+    isNil(apiResponse) ||
+    isNil(apiResponse.data)
+  ) {
+    // node.logger.error(
+    //   `failed to fetch data from API for endpoint: ${endpointName}`,
+    //   {
+    //     ...beaconIdLogOptions,
+    //     error: errBuildAndExecuteRequest,
+    //   }
+    // );
+    return null;
+  }
+  // node.logger.info(
+  //   `API server response data: ${JSON.stringify(apiResponse.data)}`,
+  //   beaconIdLogOptions
+  // );
+
+  try {
+    const response = adapter.extractAndEncodeResponse(
+      apiResponse.data,
+      reservedParameters as adapter.ReservedParameters
+    );
+    return ethers.BigNumber.from(response.values[0].toString());
+  } catch (error) {
+    // node.logger.error(
+    //   `failed to extract or encode value from API response: ${JSON.stringify(
+    //     apiResponse.data
+    //   )}`,
+    //   { ...beaconIdLogOptions, error: error as any }
+    // );
+    return null;
+  }
+  // node.logger.info(
+  //   `API server value: ${apiValue.toString()}`,
+  //   beaconIdLogOptions
+  // );
+};
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -42,7 +156,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
     baseLogOptions
   );
 
-  const { chains, nodeSettings, triggers, ois: oises, apiCredentials } = config;
+  const {chains, nodeSettings, triggers} = config;
   const evmChains = chains.filter(
     (chain: node.ChainConfig & ChainConfig) => chain.type === "evm"
   );
@@ -53,7 +167,19 @@ export const handler = async (_event: any = {}): Promise<any> => {
   }
 
   const providerPromises = flatMap(
-    evmChains.map((chain: node.ChainConfig & ChainConfig) => {
+    evmChains.map(async (chain: node.ChainConfig & ChainConfig) => {
+      const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(
+        nodeSettings.airnodeWalletMnemonic
+      );
+
+      const apiValues: { apiValue: BigNumber | null, templateId: string }[] =
+        await Promise.all(triggers.rrpBeaconServerKeeperJobs.map(async (trigger: RrpBeaconServerKeeperTrigger) => {
+          return {
+            apiValue: await readApiValue(trigger, config, airnodeHDNode),
+            templateId: trigger.templateId
+          };
+        }));
+
       return map(chain.providers, async (chainProvider, providerName) => {
         const providerLogOptions = {
           ...baseLogOptions,
@@ -81,10 +207,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
         const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(
           chain.contracts.RrpBeaconServer,
           provider
-        );
-
-        const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(
-          nodeSettings.airnodeWalletMnemonic
         );
 
         // Fetch current block number from chain via provider
@@ -155,9 +277,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
             for (const {
               templateId,
               overrideParameters,
-              templateParameters,
-              oisTitle,
-              endpointName,
               deviationPercentage,
               requestSponsor,
             } of rrpBeaconServerKeeperJobs) {
@@ -223,114 +342,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // **************************************************************************
               // 5. Make API request
               // **************************************************************************
-              node.logger.debug("making API request...", beaconIdLogOptions);
-              const configOis = oises.find((o) => o.title === oisTitle)!;
-              const configEndpoint = configOis.endpoints.find(
-                (e) => e.name === endpointName
-              )!;
-              const apiCallParameters = [
-                ...templateParameters,
-                ...overrideParameters,
-              ].reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
-              const reservedParameters =
-                node.adapters.http.parameters.getReservedParameters(
-                  configEndpoint,
-                  apiCallParameters || {}
-                );
-              if (!reservedParameters._type) {
-                node.logger.error(
-                  `reserved parameter 'type' is missing for endpoint: ${endpointName}`,
-                  beaconIdLogOptions
-                );
-                continue;
+              const cachedApiValue = apiValues.find(apiValue => apiValue.templateId === templateId);
+              if (!cachedApiValue?.apiValue) {
+                return;
               }
-              const sanitizedParameters: adapter.Parameters =
-                node.utils.removeKeys(
-                  apiCallParameters || {},
-                  ois.RESERVED_PARAMETERS
-                );
-
-              // Verify templateId
-              const airnodeAddress = airnodeHDNode.derivePath(
-                ethers.utils.defaultPath
-              ).address;
-              const endpointId = ethers.utils.keccak256(
-                ethers.utils.defaultAbiCoder.encode(
-                  ["string", "string"],
-                  [oisTitle, endpointName]
-                )
-              );
-              const encodedTemplateParameters = abi.encode(templateParameters);
-              const expectedTemplateId =
-                node.evm.templates.getExpectedTemplateId({
-                  airnodeAddress,
-                  endpointId,
-                  encodedParameters: encodedTemplateParameters,
-                  id: templateId,
-                });
-              if (expectedTemplateId !== templateId) {
-                node.logger.error(
-                  `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`,
-                  beaconIdLogOptions
-                );
-                continue;
-              }
-
-              const adapterApiCredentials = apiCredentials
-                .filter((c) => c.oisTitle === oisTitle)
-                .map((c) => node.utils.removeKey(c, "oisTitle"));
-
-              const options: adapter.BuildRequestOptions = {
-                ois: configOis,
-                endpointName,
-                parameters: sanitizedParameters,
-                apiCredentials:
-                  adapterApiCredentials as adapter.ApiCredentials[],
-                metadata: null,
-              };
-
-              const [errBuildAndExecuteRequest, apiResponse] = await retryGo(
-                () => adapter.buildAndExecuteRequest(options)
-              );
-              if (
-                errBuildAndExecuteRequest ||
-                isNil(apiResponse) ||
-                isNil(apiResponse.data)
-              ) {
-                node.logger.error(
-                  `failed to fetch data from API for endpoint: ${endpointName}`,
-                  {
-                    ...beaconIdLogOptions,
-                    error: errBuildAndExecuteRequest,
-                  }
-                );
-                continue;
-              }
-              node.logger.info(
-                `API server response data: ${JSON.stringify(apiResponse.data)}`,
-                beaconIdLogOptions
-              );
-
-              let apiValue: ethers.BigNumber;
-              try {
-                const response = adapter.extractAndEncodeResponse(
-                  apiResponse.data,
-                  reservedParameters as adapter.ReservedParameters
-                );
-                apiValue = ethers.BigNumber.from(response.values[0].toString());
-              } catch (error) {
-                node.logger.error(
-                  `failed to extract or encode value from API response: ${JSON.stringify(
-                    apiResponse.data
-                  )}`,
-                  { ...beaconIdLogOptions, error: error as any }
-                );
-                continue;
-              }
-              node.logger.info(
-                `API server value: ${apiValue.toString()}`,
-                beaconIdLogOptions
-              );
+              const {apiValue} = cachedApiValue;
 
               // **************************************************************************
               // 6. Check deviation
@@ -543,7 +559,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const response = {
     ok: true,
-    data: { message: "Airkeeper invocation has finished" },
+    data: {message: "Airkeeper invocation has finished"},
   };
-  return { statusCode: 200, body: JSON.stringify(response) };
+  return {statusCode: 200, body: JSON.stringify(response)};
 };
