@@ -19,7 +19,6 @@ export const readApiValue = async (
     overrideParameters,
   }: RrpBeaconServerKeeperTrigger
 ): Promise<node.LogsData<ApiValuesByBeaconId>> => {
-  let apiValue: ethers.BigNumber | null = null;
   const configParameters = [...templateParameters, ...overrideParameters];
 
   // Derive beaconId
@@ -54,7 +53,7 @@ export const readApiValue = async (
           `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`
         ),
       ],
-      { [beaconId]: apiValue },
+      { [beaconId]: null },
     ];
   }
 
@@ -79,7 +78,7 @@ export const readApiValue = async (
           `reserved parameter 'type' is missing for endpoint: ${endpointName}`
         ),
       ],
-      { [beaconId]: apiValue },
+      { [beaconId]: null },
     ];
   }
   const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
@@ -115,7 +114,7 @@ export const readApiValue = async (
           errBuildAndExecuteRequest
         ),
       ],
-      { [beaconId]: apiValue },
+      { [beaconId]: null },
     ];
   }
   const logApiResponse = node.logger.pend(
@@ -129,7 +128,13 @@ export const readApiValue = async (
       apiResponse!.data,
       reservedParameters as adapter.ReservedParameters
     );
-    apiValue = ethers.BigNumber.from(response.values[0].toString());
+    const apiValue = ethers.BigNumber.from(response.values[0].toString());
+    const logApiValue = node.logger.pend(
+      "INFO",
+      `API value: ${apiValue.toString()}`
+    );
+
+    return [[logApiResponse, logApiValue], { [beaconId]: apiValue }];
   } catch (error) {
     return [
       [
@@ -141,13 +146,7 @@ export const readApiValue = async (
           error as any
         ),
       ],
-      { [beaconId]: apiValue },
+      { [beaconId]: null },
     ];
   }
-  const logApiValue = node.logger.pend(
-    "INFO",
-    `API value: ${apiValue.toString()}`
-  );
-
-  return [[logApiResponse, logApiValue], { [beaconId]: apiValue }];
 };
