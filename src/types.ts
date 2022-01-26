@@ -55,3 +55,7 @@ export interface Config extends node.Config {
     rrpBeaconServerKeeperJobs: RrpBeaconServerKeeperTrigger[];
   };
 }
+
+export interface ApiValuesByBeaconId {
+  readonly [beaconId: string]: ethers.BigNumber | null;
+}
