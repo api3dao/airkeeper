@@ -1,6 +1,6 @@
-import * as ethers from "ethers";
-import * as node from "@api3/airnode-node";
 import * as abi from "@api3/airnode-abi";
+import * as node from "@api3/airnode-node";
+import { ethers } from "ethers";
 
 export interface ChainOptions {
   readonly txType: "legacy" | "eip1559";
@@ -53,5 +53,16 @@ export interface Config extends node.Config {
   readonly chains: ChainConfig[];
   readonly triggers: node.Triggers & {
     rrpBeaconServerKeeperJobs: RrpBeaconServerKeeperTrigger[];
+  };
+}
+
+export interface ApiValuesByBeaconId {
+  readonly [beaconId: string]: ethers.BigNumber | null;
+}
+
+export interface LogsAndApiValuesByBeaconId {
+  [beaconId: string]: {
+    logs: node.PendingLog[];
+    apiValue: ethers.BigNumber | null;
   };
 }

@@ -1,5 +1,5 @@
-import * as ethers from "ethers";
 import * as node from "@api3/airnode-node";
+import { ethers } from "ethers";
 import { FetchOptions, GasTarget, PriorityFee } from "./types";
 
 // The Priority Fee in Wei
