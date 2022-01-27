@@ -59,3 +59,10 @@ export interface Config extends node.Config {
 export interface ApiValuesByBeaconId {
   readonly [beaconId: string]: ethers.BigNumber | null;
 }
+
+export interface LogsAndApiValuesByBeaconId {
+  [beaconId: string]: {
+    logs: node.PendingLog[];
+    apiValue: ethers.BigNumber | null;
+  };
+}

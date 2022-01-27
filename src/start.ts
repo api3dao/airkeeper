@@ -12,7 +12,7 @@ import * as path from "path";
 import { readApiValue } from "./call-api";
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
 import { getGasPrice } from "./gas-prices";
-import { ChainConfig } from "./types";
+import { ChainConfig, LogsAndApiValuesByBeaconId } from "./types";
 import {
   deriveKeeperSponsorWallet,
   loadAirkeeperConfig,
@@ -58,19 +58,15 @@ export const handler = async (_event: any = {}): Promise<any> => {
   const responses = await Promise.all(apiValuePromises);
 
   // Group logs and API values by beaconId
-  const logsAndApiValuesByBeaconId: {
-    [beaconId: string]: {
-      logs: node.PendingLog[];
-      apiValue: ethers.BigNumber | null;
-    };
-  } = responses.reduce((acc, [, logsData]) => {
-    if (isNil(logsData)) {
-      return acc;
-    }
-    const [logs, data] = logsData;
-    const [beaconId] = Object.keys(data);
-    return { ...acc, ...{ [beaconId]: { logs, apiValue: data[beaconId] } } };
-  }, {});
+  const logsAndApiValuesByBeaconId: LogsAndApiValuesByBeaconId =
+    responses.reduce((acc, [, logsData]) => {
+      if (isNil(logsData)) {
+        return acc;
+      }
+      const [logs, data] = logsData;
+      const [beaconId] = Object.keys(data);
+      return { ...acc, ...{ [beaconId]: { logs, apiValue: data[beaconId] } } };
+    }, {});
 
   // Print pending logs
   Object.keys(logsAndApiValuesByBeaconId).forEach((beaconId) =>

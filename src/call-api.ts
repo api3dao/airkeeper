@@ -46,15 +46,9 @@ export const readApiValue = async (
     id: templateId,
   });
   if (expectedTemplateId !== templateId) {
-    return [
-      [
-        node.logger.pend(
-          "ERROR",
-          `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`
-        ),
-      ],
-      { [beaconId]: null },
-    ];
+    const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
+    const log = node.logger.pend("ERROR", message);
+    return [[log], { [beaconId]: null }];
   }
 
   const configOis = oises.find((o) => o.title === oisTitle)!;
@@ -71,15 +65,9 @@ export const readApiValue = async (
       apiCallParameters || {}
     );
   if (!reservedParameters._type) {
-    return [
-      [
-        node.logger.pend(
-          "ERROR",
-          `reserved parameter 'type' is missing for endpoint: ${endpointName}`
-        ),
-      ],
-      { [beaconId]: null },
-    ];
+    const message = `reserved parameter '_type' is missing for endpoint: ${endpointName}`;
+    const log = node.logger.pend("ERROR", message);
+    return [[log], { [beaconId]: null }];
   }
   const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
     apiCallParameters || {},
@@ -106,21 +94,14 @@ export const readApiValue = async (
     isNil(apiResponse) ||
     isNil(apiResponse.data)
   ) {
-    return [
-      [
-        node.logger.pend(
-          "ERROR",
-          `failed to fetch data from API for endpoint: ${endpointName}`,
-          errBuildAndExecuteRequest
-        ),
-      ],
-      { [beaconId]: null },
-    ];
+    const message = `failed to fetch data from API for endpoint: ${endpointName}`;
+    const log = node.logger.pend("ERROR", message, errBuildAndExecuteRequest);
+    return [[log], { [beaconId]: null }];
   }
-  const logApiResponse = node.logger.pend(
-    "INFO",
-    `API server response data: ${JSON.stringify(apiResponse.data)}`
-  );
+  const messageApiResponse = `API server response data: ${JSON.stringify(
+    apiResponse.data
+  )}`;
+  const logApiResponse = node.logger.pend("DEBUG", messageApiResponse);
 
   // Extract API value
   try {
@@ -129,24 +110,15 @@ export const readApiValue = async (
       reservedParameters as adapter.ReservedParameters
     );
     const apiValue = ethers.BigNumber.from(response.values[0].toString());
-    const logApiValue = node.logger.pend(
-      "INFO",
-      `API value: ${apiValue.toString()}`
-    );
+    const messageApiValue = `API value: ${apiValue.toString()}`;
+    const logApiValue = node.logger.pend("INFO", messageApiValue);
 
     return [[logApiResponse, logApiValue], { [beaconId]: apiValue }];
   } catch (error) {
-    return [
-      [
-        node.logger.pend(
-          "ERROR",
-          `failed to extract or encode value from API response: ${JSON.stringify(
-            apiResponse.data
-          )}`,
-          error as any
-        ),
-      ],
-      { [beaconId]: null },
-    ];
+    const message = `failed to extract or encode value from API response: ${JSON.stringify(
+      apiResponse.data
+    )}`;
+    const log = node.logger.pend("ERROR", message, error as any);
+    return [[log], { [beaconId]: null }];
   }
 };
