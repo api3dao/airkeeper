@@ -1,7 +1,7 @@
 import * as abi from "@api3/airnode-abi";
 import * as node from "@api3/airnode-node";
 import * as protocol from "@api3/airnode-protocol";
-import * as ethers from "ethers";
+import { ethers } from "ethers";
 import flatMap from "lodash/flatMap";
 import groupBy from "lodash/groupBy";
 import isEmpty from "lodash/isEmpty";
@@ -487,7 +487,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 requestSponsor
               );
               const currentNonce = nonce;
-              const [errRequestBeaconUpdate] = await retryGo(() =>
+              const [errRequestBeaconUpdate, tx] = await retryGo(() =>
                 rrpBeaconServer
                   .connect(keeperSponsorWallet)
                   .requestBeaconUpdate(
@@ -510,7 +510,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
                     error: errRequestBeaconUpdate,
                   }
                 );
+                continue;
               }
+              node.logger.info(
+                `beacon update tx submitted: ${tx?.hash}`,
+                beaconIdLogOptions
+              );
             }
           }
         );

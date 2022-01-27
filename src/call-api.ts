@@ -2,7 +2,7 @@ import * as abi from "@api3/airnode-abi";
 import * as adapter from "@api3/airnode-adapter";
 import * as node from "@api3/airnode-node";
 import * as ois from "@api3/airnode-ois";
-import * as ethers from "ethers";
+import { ethers } from "ethers";
 import isNil from "lodash/isNil";
 import { ApiValuesByBeaconId, RrpBeaconServerKeeperTrigger } from "./types";
 import { retryGo } from "./utils";

@@ -1,6 +1,6 @@
-import * as ethers from "ethers";
-import * as node from "@api3/airnode-node";
 import * as abi from "@api3/airnode-abi";
+import * as node from "@api3/airnode-node";
+import { ethers } from "ethers";
 
 export interface ChainOptions {
   readonly txType: "legacy" | "eip1559";
