@@ -9,7 +9,12 @@
     "sls:deploy": "sls deploy --region $REGION --stage $STAGE",
     "sls:remove": "sls remove --region $REGION --stage $STAGE",
     "sls:invoke": "sls invoke --function start",
-    "sls:invoke-local": "sls invoke local --function start"
+    "sls:invoke-local": "sls invoke local --function start",
+    "lint": "yarn run prettier:check && yarn run lint:eslint",
+    "lint:eslint": "eslint . --ext .js,.ts",
+    "prettier:check": "prettier --check \"./**/*.{js,ts,md,json}\" --loglevel silent",
+    "prettier:write": "prettier --write \"./**/*.{js,ts,md,json}\"",
+    "prepare": "husky install"
   },
   "dependencies": {
     "@api3/airnode-abi": "^0.3.1",
@@ -26,10 +31,23 @@
     "@types/lodash": "^4.14.177",
     "@types/node": "^16.11.12",
     "@types/serverless": "^1.78.39",
+    "@typescript-eslint/eslint-plugin": "^5.10.1",
+    "@typescript-eslint/parser": "^5.10.1",
+    "eslint": "^7.32.0",
+    "eslint-config-google": "^0.14.0",
+    "eslint-config-prettier": "^8.3.0",
+    "eslint-config-standard": "^16.0.3",
+    "eslint-plugin-functional": "^4.1.1",
+    "eslint-plugin-import": "^2.25.4",
+    "eslint-plugin-jest": "^26.0.0",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^5.2.0",
+    "prettier": "^2.5.1",
     "rimraf": "^3.0.2",
     "serverless": "^2.68.0",
     "serverless-plugin-typescript": "^2.1.0",
     "ts-node": "^10.4.0",
-    "typescript": "^4.5.2"
+    "typescript": "^4.5.2",
+    "husky": "^7.0.0"
   }
 }
