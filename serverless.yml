@@ -17,7 +17,7 @@ provider:
 
 package:
   patterns:
-    - 'config/*.json'
+    - "config/*.json"
 
 functions:
   start:

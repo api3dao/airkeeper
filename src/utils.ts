@@ -1,24 +1,28 @@
-import fs from 'fs';
-import path from 'path';
-import * as node from '@api3/airnode-node';
-import { ethers } from 'ethers';
-import { Config } from './types';
+import * as node from "@api3/airnode-node";
+import { ethers } from "ethers";
+import fs from "fs";
+import path from "path";
+import { Config } from "./types";
 
 export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
 
 const loadAirkeeperConfig = (): Config => {
   const configPath = path.resolve(`${__dirname}/../config/airkeeper.json`);
-  return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  return JSON.parse(fs.readFileSync(configPath, "utf8"));
 };
 
-const deriveKeeperWalletPathFromSponsorAddress = (sponsorAddress: string): string => {
-  const sponsorAddressBN = ethers.BigNumber.from(ethers.utils.getAddress(sponsorAddress));
+const deriveKeeperWalletPathFromSponsorAddress = (
+  sponsorAddress: string
+): string => {
+  const sponsorAddressBN = ethers.BigNumber.from(
+    ethers.utils.getAddress(sponsorAddress)
+  );
   const paths = [];
   for (let i = 0; i < 6; i++) {
     const shiftedSponsorAddressBN = sponsorAddressBN.shr(31 * i);
     paths.push(shiftedSponsorAddressBN.mask(31).toString());
   }
-  return `12345/${paths.join('/')}`;
+  return `12345/${paths.join("/")}`;
 };
 
 const deriveKeeperSponsorWallet = (
@@ -32,7 +36,13 @@ const deriveKeeperSponsorWallet = (
   return new ethers.Wallet(sponsorWalletHdNode.privateKey).connect(provider);
 };
 
-const retryGo = <T>(fn: () => Promise<T>, options?: node.utils.PromiseOptions) =>
-  node.utils.go(() => node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, fn), options);
+const retryGo = <T>(
+  fn: () => Promise<T>,
+  options?: node.utils.PromiseOptions
+) =>
+  node.utils.go(
+    () => node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, fn),
+    options
+  );
 
 export { loadAirkeeperConfig, deriveKeeperSponsorWallet, retryGo };
