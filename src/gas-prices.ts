@@ -19,7 +19,7 @@ const getLegacyGasPrice = async (
 ): Promise<node.LogsData<GasTarget | null>> => {
   const { provider } = options;
 
-  const [err, gasPrice] = await node.utils.go(provider.getGasPrice, {
+  const [err, gasPrice] = await node.utils.go(() => provider.getGasPrice(), {
     retries: 1,
     timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
   });
