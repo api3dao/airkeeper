@@ -1,9 +1,9 @@
-import * as abi from '@api3/airnode-abi';
-import * as node from '@api3/airnode-node';
-import { ethers } from 'ethers';
+import * as abi from "@api3/airnode-abi";
+import * as node from "@api3/airnode-node";
+import { ethers } from "ethers";
 
 export interface ChainOptions {
-  readonly txType: 'legacy' | 'eip1559';
+  readonly txType: "legacy" | "eip1559";
   readonly baseFeeMultiplier?: string;
   readonly priorityFee?: PriorityFee;
 }
@@ -15,7 +15,14 @@ export interface FetchOptions {
 
 export interface PriorityFee {
   readonly value: string;
-  readonly unit?: 'wei' | 'kwei' | 'mwei' | 'gwei' | 'szabo' | 'finney' | 'ether';
+  readonly unit?:
+    | "wei"
+    | "kwei"
+    | "mwei"
+    | "gwei"
+    | "szabo"
+    | "finney"
+    | "ether";
 }
 
 export interface GasTarget {
