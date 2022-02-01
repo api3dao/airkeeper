@@ -9,6 +9,7 @@
   "triggers": {
     "rrpBeaconServerKeeperJobs": [
       {
+        "chainIds": ["31337"],
         "templateId": "0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d",
         "templateParameters": [
           { "type": "bytes32", "name": "to", "value": "USD" },
