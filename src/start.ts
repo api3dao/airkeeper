@@ -15,7 +15,7 @@ import { getGasPrice } from "./gas-prices";
 import { ChainConfig, LogsAndApiValuesByBeaconId } from "./types";
 import {
   deriveKeeperSponsorWallet,
-  loadAirkeeperConfig,
+  parseAirkeeperConfig,
   retryGo,
 } from "./utils";
 
@@ -26,14 +26,15 @@ export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
   // **************************************************************************
-  // 1. Load config (this file must be the same as the one used by the node)
+  // 1. Load config
   // **************************************************************************
+  // This file must be the same as the one used by the node
   const nodeConfigPath = path.resolve(`${__dirname}/../config/config.json`);
   const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
-  const keeperConfig = loadAirkeeperConfig();
-  const config = merge(nodeConfig, keeperConfig);
+  // This file will be merged with config.json from node
+  const keeperConfig = parseAirkeeperConfig();
 
-  const baseLogOptions = node.logger.buildBaseOptions(config, {
+  const baseLogOptions = node.logger.buildBaseOptions(nodeConfig, {
     coordinatorId: node.utils.randomString(8),
   });
   node.logger.info(
@@ -41,6 +42,23 @@ export const handler = async (_event: any = {}): Promise<any> => {
     baseLogOptions
   );
 
+  const { chains: keeperChains, triggers: keeperTriggers } = keeperConfig;
+  const config = {
+    ...nodeConfig,
+    chains: keeperChains.map((chain) => {
+      if (isNil(chain.id)) {
+        throw new Error(
+          `Missing 'id' property in chain config: ${JSON.stringify(chain)}`
+        );
+      }
+      const configChain = nodeConfig.chains.find((c) => c.id === chain.id);
+      if (isNil(configChain)) {
+        throw new Error(`Chain id ${chain.id} not found in node config.json`);
+      }
+      return merge(configChain, chain);
+    }),
+    triggers: { ...nodeConfig.triggers, ...keeperTriggers },
+  };
   const { chains, nodeSettings, triggers, ois: oises, apiCredentials } = config;
 
   // **************************************************************************
