@@ -214,6 +214,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             const rrpBeaconServerKeeperJobs =
               rrpBeaconServerKeeperJobsByKeeperSponsor[keeperSponsor];
             for (const {
+              chainIds,
               templateId,
               overrideParameters,
               templateParameters,
@@ -247,7 +248,24 @@ export const handler = async (_event: any = {}): Promise<any> => {
               };
 
               // **************************************************************************
-              // 3.2.3.2 Read API value from cache
+              // 3.2.3.2 Verify if beacon must be updated for current chain
+              // **************************************************************************
+              node.logger.debug(
+                "verifying if beacon must be updated for current chain...",
+                beaconIdLogOptions
+              );
+
+              // If chainIds is not defined, beacon must be updated to keep backward compatibility
+              if (chainIds && !chainIds.includes(chain.id)) {
+                node.logger.debug(
+                  "skipping beaconId as it is not for current chain",
+                  beaconIdLogOptions
+                );
+                continue;
+              }
+
+              // **************************************************************************
+              // 3.2.3.3 Read API value from cache
               // **************************************************************************
               node.logger.debug("looking for API value...", beaconIdLogOptions);
 
@@ -261,7 +279,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               }
 
               // **************************************************************************
-              // 3.2.3.3 Verify deviationPercentage is between 0 and 100 and has only 2 decimal places
+              // 3.2.3.4 Verify deviationPercentage is between 0 and 100 and has only 2 decimal places
               // **************************************************************************
               node.logger.debug(
                 "verifying deviationPercentage...",
@@ -282,7 +300,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               }
 
               // **************************************************************************
-              // 3.2.3.4 Read beacon
+              // 3.2.3.5 Read beacon
               // **************************************************************************
               node.logger.debug("reading beacon value...", beaconIdLogOptions);
 
@@ -314,7 +332,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               );
 
               // **************************************************************************
-              // 3.2.3.5 Calculate deviation
+              // 3.2.3.6 Calculate deviation
               // **************************************************************************
               node.logger.debug("calculating deviation...", beaconIdLogOptions);
 
@@ -341,7 +359,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               );
 
               // **************************************************************************
-              // 3.2.3.6 Check if deviation is within the threshold
+              // 3.2.3.7 Check if deviation is within the threshold
               // **************************************************************************
               node.logger.debug("checking deviation...", beaconIdLogOptions);
 
@@ -357,7 +375,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               }
 
               // **************************************************************************
-              // 3.2.3.7 Fetch previous events to determine if previous update tx is pending
+              // 3.2.3.8 Fetch previous events to determine if previous update tx is pending
               // **************************************************************************
               node.logger.debug("checking previous txs...", beaconIdLogOptions);
 
@@ -453,7 +471,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               }
 
               // **************************************************************************
-              // 3.2.3.8 Fetch current gas fee data
+              // 3.2.3.9 Fetch current gas fee data
               // **************************************************************************
               node.logger.debug("fetching gas price...", beaconIdLogOptions);
 
@@ -473,7 +491,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               }
 
               // **************************************************************************
-              // 3.2.3.9 Update beacon (submit requestBeaconUpdate transaction)
+              // 3.2.3.10 Update beacon (submit requestBeaconUpdate transaction)
               // **************************************************************************
               node.logger.debug("updating beacon...", beaconIdLogOptions);
 
