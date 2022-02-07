@@ -8,7 +8,7 @@ import { ApiValuesByBeaconId, RrpBeaconServerKeeperTrigger } from "./types";
 import { retryGo } from "./utils";
 
 export const readApiValue = async (
-  airnodeHDNode: ethers.utils.HDNode,
+  airnodeAddress: string,
   oises: ois.OIS[],
   apiCredentials: node.ApiCredentials[],
   {
@@ -29,9 +29,6 @@ export const readApiValue = async (
   );
 
   // Verify templateId matches data in rrpBeaconServerKeeperJob
-  const airnodeAddress = airnodeHDNode.derivePath(
-    ethers.utils.defaultPath
-  ).address;
   const endpointId = ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(
       ["string", "string"],
