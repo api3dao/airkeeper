@@ -38,9 +38,8 @@ The `deploy` command will create a new AWS lambda function and a new AWS cloud s
 ```sh
 docker run -it --rm \
 --env-file config/aws.env \
---env COMMAND=deploy \
--v "$(pwd)/config:/airkeeper/config" \
-api3/airkeeper:latest
+-v "$(pwd)/config:/app/config" \
+api3/airkeeper:latest deploy --stage dev --region us-east-1
 ```
 
 For Windows, use CMD (and not PowerShell).
@@ -48,9 +47,8 @@ For Windows, use CMD (and not PowerShell).
 ```sh
 docker run -it --rm ^
 --env-file config/aws.env ^
---env COMMAND=deploy ^
--v "$(pwd)/config:/airkeeper/config" ^
-api3/airkeeper:latest
+-v "$(pwd)/config:/app/config" ^
+api3/airkeeper:latest deploy --stage dev --region us-east-1
 ```
 
 ### remove command
@@ -60,9 +58,8 @@ The `remove` command will delete the previously deployed AWS lambda function and
 ```sh
 docker run -it --rm \
 --env-file config/aws.env \
---env COMMAND=remove \
--v "$(pwd)/config:/airkeeper/config" \
-api3/airkeeper:latest
+-v "$(pwd)/config:/app/config" \
+api3/airkeeper:latest remove --stage dev --region us-east-1
 ```
 
 For Windows, use CMD (and not PowerShell).
@@ -70,9 +67,8 @@ For Windows, use CMD (and not PowerShell).
 ```sh
 docker run -it --rm ^
 --env-file config/aws.env ^
---env COMMAND=remove ^
--v "$(pwd)/config:/airkeeper/config" ^
-api3/airkeeper:latest
+-v "$(pwd)/config:/app/config" ^
+api3/airkeeper:latest remove --stage dev --region us-east-1
 ```
 
 ## Manual instructions

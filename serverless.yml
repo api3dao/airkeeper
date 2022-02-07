@@ -1,8 +1,5 @@
 service: airkeeper
 
-plugins:
-  - serverless-plugin-typescript
-
 variablesResolutionMode: 20210326
 
 provider:
@@ -21,7 +18,7 @@ package:
 
 functions:
   start:
-    handler: src/start.handler
+    handler: dist/src/start.handler
     name: airkeeper-update-beacon
     timeout: 60
     events:
