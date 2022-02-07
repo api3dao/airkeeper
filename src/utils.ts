@@ -7,7 +7,7 @@ import { Config } from "./types";
 export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
 
 const parseAirkeeperConfig = (): Config => {
-  const configPath = path.resolve(`${__dirname}/../config/airkeeper.json`);
+  const configPath = path.resolve(`${__dirname}/../../config/airkeeper.json`);
   return JSON.parse(fs.readFileSync(configPath, "utf8"));
 };
 
