@@ -96,7 +96,7 @@ In order to run Airkeeper with sample configuration files locally, you will need
 
 ### Running Airkeeper on AWS Lambda
 
-Airkeeper is meant to be deployed to AWS lambda service and for this you will need to setup your AWS credentials. These credentials should be added to the `aws.env` file in the root directory of the Airkeeper repo. Then you can use the export-env.sh script to load them into the environment.
+Airkeeper is meant to be deployed to AWS lambda service and for this you will need to add your credentials to the `config/aws.env` file. Then, you can use the `export-aws-env.sh` script to load them into the environment.
 
 1. (Optional) Run `npm run sls:config` to configure the AWS credentials. You must first configure the `config/aws.env` file with your AWS account details and then run `source export-aws-env.sh` script to load the env vars.
 2. Run `npm run sls:deploy` to deploy the Airkeeper lambda function.
