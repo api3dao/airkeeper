@@ -10,9 +10,10 @@
     "*.js"
   ],
   "scripts": {
-    "build": "yarn clean && yarn compile",
+    "build": "yarn clean && yarn compile:build",
     "clean": "rimraf -rf ./dist *.tgz",
     "compile": "tsc -p tsconfig.json",
+    "compile:build": "tsc -p tsconfig-build.json",
     "sls:config": "sls config credentials --provider aws --key $AWS_ACCESS_KEY_ID --secret $AWS_SECRET_ACCESS_KEY",
     "sls:deploy": "yarn build && sls deploy --region $REGION --stage $STAGE",
     "sls:remove": "sls remove --region $REGION --stage $STAGE",

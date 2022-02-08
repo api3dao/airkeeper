@@ -1,0 +1,46 @@
+name: Continuous Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone airkeeper
+        uses: actions/checkout@master
+      - name: Check hyperlinks
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone airkeeper
+        uses: actions/checkout@v2
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: "14"
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+      - name: Compile
+        run: yarn compile
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone airkeeper
+        uses: actions/checkout@v2
+      - name: Setup Node
+        uses: actions/setup-node@v2
+        with:
+          node-version: "14"
+      - name: Install Dependencies
+        run: yarn install --frozen-lockfile
+      - name: Test
+        run: yarn test

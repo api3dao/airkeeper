@@ -250,41 +250,6 @@ describe("readApiValue", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("returns null if reserved parameter '_type' is missing", async () => {
-    const spy = jest.spyOn(adapter, "buildAndExecuteRequest") as any;
-
-    const oisesWithoutType = oises.map((o) => ({
-      ...o,
-      endpoints: o.endpoints.map((e) => ({
-        ...e,
-        reservedParameters: e.reservedParameters.filter(
-          (r) => r.name !== "_type"
-        ),
-      })),
-    }));
-
-    const [logs, res] = await readApiValue(
-      airnodeAddress,
-      oisesWithoutType,
-      apiCredentials,
-      job
-    );
-
-    expect(logs).toHaveLength(1);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          level: "ERROR",
-          message: expect.stringMatching(
-            "reserved parameter '_type' is missing for endpoint: convertToUSD"
-          ),
-        },
-      ])
-    );
-    expect(Object.values(res)).toEqual([null]);
-    expect(spy).not.toHaveBeenCalled();
-  });
-
   it("returns an error if the API call fails to execute", async () => {
     const spy = jest.spyOn(adapter, "buildAndExecuteRequest") as any;
     const error = new Error("Network is down");
