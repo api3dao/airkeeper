@@ -1,16 +1,18 @@
 {
   "compilerOptions": {
-    "baseUrl": "./",
-    "outDir": "./dist/src",
-    "target": "esnext",
+    "declaration": true,
     "module": "commonjs",
-    "lib": ["esnext"],
+    "lib": ["es6"],
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "moduleResolution": "node",
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "sourceMap": true,
     "strict": true,
+    "target": "es5",
+    "skipLibCheck": true,
+    "baseUrl": "./",
+    "outDir": "./dist/src"
   },
+  "include": ["./src/**/*.ts"],
+  "exclude": ["node_modules"]
 }

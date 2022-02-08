@@ -69,9 +69,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(
     nodeSettings.airnodeWalletMnemonic
   );
+  const airnodeAddress = airnodeHDNode.derivePath(
+    ethers.utils.defaultPath
+  ).address;
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((job) =>
-    retryGo(() => readApiValue(airnodeHDNode, oises, apiCredentials, job))
+    retryGo(() => readApiValue(airnodeAddress, oises, apiCredentials, job))
   );
   const responses = await Promise.all(apiValuePromises);
 

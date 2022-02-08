@@ -1,13 +1,14 @@
 # Package directories & files
 /node_modules
 /dist
-/lib
-/.build
 /.serverless
 *.tgz
 
 # IDE specific files
 .vscode
+
+# Coverage
+/coverage
 
 # Log files
 *.log
