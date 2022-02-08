@@ -1,8 +1,9 @@
-const dotenv = require('dotenv');
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
 
-module.exports = async ({ options, resolveConfigurationProperty }) => {
+// eslint-disable-next-line functional/immutable-data
+module.exports = async ({ _options, _resolveConfigurationProperty }) => {
   const secretsPath = path.resolve(__dirname, 'config', 'secrets.env');
   const envVars = fs.existsSync(secretsPath)
     ? dotenv.config({
@@ -14,7 +15,6 @@ module.exports = async ({ options, resolveConfigurationProperty }) => {
   return Object.keys(envVars)
     .filter((key) => !key.startsWith('AWS_'))
     .reduce((obj, key) => {
-      obj[key] = envVars[key];
-      return obj;
+      return { ...obj, [key]: envVars[key] };
     }, {});
 };

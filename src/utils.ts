@@ -1,7 +1,7 @@
-import * as node from '@api3/airnode-node';
-import { ethers } from 'ethers';
 import fs from 'fs';
 import path from 'path';
+import * as node from '@api3/airnode-node';
+import { ethers } from 'ethers';
 import { Config } from './types';
 
 export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;

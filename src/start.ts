@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
@@ -8,7 +9,6 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
-import * as path from 'path';
 import { readApiValue } from './call-api';
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
 import { getGasPrice } from './gas-prices';
