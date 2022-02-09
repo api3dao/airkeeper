@@ -17,7 +17,7 @@
     "lint": "yarn run prettier:check && yarn run lint:eslint",
     "lint:eslint": "eslint . --ext .js,.ts",
     "prettier:check": "prettier --check \"./**/*.{js,sol,ts,md,yml,json}\"",
-    "prettier:write": "prettier --write \"./**/*.{js,sol,ts,md,yml,json}\" --loglevel silent",
+    "prettier:write": "prettier --write \"./**/*.{js,sol,ts,md,yml,json}\" --ignore-unknown",
     "sls:config": "sls config credentials --provider aws --key $AWS_ACCESS_KEY_ID --secret $AWS_SECRET_ACCESS_KEY",
     "sls:deploy": "yarn build && sls deploy --region $REGION --stage $STAGE",
     "sls:remove": "sls remove --region $REGION --stage $STAGE",
@@ -59,6 +59,6 @@
     "typescript": "^4.5.5"
   },
   "lint-staged": {
-    "**/*": "prettier --write --ignore-unknown"
+    "./**/*.{js,ts}": "yarn lint"
   }
 }

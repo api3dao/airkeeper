@@ -1,4 +1,8 @@
 # Ignore artifacts:
-build
-dist
-coverage
+**/.build/**
+**/dist/**
+**/.serverless/**
+**/coverage/**
+
+**/config/*.json
+**/node_modules/**
