@@ -1,9 +1,10 @@
-const dotenv = require("dotenv");
-const path = require("path");
-const fs = require("fs");
+const fs = require('fs');
+const path = require('path');
+const dotenv = require('dotenv');
 
-module.exports = async ({ options, resolveConfigurationProperty }) => {
-  const secretsPath = path.resolve(__dirname, "config", "secrets.env");
+// eslint-disable-next-line functional/immutable-data
+module.exports = async ({ _options, _resolveConfigurationProperty }) => {
+  const secretsPath = path.resolve(__dirname, 'config', 'secrets.env');
   const envVars = fs.existsSync(secretsPath)
     ? dotenv.config({
         // Load env vars into Serverless environment
@@ -12,9 +13,8 @@ module.exports = async ({ options, resolveConfigurationProperty }) => {
     : {};
   // Return all env vars that don't start with "AWS_"
   return Object.keys(envVars)
-    .filter((key) => !key.startsWith("AWS_"))
+    .filter((key) => !key.startsWith('AWS_'))
     .reduce((obj, key) => {
-      obj[key] = envVars[key];
-      return obj;
+      return { ...obj, [key]: envVars[key] };
     }, {});
 };

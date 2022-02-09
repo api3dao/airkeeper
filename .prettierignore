@@ -1,0 +1,8 @@
+# Ignore artifacts:
+**/.build/**
+**/dist/**
+**/.serverless/**
+**/coverage/**
+
+**/config/*.json
+**/node_modules/**
