@@ -35,7 +35,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
   });
   node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const {  airnode: airnodeAddress, airnodeXpub: airnodeXpub ,chains: keeperChains, triggers: keeperTriggers } = keeperConfig;
+  const {
+    airnode: airnodeAddress,
+    airnodeXpub: airnodeXpub,
+    chains: keeperChains,
+    triggers: keeperTriggers,
+  } = keeperConfig;
   const config = {
     ...nodeConfig,
     chains: keeperChains.map((chain) => {
@@ -63,7 +68,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   node.logger.debug('making API requests...', baseLogOptions);
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((job) =>
-    retryGo(() => readApiValue(airnodeAddress ,oises, apiCredentials, job))
+    retryGo(() => readApiValue(airnodeAddress, oises, apiCredentials, job))
   );
   const responses = await Promise.all(apiValuePromises);
 
