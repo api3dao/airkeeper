@@ -35,7 +35,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   });
   node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const { chains: keeperChains, triggers: keeperTriggers } = keeperConfig;
+  const {  airnode: airnodeAddress, airnodeXpub: airnodeXpub ,chains: keeperChains, triggers: keeperTriggers } = keeperConfig;
   const config = {
     ...nodeConfig,
     chains: keeperChains.map((chain) => {
@@ -50,18 +50,20 @@ export const handler = async (_event: any = {}): Promise<any> => {
     }),
     triggers: { ...nodeConfig.triggers, ...keeperTriggers },
   };
-  const { chains, nodeSettings, triggers, ois: oises, apiCredentials } = config;
+  const { chains, triggers, ois: oises, apiCredentials } = config;
+
+  const airnodeHDNode = ethers.utils.HDNode.fromExtendedKey(airnodeXpub);
+  if (airnodeAddress !== airnodeHDNode.derivePath('0/0').address) {
+    throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
+  }
 
   // **************************************************************************
   // 2. Read and cache API values
   // **************************************************************************
   node.logger.debug('making API requests...', baseLogOptions);
 
-  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
-  const airnodeAddress = airnodeHDNode.derivePath(ethers.utils.defaultPath).address;
-
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((job) =>
-    retryGo(() => readApiValue(airnodeAddress, oises, apiCredentials, job))
+    retryGo(() => readApiValue(airnodeAddress ,oises, apiCredentials, job))
   );
   const responses = await Promise.all(apiValuePromises);
 

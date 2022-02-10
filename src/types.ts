@@ -44,6 +44,8 @@ export interface RrpBeaconServerKeeperTrigger {
 }
 
 export interface Config extends node.Config {
+  readonly airnode: string;
+  readonly airnodeXpub: string;
   readonly chains: ChainConfig[];
   readonly triggers: node.Triggers & {
     rrpBeaconServerKeeperJobs: RrpBeaconServerKeeperTrigger[];
