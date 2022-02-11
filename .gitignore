@@ -20,4 +20,5 @@ aws.env
 # Config files
 **/airkeeper.json
 **/config.json
+**/psp.json
 **/secrets.env

@@ -21,8 +21,10 @@
     "sls:config": "sls config credentials --provider aws --key $AWS_ACCESS_KEY_ID --secret $AWS_SECRET_ACCESS_KEY",
     "sls:deploy": "yarn build && sls deploy --region $REGION --stage $STAGE",
     "sls:remove": "sls remove --region $REGION --stage $STAGE",
-    "sls:invoke": "sls invoke --function start",
-    "sls:invoke-local": "yarn build && sls invoke local --function start",
+    "sls:invoke:airkeeper": "sls invoke --function airkeeper-beacon-update",
+    "sls:invoke-local:airkeeper": "yarn build && sls invoke local --function airkeeper-beacon-update",
+    "sls:invoke:psp": "sls invoke --function psp-beacon-update",
+    "sls:invoke-local:psp": "yarn build && sls invoke local --function psp-beacon-update",
     "test": "jest",
     "prepare": "husky install"
   },

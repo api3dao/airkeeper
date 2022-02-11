@@ -1,5 +1,6 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 
 export interface ChainOptions {
@@ -31,6 +32,19 @@ export interface ChainConfig extends node.ChainConfig {
   readonly options: ChainOptions;
 }
 
+export interface Allocator {
+  readonly address: string;
+  readonly startIndex: number;
+  readonly endIndex: number;
+}
+
+export interface PspChainConfig extends node.ChainConfig {
+  readonly contracts: node.ChainContracts & {
+    readonly AirnodeProtocol: string;
+    readonly DapiServer: string;
+  };
+  readonly allocators: Allocator[];
+}
 export interface RrpBeaconServerKeeperTrigger {
   readonly chainIds: string[];
   readonly templateId: string;
@@ -52,8 +66,39 @@ export interface Config extends node.Config {
   };
 }
 
-export interface ApiValuesByBeaconId {
-  readonly [beaconId: string]: ethers.BigNumber | null;
+export interface PspTrigger {
+  readonly subscriptionId: string;
+  readonly endpointName: string;
+  readonly oisTitle: string;
+  readonly templateId: string;
+  readonly templateParameters: abi.InputParameter[];
+  readonly overrideParameters: abi.InputParameter[];
+  readonly conditions: string;
+  readonly relayer: string;
+  readonly sponsor: string;
+  readonly requester: string;
+  readonly fulfillFunctionId: string;
+}
+
+export interface PspConfig {
+  readonly chains: PspChainConfig[];
+  readonly triggers: node.Triggers & {
+    psp: PspTrigger[];
+  };
+}
+
+export type Trigger = RrpBeaconServerKeeperTrigger | PspTrigger;
+
+export interface CallApiOptions {
+  airnodeAddress: string;
+  oises: ois.OIS[];
+  apiCredentials: node.ApiCredentials[];
+  id: string;
+  trigger: Trigger;
+}
+
+export interface ApiValuesById {
+  readonly [id: string]: ethers.BigNumber | null;
 }
 
 export interface LogsAndApiValuesByBeaconId {

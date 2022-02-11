@@ -12,24 +12,24 @@ import merge from 'lodash/merge';
 import { readApiValue } from './call-api';
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
 import { getGasPrice } from './gas-prices';
-import { ChainConfig, LogsAndApiValuesByBeaconId } from './types';
-import { deriveKeeperSponsorWallet, parseAirkeeperConfig, retryGo } from './utils';
+import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
+import { deriveKeeperSponsorWallet, parseConfig, retryGo } from './utils';
 import 'source-map-support/register';
 
 export const GAS_LIMIT = 500_000;
 export const BLOCK_COUNT_HISTORY_LIMIT = 300;
 
-export const handler = async (_event: any = {}): Promise<any> => {
+export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
   // This file must be the same as the one used by the node
-  const nodeConfigPath = path.resolve(`${__dirname}/../../config/config.json`);
+  const nodeConfigPath = path.resolve(__dirname, '..', '..', 'config', `config.json`);
   const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
-  // This file will be merged with config.json from node
-  const keeperConfig = parseAirkeeperConfig();
+  // This file will be merged with config.json from above
+  const keeperConfig: Config = parseConfig('airkeeper');
 
   const baseLogOptions = node.logger.buildBaseOptions(nodeConfig, {
     coordinatorId: node.utils.randomString(8),
@@ -68,8 +68,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   node.logger.debug('making API requests...', baseLogOptions);
 
-  const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((job) =>
-    retryGo(() => readApiValue(airnodeAddress, oises, apiCredentials, job))
+  const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((trigger) =>
+    retryGo(() => {
+      const encodedParameters = abi.encode([...trigger.templateParameters, ...trigger.overrideParameters]);
+      const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [trigger.templateId, encodedParameters]);
+      return readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, trigger });
+    })
   );
   const responses = await Promise.all(apiValuePromises);
 
