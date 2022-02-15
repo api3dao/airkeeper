@@ -14,6 +14,7 @@ import { readApiValue } from './call-api';
 import { getGasPrice } from './gas-prices';
 import { ChainConfig, LogsAndApiValuesByBeaconId } from './types';
 import { deriveKeeperSponsorWallet, parseAirkeeperConfig, retryGo } from './utils';
+import 'source-map-support/register';
 
 export const GAS_LIMIT = 500_000;
 export const BLOCK_COUNT_HISTORY_LIMIT = 300;
@@ -35,15 +36,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
   });
   node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const {
-    airnode: airnodeAddress,
-    airnodeXpub: airnodeXpub,
-    chains: keeperChains,
-    triggers: keeperTriggers,
-  } = keeperConfig;
   const config = {
     ...nodeConfig,
-    chains: keeperChains.map((chain) => {
+    chains: keeperConfig.chains.map((chain) => {
       if (isNil(chain.id)) {
         throw new Error(`Missing 'id' property in chain config: ${JSON.stringify(chain)}`);
       }
@@ -53,12 +48,18 @@ export const handler = async (_event: any = {}): Promise<any> => {
       }
       return merge(configChain, chain);
     }),
-    triggers: { ...nodeConfig.triggers, ...keeperTriggers },
+    triggers: { ...nodeConfig.triggers, ...keeperConfig.triggers },
   };
   const { chains, triggers, ois: oises, apiCredentials } = config;
 
-  const airnodeHDNode = ethers.utils.HDNode.fromExtendedKey(airnodeXpub);
-  if (airnodeAddress !== airnodeHDNode.derivePath('0/0').address) {
+  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
+  const airnodeAddress = (
+    keeperConfig.airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(keeperConfig.airnodeXpub).derivePath('0/0')
+      : airnodeHDNode.derivePath(ethers.utils.defaultPath)
+  ).address;
+
+  if (keeperConfig.airnodeAddress && keeperConfig.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
 
