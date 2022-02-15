@@ -8,6 +8,7 @@ export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
 
 const parseAirkeeperConfig = (): Config => {
   const configPath = path.resolve(`${__dirname}/../../config/airkeeper.json`);
+  console.log({configPath});
   return JSON.parse(fs.readFileSync(configPath, 'utf8'));
 };
 
@@ -20,6 +21,18 @@ const deriveKeeperWalletPathFromSponsorAddress = (sponsorAddress: string): strin
   }
   return `12345/${paths.join('/')}`;
 };
+
+function deriveSponsorWalletAddress(xpub: string, protocolId: number, sponsorAddress: string) {
+  const hdNodeFromXpub = ethers.utils.HDNode.fromExtendedKey(xpub);
+  const sponsorAddressBN = ethers.BigNumber.from(sponsorAddress);
+  const paths = [];
+  for (let i = 0; i < 6; i++) {
+    const shiftedSponsorAddressBN = sponsorAddressBN.shr(31 * i);
+    paths.push(shiftedSponsorAddressBN.mask(31).toString());
+  }
+  const sponsorWalletHdNode = hdNodeFromXpub.derivePath(`${protocolId}/${paths.join('/')}`);
+  return sponsorWalletHdNode.address;
+}
 
 const deriveKeeperSponsorWallet = (
   airnodeHdNode: ethers.utils.HDNode,

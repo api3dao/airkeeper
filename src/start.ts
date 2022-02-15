@@ -15,6 +15,8 @@ import { getGasPrice } from './gas-prices';
 import { ChainConfig, LogsAndApiValuesByBeaconId } from './types';
 import { deriveKeeperSponsorWallet, parseAirkeeperConfig, retryGo } from './utils';
 
+import 'source-map-support/register';
+
 export const GAS_LIMIT = 500_000;
 export const BLOCK_COUNT_HISTORY_LIMIT = 300;
 
@@ -58,10 +60,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
   node.logger.debug('making API requests...', baseLogOptions);
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
-  const airnodeAddress = airnodeHDNode.derivePath(ethers.utils.defaultPath).address;
+  // const airnodeAddress = airnodeHDNode.derivePath(ethers.utils.defaultPath).address;
+  const apiProviderAirnodeAddress = ethers.utils.HDNode.fromExtendedKey(`xpub6C4Rxe6YMdxDtoDvi5RVuMBBWMhAJPsQDPiTqCbvShS9xDSJRh51utmaHskjBo9u4xHXP7ie1djR2SQVVPD9U7HUn4k4xBCPQX4DeQ1ovpF`).derivePath('0/0').address;
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((job) =>
-    retryGo(() => readApiValue(airnodeAddress, oises, apiCredentials, job))
+    retryGo(() => readApiValue(apiProviderAirnodeAddress, oises, apiCredentials, job))
   );
   const responses = await Promise.all(apiValuePromises);
 
@@ -270,7 +273,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             const delta = beaconValue.sub(apiValue!).abs();
             if (delta.eq(0)) {
               node.logger.warn('beacon is up-to-date. skipping update', beaconIdLogOptions);
-              continue;
+              // continue;
             }
             beaconValue = beaconResponse.value.isZero() ? ethers.constants.One : beaconResponse.value;
             const basisPoints = ethers.utils.parseUnits('1', 16);
@@ -290,7 +293,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 'delta between beacon value and API value is within threshold. skipping update',
                 beaconIdLogOptions
               );
-              continue;
+              // continue;
             }
 
             // **************************************************************************
@@ -316,7 +319,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                 ...beaconIdLogOptions,
                 error: errRequestedBeaconUpdateFilter,
               });
-              continue;
+              // continue;
             }
 
             // Fetch UpdatedBeacon events by beaconId
@@ -333,6 +336,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             }
 
             // Match these events by requestId and unmatched events are the ones that are still waiting to be fulfilled
+            // @ts-ignore
             const [pendingRequestedBeaconUpdateEvent] = requestedBeaconUpdateEvents.filter(
               (rbue) => !updatedBeaconEvents.some((ub) => rbue.args!['requestId'] === ub.args!['requestId'])
             );
