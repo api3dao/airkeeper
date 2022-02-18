@@ -1,4 +1,3 @@
-import * as path from 'path';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
@@ -13,7 +12,7 @@ import { readApiValue } from './call-api';
 // TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
 import { getGasPrice } from './gas-prices';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
-import { deriveKeeperSponsorWallet, parseConfig, retryGo } from './utils';
+import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 import 'source-map-support/register';
 
 export const GAS_LIMIT = 500_000;
@@ -25,14 +24,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  // This file must be the same as the one used by the node
-  const nodeConfigPath = path.resolve(__dirname, '..', '..', 'config', `config.json`);
-  const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
+  const nodeConfig = loadNodeConfig();
   // This file will be merged with config.json from above
   const keeperConfig: Config = parseConfig('airkeeper');
 
   const baseLogOptions = node.logger.buildBaseOptions(nodeConfig, {
-    coordinatorId: node.utils.randomString(8),
+    coordinatorId: node.utils.randomHexString(8),
   });
   node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
@@ -72,7 +69,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
     retryGo(() => {
       const encodedParameters = abi.encode([...trigger.templateParameters, ...trigger.overrideParameters]);
       const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [trigger.templateId, encodedParameters]);
-      return readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, trigger });
+      return readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...trigger });
     })
   );
   const responses = await Promise.all(apiValuePromises);
@@ -154,7 +151,11 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('deriving keeperSponsorWallet...', providerLogOptions);
 
-          const keeperSponsorWallet = deriveKeeperSponsorWallet(airnodeHDNode, keeperSponsor, provider);
+          const keeperSponsorWallet = deriveSponsorWallet(
+            config.nodeSettings.airnodeWalletMnemonic,
+            keeperSponsor,
+            '12345'
+          ).connect(provider);
 
           const keeperSponsorWalletLogOptions = {
             ...providerLogOptions,

@@ -32,18 +32,18 @@ export interface ChainConfig extends node.ChainConfig {
   readonly options: ChainOptions;
 }
 
-export interface Allocator {
-  readonly address: string;
-  readonly startIndex: number;
-  readonly endIndex: number;
-}
+// export interface Allocator {
+//   readonly address: string;
+//   readonly startIndex: number;
+//   readonly endIndex: number;
+// }
 
 export interface PspChainConfig extends node.ChainConfig {
   readonly contracts: node.ChainContracts & {
     readonly AirnodeProtocol: string;
     readonly DapiServer: string;
   };
-  readonly allocators: Allocator[];
+  // readonly allocators: Allocator[];
 }
 export interface RrpBeaconServerKeeperTrigger {
   readonly chainIds: string[];
@@ -66,13 +66,20 @@ export interface Config extends node.Config {
   };
 }
 
-export interface PspTrigger {
-  readonly subscriptionId: string;
-  readonly endpointName: string;
-  readonly oisTitle: string;
+export interface PspConfig {
+  readonly chains: PspChainConfig[];
+  readonly triggers: node.Triggers & {
+    'proto-psp': string[];
+  };
+  readonly subscriptions: { [key: string]: Subscription };
+  readonly templates: { [key: string]: Template };
+}
+
+export interface Subscription {
+  readonly chainId: string;
+  readonly airnodeAddress: string;
   readonly templateId: string;
-  readonly templateParameters: abi.InputParameter[];
-  readonly overrideParameters: abi.InputParameter[];
+  readonly parameters: string;
   readonly conditions: string;
   readonly relayer: string;
   readonly sponsor: string;
@@ -80,21 +87,25 @@ export interface PspTrigger {
   readonly fulfillFunctionId: string;
 }
 
-export interface PspConfig {
-  readonly chains: PspChainConfig[];
-  readonly triggers: node.Triggers & {
-    psp: PspTrigger[];
-  };
+export interface Template {
+  readonly oisTitle: string;
+  readonly endpointName: string;
+  readonly endpointId: string;
+  readonly templateParameters: abi.InputParameter[];
+  readonly overrideParameters: abi.InputParameter[];
 }
-
-export type Trigger = RrpBeaconServerKeeperTrigger | PspTrigger;
 
 export interface CallApiOptions {
   airnodeAddress: string;
   oises: ois.OIS[];
   apiCredentials: node.ApiCredentials[];
   id: string;
-  trigger: Trigger;
+  templateId: string;
+  oisTitle: string;
+  endpointName: string;
+  endpointId?: string;
+  templateParameters: abi.InputParameter[];
+  overrideParameters: abi.InputParameter[];
 }
 
 export interface ApiValuesById {

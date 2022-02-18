@@ -1,69 +1,41 @@
 {
   "chains": [
     {
-      "id": "80001",
-      "contracts": {
-        "AirnodeProtocol": "0x7cB57B5A97eAbe94205C07890BE4c1aD31E486A8",
-        "DapiServer": "0xFF298a3169117606BDA78eD6C04917224968f9b5"
-      },
-      "allocators": [
-        {
-          "address": "0xFF298a3169117606BDA78eD6C04917224968f9b5",
-          "startIndex": "0",
-          "endIndex": "5"
-        }
-      ]
-    },
-    {
       "id": "31337",
       "contracts": {
         "AirnodeProtocol": "0x7cB57B5A97eAbe94205C07890BE4c1aD31E486A8",
         "DapiServer": "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e"
-      },
-      "allocators": [
-        {
-          "address": "0xFF298a3169117606BDA78eD6C04917224968f9b5",
-          "startIndex": "0",
-          "endIndex": "5"
-        }
-      ]
-    },
-    {
-      "id": "4",
-      "contracts": {
-        "AirnodeProtocol": "0x7cB57B5A97eAbe94205C07890BE4c1aD31E486A8",
-        "DapiServer": "0x2cFda716b751eb406C5124C6E4428F2AEA453D96"
-      },
-      "allocators": [
-        {
-          "address": "0xFF298a3169117606BDA78eD6C04917224968f9b5",
-          "startIndex": "0",
-          "endIndex": "5"
-        }
-      ]
+      }
     }
   ],
   "triggers": {
-    "psp": [
-      {
-        "subscriptionId": "",
-        "oisTitle": "Currency Converter API",
-        "endpointName": "convertToUSD",
-        "airnodeAddress": "0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace",
-        "templateId": "0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d",
-        "templateParameters": [
-          { "type": "bytes32", "name": "to", "value": "USD" },
-          { "type": "bytes32", "name": "_type", "value": "int256" },
-          { "type": "bytes32", "name": "_path", "value": "result" },
-          { "type": "bytes32", "name": "_times", "value": "1000000" }
-        ],
-        "overrideParameters": [{ "type": "bytes32", "name": "from", "value": "ETH" }],
-        "conditions": "1",
-        "relayer": "",
-        "sponsor": "",
-        "requester": "",
-        "fulfillFunctionId": "0x0"
-      }
-    ]
+    "proto-psp": ["0x02cf4b73836eb07292ff5b42834b8dd3167c36d7d6dca0baa071db33176222a6"]
+  },
+  "subscriptions": {
+    "0x02cf4b73836eb07292ff5b42834b8dd3167c36d7d6dca0baa071db33176222a6": {
+      "chainId": "31337",
+      "airnodeAddress": "0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace",
+      "templateId": "0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46",
+      "parameters": "0x",
+      "conditions": "0x0000000000000000000000000000000000000000000000000000000000989680",
+      "relayer": "0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace",
+      "sponsor": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+      "requester": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
+      "fulfillFunctionId": "0x206b48f4"
+    }
+  },
+  "templates": {
+    "0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46": {
+      "oisTitle": "Currency Converter API",
+      "endpointName": "convertToUSD",
+      "endpointId": "0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46",
+      "templateParameters": [
+        { "type": "bytes32", "name": "to", "value": "USD" },
+        { "type": "bytes32", "name": "_type", "value": "int256" },
+        { "type": "bytes32", "name": "_path", "value": "result" },
+        { "type": "bytes32", "name": "_times", "value": "1000000" }
+      ],
+      "overrideParameters": [{ "type": "bytes32", "name": "from", "value": "ETH" }]
+    }
   }
 }

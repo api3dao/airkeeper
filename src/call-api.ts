@@ -12,19 +12,38 @@ export const readApiValue = async ({
   oises,
   apiCredentials,
   id,
-  trigger: { oisTitle, endpointName, templateId, templateParameters, overrideParameters },
+  templateId,
+  oisTitle,
+  endpointName,
+  endpointId,
+  templateParameters,
+  overrideParameters,
 }: CallApiOptions): Promise<node.LogsData<ApiValuesById>> => {
   const configParameters = [...templateParameters, ...overrideParameters];
 
-  // Verify templateId matches data in rrpBeaconServerKeeperJob
-  const endpointId = ethers.utils.keccak256(
+  // Verify endpointId
+  const expectedEndpointId = ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
   );
-  const encodedTemplateParameters = abi.encode(templateParameters);
+  if (endpointId && expectedEndpointId !== endpointId) {
+    const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
+    const log = node.logger.pend('ERROR', message);
+    return [[log], { [id]: null }];
+  }
+
+  // Verify templateId
+  let encodedParameters;
+  try {
+    encodedParameters = abi.encode(templateParameters);
+  } catch (error) {
+    const message = `failed to encode template parameters '${JSON.stringify(templateParameters)}'`;
+    const log = node.logger.pend('ERROR', message);
+    return [[log], { [id]: null }];
+  }
   const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
     airnodeAddress,
-    endpointId,
-    encodedParameters: encodedTemplateParameters,
+    endpointId: expectedEndpointId,
+    encodedParameters,
     id: templateId,
   });
   if (expectedTemplateId !== templateId) {

@@ -1,3 +1,4 @@
+import * as abi from '@api3/airnode-abi';
 import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
@@ -102,7 +103,6 @@ describe('readApiValue', () => {
               },
             },
           ],
-          testable: true,
         },
       ],
     },
@@ -111,25 +111,28 @@ describe('readApiValue', () => {
     {
       oisTitle: 'Currency Converter API',
       securitySchemeName: 'Currency Converter Security Scheme',
-      securitySchemeValue: '<enter your API key>',
+      securitySchemeValue: '${SS_CURRENCY_CONVERTER_API_KEY}',
     },
   ];
   const job = {
     chainIds: ['31337', '1'],
-    templateId: '0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d',
+    templateId: '0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46',
     templateParameters: [
-      { type: 'bytes32', name: 'to', value: 'USD' },
-      { type: 'bytes32', name: '_type', value: 'int256' },
-      { type: 'bytes32', name: '_path', value: 'result' },
-      { type: 'bytes32', name: '_times', value: '1000000' },
+      { type: 'string32', name: 'to', value: 'USD' },
+      { type: 'string32', name: '_type', value: 'int256' },
+      { type: 'string32', name: '_path', value: 'result' },
+      { type: 'string32', name: '_times', value: '100000' },
     ],
-    overrideParameters: [{ type: 'bytes32', name: 'from', value: 'ETH' }],
+    overrideParameters: [{ type: 'string32', name: 'from', value: 'ETH' }],
     oisTitle: 'Currency Converter API',
     endpointName: 'convertToUSD',
     deviationPercentage: '0.05',
     keeperSponsor: '0x2479808b1216E998309A727df8A0A98A1130A162',
     requestSponsor: '0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec',
   };
+
+  const encodedParameters = abi.encode([...job.templateParameters, ...job.overrideParameters]);
+  const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [job.templateId, encodedParameters]);
 
   it('calls the adapter with the given parameters', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
@@ -139,7 +142,7 @@ describe('readApiValue', () => {
       data: apiResponse,
     });
 
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, job);
+    const [logs, res] = await readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
 
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(
@@ -150,13 +153,13 @@ describe('readApiValue', () => {
         },
         {
           level: 'INFO',
-          message: 'API value: 723392028',
+          message: 'API value: 72339202',
         },
       ])
     );
     expect(res).toBeDefined();
     expect(res).toEqual({
-      '0x4b08a2198ace6a21661c4dd942323bbbb4c8ab3bc7a3cfe11f1435022ae0e45e': ethers.BigNumber.from(723392028),
+      '0xef655bb09740bae4e70ab7641351f20d1be8ebdf93799cc988c88b89007fc6e3': ethers.BigNumber.from(72339202),
     });
     expect(spy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
@@ -180,9 +183,15 @@ describe('readApiValue', () => {
   it('returns null if templateId fails verification', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, {
-      ...job,
-      templateParameters: [...job.templateParameters, { type: 'bytes32', name: 'to', value: 'BTC' }],
+    const [logs, res] = await readApiValue({
+      airnodeAddress,
+      oises,
+      apiCredentials,
+      id: beaconId,
+      ...{
+        ...job,
+        templateParameters: [...job.templateParameters, { type: 'string32', name: 'from', value: 'BTC' }],
+      },
     });
 
     expect(logs).toHaveLength(1);
@@ -191,7 +200,7 @@ describe('readApiValue', () => {
         {
           level: 'ERROR',
           message: expect.stringMatching(
-            "templateId '0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d' does not match expected templateId '[^']*'"
+            "templateId '0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46' does not match expected templateId '[^']*'"
           ),
         },
       ])
@@ -211,7 +220,13 @@ describe('readApiValue', () => {
       })),
     }));
 
-    const [logs, res] = await readApiValue(airnodeAddress, oisesWithoutType, apiCredentials, job);
+    const [logs, res] = await readApiValue({
+      airnodeAddress,
+      oises: oisesWithoutType,
+      apiCredentials,
+      id: beaconId,
+      ...job,
+    });
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -231,7 +246,7 @@ describe('readApiValue', () => {
     const error = new Error('Network is down');
     spy.mockRejectedValueOnce(error);
 
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, job);
+    const [logs, res] = await readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -276,7 +291,7 @@ describe('readApiValue', () => {
       throw error;
     });
 
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, job);
+    const [logs, res] = await readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(

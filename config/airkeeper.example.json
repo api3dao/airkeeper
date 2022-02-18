@@ -13,16 +13,14 @@
     "rrpBeaconServerKeeperJobs": [
       {
         "chainIds": ["31337"],
-        "templateId": "0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d",
+        "templateId": "0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46",
         "templateParameters": [
           { "type": "bytes32", "name": "to", "value": "USD" },
           { "type": "bytes32", "name": "_type", "value": "int256" },
           { "type": "bytes32", "name": "_path", "value": "result" },
           { "type": "bytes32", "name": "_times", "value": "1000000" }
         ],
-        "overrideParameters": [
-          { "type": "bytes32", "name": "from", "value": "ETH" }
-        ],
+        "overrideParameters": [{ "type": "bytes32", "name": "from", "value": "ETH" }],
         "oisTitle": "Currency Converter API",
         "endpointName": "convertToUSD",
         "deviationPercentage": "5",
