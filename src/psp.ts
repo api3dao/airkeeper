@@ -45,10 +45,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   };
   const { chains, nodeSettings, triggers, subscriptions, templates, ois: oises, apiCredentials } = config;
 
-  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
-  // TODO: get wallet from hdnode above?
   const airnodeWallet = ethers.Wallet.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
-  const airnodeAddress = airnodeHDNode.derivePath(ethers.utils.defaultPath).address;
+  const { address: airnodeAddress } = airnodeWallet;
 
   // **************************************************************************
   // 2. Process chain providers in parallel
@@ -288,7 +286,6 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         // **************************************************************************
         node.logger.debug('processing sponsor addresses...', providerLogOptions);
 
-        // TODO: can this mapping between proto-psp and subscriptions be improved?
         const protoSubscriptions: (Subscription & { id: string })[] = [];
         triggers['proto-psp'].forEach((subscriptionId) => {
           // **************************************************************************
@@ -301,7 +298,36 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, providerLogOptions);
             return;
           }
-          // TODO: validate subscriptionId by encoding subscription fields
+
+          // **************************************************************************
+          // Verify subscriptionId
+          // **************************************************************************
+          node.logger.debug('Verifying subscriptionId...', providerLogOptions);
+
+          const expectedSubscriptionId = ethers.utils.keccak256(
+            ethers.utils.solidityPack(
+              ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+              [
+                subscription.chainId,
+                subscription.airnodeAddress,
+                subscription.templateId,
+                subscription.parameters,
+                subscription.conditions,
+                subscription.relayer,
+                subscription.sponsor,
+                subscription.requester,
+                subscription.fulfillFunctionId,
+              ]
+            )
+          );
+          if (subscriptionId !== expectedSubscriptionId) {
+            node.logger.warn(
+              `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
+              providerLogOptions
+            );
+            return;
+          }
+
           protoSubscriptions.push({ id: subscriptionId, ...subscription });
         });
         if (isEmpty(protoSubscriptions)) {
@@ -359,8 +385,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             const subscriptionIdLogOptions = {
               ...sponsorWalletLogOptions,
               additional: {
-                ...sponsorWalletLogOptions,
-                subscriptionId: subscriptions.id,
+                ...sponsorWalletLogOptions.additional,
+                subscriptionId: subscription.id,
               },
             };
 
@@ -395,7 +421,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('Checking authorization status...', subscriptionIdLogOptions);
 
-          // TODO: This needs a little bit of thinking 🤔
+          // This needs a little bit of thinking 🤔
           // By default subscription.requester is set to the dapiServer address when calling dapiServer.registerBeaconUpdateSubscription()
           // Reference: airnode/packages/airnode-node/src/evm/authorization/authorization-fetching.ts
           const endpointId = ethers.utils.keccak256(
@@ -479,22 +505,33 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('Checking conditions...', subscriptionIdLogOptions);
 
-            // TODO: there are a lot of things that can go wrong in the next 4 lines that need to be handled
             const encodedFulfillmentData = ethers.utils.defaultAbiCoder.encode(['int256'], [apiValue]);
-            const decodedConditions = abi.decode(subscription.conditions);
-            const decodedFunctionId = ethers.utils.defaultAbiCoder.decode(
-              ['bytes4'],
-              decodedConditions._conditionFunctionId
-            );
-            const conditionFunction = dapiServer.interface.getFunction(decodedFunctionId.toString());
-            // TODO: retryGo?
-            const [conditionsMet] = await dapiServer
-              .connect(voidSigner)
-              .functions[conditionFunction.name](
-                subscription.id,
-                encodedFulfillmentData,
-                decodedConditions._conditionParameters
+            let conditionFunction: ethers.utils.FunctionFragment;
+            let conditionParameters: string;
+            try {
+              const decodedConditions = abi.decode(subscription.conditions);
+              const decodedFunctionId = ethers.utils.defaultAbiCoder.decode(
+                ['bytes4'],
+                decodedConditions._conditionFunctionId
               );
+              conditionFunction = dapiServer.interface.getFunction(decodedFunctionId.toString());
+              conditionParameters = decodedConditions._conditionParameters;
+            } catch (err) {
+              node.logger.error('Failed to decode conditions', {
+                ...subscriptionIdLogOptions,
+                error: err as any,
+              });
+              continue;
+            }
+            const [err, [conditionsMet]] = await retryGo(() =>
+              dapiServer
+                .connect(voidSigner)
+                .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters)
+            );
+            if (err) {
+              node.logger.error('Failed to check conditions', { ...subscriptionIdLogOptions, error: err });
+              continue;
+            }
             if (!conditionsMet) {
               node.logger.warn('Conditions not met. Skipping update...', subscriptionIdLogOptions);
               continue;
@@ -524,6 +561,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('Fulfilling subscription...', subscriptionIdLogOptions);
 
+            // TODO: add gas price using override but use @api3/airnode-node/src/evm/gas-price.ts
             const currentNonce = nonce;
             const [errFulfillPspBeaconUpdate, tx] = await retryGo<ethers.ContractTransaction>(() =>
               dapiServer
