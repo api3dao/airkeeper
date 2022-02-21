@@ -9,8 +9,6 @@ import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { readApiValue } from './call-api';
-// TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
-import { getGasPrice } from './gas-prices';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 import 'source-map-support/register';
@@ -372,7 +370,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('fetching gas price...', beaconIdLogOptions);
 
-            const [gasPriceLogs, gasTarget] = await getGasPrice({
+            const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
               provider,
               chainOptions: chain.options,
             });
@@ -380,7 +378,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               node.logger.logPending(gasPriceLogs, beaconIdLogOptions);
             }
             if (!gasTarget) {
-              node.logger.error('unable to submit transactions without gas price. skipping update', beaconIdLogOptions);
+              node.logger.warn('failed to fetch gas price. Skipping update...', beaconIdLogOptions);
               continue;
             }
 

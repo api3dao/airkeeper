@@ -12,6 +12,8 @@ import { readApiValue } from './call-api';
 import { PspChainConfig, PspConfig, Subscription } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 
+export const GAS_LIMIT = 500_000;
+
 export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
@@ -539,6 +541,23 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             node.logger.info('Conditions met. Updating beacon...', subscriptionIdLogOptions);
 
             // **************************************************************************
+            // Fetch current gas fee data
+            // **************************************************************************
+            node.logger.debug('Fetching gas price...', subscriptionIdLogOptions);
+
+            const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
+              provider,
+              chainOptions: chain.options,
+            });
+            if (!isEmpty(gasPriceLogs)) {
+              node.logger.logPending(gasPriceLogs, subscriptionIdLogOptions);
+            }
+            if (!gasTarget) {
+              node.logger.warn('Failed to fetch gas price. Skipping update...', subscriptionIdLogOptions);
+              continue;
+            }
+
+            // **************************************************************************
             // Compute signature
             // **************************************************************************
             node.logger.debug('Signing fulfill message...', subscriptionIdLogOptions);
@@ -575,6 +594,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                   encodedFulfillmentData,
                   signature,
                   {
+                    gasLimit: GAS_LIMIT,
+                    ...gasTarget,
                     nonce: nonce++,
                   }
                 )
