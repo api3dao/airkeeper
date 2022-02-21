@@ -7,7 +7,6 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
-import pick from 'lodash/pick';
 import { readApiValue } from './call-api';
 import { PspChainConfig, PspConfig, Subscription } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
@@ -29,7 +28,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   });
   node.logger.info(`PSP beacon update started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const { chains: pspChains, triggers: pspTriggers } = pspConfig;
+  const { chains: pspChains, triggers: pspTriggers, subscriptions, templates } = pspConfig;
   const config = {
     ...nodeConfig,
     chains: pspChains.map((chain) => {
@@ -43,9 +42,10 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
       return merge(configChain, chain);
     }),
     triggers: { ...nodeConfig.triggers, ...pspTriggers },
-    ...pick(pspConfig, ['subscriptions', 'templates']),
+    subscriptions,
+    templates,
   };
-  const { chains, nodeSettings, triggers, subscriptions, templates, ois: oises, apiCredentials } = config;
+  const { chains, nodeSettings, triggers, ois: oises, apiCredentials } = config;
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
   const { address: airnodeAddress } = airnodeWallet;
@@ -82,7 +82,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         // Fetch current block number from chain via provider
         const [err, currentBlock] = await retryGo(() => provider.getBlockNumber());
         if (err || isNil(currentBlock)) {
-          node.logger.error('failed to fetch the blockNumber', {
+          node.logger.error('Failed to fetch the blockNumber', {
             ...providerLogOptions,
             error: err,
           });
@@ -284,17 +284,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         */
 
         // **************************************************************************
-        // Process each sponsor address in parallel
+        // Fetch subscriptions details
         // **************************************************************************
-        node.logger.debug('processing sponsor addresses...', providerLogOptions);
+        node.logger.debug('Fetching subscriptions details...', providerLogOptions);
 
         const protoSubscriptions: (Subscription & { id: string })[] = [];
         triggers['proto-psp'].forEach((subscriptionId) => {
-          // **************************************************************************
-          // Fetch subscription details
-          // **************************************************************************
-          node.logger.debug('Fetching subscription details...', providerLogOptions);
-
           const subscription = subscriptions[subscriptionId];
           if (isNil(subscription)) {
             node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, providerLogOptions);
@@ -306,21 +301,19 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('Verifying subscriptionId...', providerLogOptions);
 
-          const expectedSubscriptionId = ethers.utils.keccak256(
-            ethers.utils.solidityPack(
-              ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-              [
-                subscription.chainId,
-                subscription.airnodeAddress,
-                subscription.templateId,
-                subscription.parameters,
-                subscription.conditions,
-                subscription.relayer,
-                subscription.sponsor,
-                subscription.requester,
-                subscription.fulfillFunctionId,
-              ]
-            )
+          const expectedSubscriptionId = ethers.utils.solidityKeccak256(
+            ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+            [
+              subscription.chainId,
+              subscription.airnodeAddress,
+              subscription.templateId,
+              subscription.parameters,
+              subscription.conditions,
+              subscription.relayer,
+              subscription.sponsor,
+              subscription.requester,
+              subscription.fulfillFunctionId,
+            ]
           );
           if (subscriptionId !== expectedSubscriptionId) {
             node.logger.warn(
@@ -333,9 +326,14 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           protoSubscriptions.push({ id: subscriptionId, ...subscription });
         });
         if (isEmpty(protoSubscriptions)) {
-          node.logger.debug('No proto-psp subscriptions to process', providerLogOptions);
+          node.logger.info('No proto-psp subscriptions to process', providerLogOptions);
           return;
         }
+
+        // **************************************************************************
+        // Process each sponsor address in parallel
+        // **************************************************************************
+        node.logger.debug('Processing sponsor addresses...', providerLogOptions);
 
         const subscriptionsBySponsor = groupBy(protoSubscriptions, 'sponsor');
         const sponsorAddresses = Object.keys(subscriptionsBySponsor);
@@ -344,7 +342,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           // Derive sponsorWallet address
           // **************************************************************************
-          node.logger.debug('deriving sponsorWallet...', providerLogOptions);
+          node.logger.debug('Deriving sponsorWallet...', providerLogOptions);
 
           // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
           const sponsorWallet = deriveSponsorWallet(
@@ -363,13 +361,13 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           // Fetch sponsorWallet transaction count
           // **************************************************************************
-          node.logger.debug('fetching transaction count...', sponsorWalletLogOptions);
+          node.logger.debug('Fetching transaction count...', sponsorWalletLogOptions);
 
           const [err, sponsorWalletTransactionCount] = await retryGo(() =>
             provider.getTransactionCount(sponsorWallet.address, currentBlock)
           );
           if (err || isNil(sponsorWalletTransactionCount)) {
-            node.logger.error('failed to fetch the sponsor wallet transaction count', {
+            node.logger.error('Failed to fetch the sponsor wallet transaction count', {
               ...sponsorWalletLogOptions,
               error: err,
             });
@@ -380,7 +378,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           // Process each psp subscription in serial to keep nonces in order
           // **************************************************************************
-          node.logger.debug('processing rrpBeaconServerKeeperJobs...', sponsorWalletLogOptions);
+          node.logger.debug('Processing rrpBeaconServerKeeperJobs...', sponsorWalletLogOptions);
 
           const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
           for (const subscription of sponsorSubscriptions || []) {
@@ -391,17 +389,6 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                 subscriptionId: subscription.id,
               },
             };
-
-            // **************************************************************************
-            // Fetch template details
-            // **************************************************************************
-            node.logger.debug('Fetching template details...', subscriptionIdLogOptions);
-
-            const template = templates[subscription.templateId];
-            if (isNil(template)) {
-              node.logger.warn('Template not found in config', subscriptionIdLogOptions);
-              continue;
-            }
 
             /* 
           // **************************************************************************
@@ -476,6 +463,20 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           */
 
             // **************************************************************************
+            // Fetch template details
+            // **************************************************************************
+            node.logger.debug('Fetching template details...', subscriptionIdLogOptions);
+
+            const template = templates[subscription.templateId];
+            if (isNil(template)) {
+              node.logger.warn(
+                `TemplateId ${subscription.templateId} not found in templates`,
+                subscriptionIdLogOptions
+              );
+              continue;
+            }
+
+            // **************************************************************************
             // Make API call
             // **************************************************************************
             node.logger.debug('Making API request...', subscriptionIdLogOptions);
@@ -498,7 +499,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
             const apiValue = data[subscription.id];
             if (isNil(apiValue)) {
-              node.logger.warn('API value is missing. Skipping update...', subscriptionIdLogOptions);
+              node.logger.warn('API value not found. Skipping update...', subscriptionIdLogOptions);
               continue;
             }
 
@@ -512,11 +513,11 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             let conditionParameters: string;
             try {
               const decodedConditions = abi.decode(subscription.conditions);
-              const decodedFunctionId = ethers.utils.defaultAbiCoder.decode(
+              const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
                 ['bytes4'],
                 decodedConditions._conditionFunctionId
               );
-              conditionFunction = dapiServer.interface.getFunction(decodedFunctionId.toString());
+              conditionFunction = dapiServer.interface.getFunction(decodedConditionFunctionId);
               conditionParameters = decodedConditions._conditionParameters;
             } catch (err) {
               node.logger.error('Failed to decode conditions', {
@@ -538,7 +539,6 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               node.logger.warn('Conditions not met. Skipping update...', subscriptionIdLogOptions);
               continue;
             }
-            node.logger.info('Conditions met. Updating beacon...', subscriptionIdLogOptions);
 
             // **************************************************************************
             // Fetch current gas fee data

@@ -11,7 +11,6 @@ import merge from 'lodash/merge';
 import { readApiValue } from './call-api';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
-import 'source-map-support/register';
 
 export const GAS_LIMIT = 500_000;
 export const BLOCK_COUNT_HISTORY_LIMIT = 300;
