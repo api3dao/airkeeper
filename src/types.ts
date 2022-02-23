@@ -44,9 +44,18 @@ export interface RrpBeaconServerKeeperTrigger {
   readonly chainIds: string[];
   readonly templateId: string;
   readonly overrideParameters: abi.InputParameter[];
+  readonly oisTitle: string;
+  readonly endpointName: string;
   readonly deviationPercentage: string;
   readonly keeperSponsor: string;
   readonly requestSponsor: string;
+}
+
+export interface PspTrigger {
+  readonly subscriptionId: string;
+  readonly overrideParameters: abi.InputParameter[];
+  readonly oisTitle: string;
+  readonly endpointName: string;
 }
 
 export interface Config extends node.Config {
@@ -55,7 +64,7 @@ export interface Config extends node.Config {
   readonly chains: ChainConfig[];
   readonly triggers: node.Triggers & {
     rrpBeaconServerKeeperJobs: RrpBeaconServerKeeperTrigger[];
-    'proto-psp': string[];
+    'proto-psp': PspTrigger[];
   };
   readonly subscriptions: { [key: string]: Subscription };
   readonly templates: { [key: string]: Template };
@@ -65,7 +74,6 @@ export interface Subscription {
   readonly chainId: string;
   readonly airnodeAddress: string;
   readonly templateId: string;
-  readonly overrideParameters: abi.InputParameter[];
   readonly parameters: string;
   readonly conditions: string;
   readonly relayer: string;
@@ -75,8 +83,6 @@ export interface Subscription {
 }
 
 export interface Template {
-  readonly oisTitle: string;
-  readonly endpointName: string;
   readonly endpointId: string;
   readonly templateParameters: abi.InputParameter[];
 }

@@ -7,8 +7,8 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
-import { readApiValue } from './call-api';
-import { ChainConfig, Config, Subscription } from './types';
+import { callApi as callApi } from './call-api';
+import { ChainConfig, Config, PspTrigger, Subscription } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 
 export const GAS_LIMIT = 500_000;
@@ -79,11 +79,11 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         const provider = node.evm.buildEVMProvider(chainProviderUrl, chain.id);
 
         // Fetch current block number from chain via provider
-        const [err, currentBlock] = await retryGo(() => provider.getBlockNumber());
-        if (err || isNil(currentBlock)) {
+        const [errorGetBlockNumber, currentBlock] = await retryGo(() => provider.getBlockNumber());
+        if (errorGetBlockNumber || isNil(currentBlock)) {
           node.logger.error('Failed to fetch the blockNumber', {
             ...providerLogOptions,
-            error: err,
+            error: errorGetBlockNumber,
           });
           return;
         }
@@ -287,11 +287,14 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         // **************************************************************************
         node.logger.debug('Fetching subscriptions details...', providerLogOptions);
 
-        const protoSubscriptions: (Subscription & { id: string })[] = [];
-        triggers['proto-psp'].forEach((subscriptionId) => {
-          const subscription = subscriptions[subscriptionId];
+        const pspTriggersWithSubscriptions: (PspTrigger & Subscription)[] = [];
+        triggers['proto-psp'].forEach((pspTrigger) => {
+          const subscription = subscriptions[pspTrigger.subscriptionId];
           if (isNil(subscription)) {
-            node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, providerLogOptions);
+            node.logger.warn(
+              `SubscriptionId ${pspTrigger.subscriptionId} not found in subscriptions`,
+              providerLogOptions
+            );
             return;
           }
 
@@ -314,17 +317,20 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               subscription.fulfillFunctionId,
             ]
           );
-          if (subscriptionId !== expectedSubscriptionId) {
+          if (pspTrigger.subscriptionId !== expectedSubscriptionId) {
             node.logger.warn(
-              `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
+              `SubscriptionId ${pspTrigger.subscriptionId} does not match expected ${expectedSubscriptionId}`,
               providerLogOptions
             );
             return;
           }
 
-          protoSubscriptions.push({ id: subscriptionId, ...subscription });
+          pspTriggersWithSubscriptions.push({
+            ...pspTrigger,
+            ...subscription,
+          });
         });
-        if (isEmpty(protoSubscriptions)) {
+        if (isEmpty(pspTriggersWithSubscriptions)) {
           node.logger.info('No proto-psp subscriptions to process', providerLogOptions);
           return;
         }
@@ -334,8 +340,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         // **************************************************************************
         node.logger.debug('Processing sponsor addresses...', providerLogOptions);
 
-        const subscriptionsBySponsor = groupBy(protoSubscriptions, 'sponsor');
-        const sponsorAddresses = Object.keys(subscriptionsBySponsor);
+        const pspTriggersWithSubscriptionsBySponsor = groupBy(pspTriggersWithSubscriptions, 'sponsor');
+        const sponsorAddresses = Object.keys(pspTriggersWithSubscriptionsBySponsor);
 
         const sponsorWalletPromises = sponsorAddresses.map(async (sponsor) => {
           // **************************************************************************
@@ -362,13 +368,13 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('Fetching transaction count...', sponsorWalletLogOptions);
 
-          const [err, sponsorWalletTransactionCount] = await retryGo(() =>
+          const [errorGetTransactionCount, sponsorWalletTransactionCount] = await retryGo(() =>
             provider.getTransactionCount(sponsorWallet.address, currentBlock)
           );
-          if (err || isNil(sponsorWalletTransactionCount)) {
+          if (errorGetTransactionCount || isNil(sponsorWalletTransactionCount)) {
             node.logger.error('Failed to fetch the sponsor wallet transaction count', {
               ...sponsorWalletLogOptions,
-              error: err,
+              error: errorGetTransactionCount,
             });
             return;
           }
@@ -379,13 +385,22 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('Processing rrpBeaconServerKeeperJobs...', sponsorWalletLogOptions);
 
-          const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
-          for (const subscription of sponsorSubscriptions || []) {
+          const sponsorPspTriggersWithSubscriptions = pspTriggersWithSubscriptionsBySponsor[sponsor];
+          for (const {
+            overrideParameters,
+            oisTitle,
+            endpointName,
+            subscriptionId,
+            templateId,
+            conditions,
+            relayer,
+            fulfillFunctionId,
+          } of sponsorPspTriggersWithSubscriptions || []) {
             const subscriptionIdLogOptions = {
               ...sponsorWalletLogOptions,
               additional: {
                 ...sponsorWalletLogOptions.additional,
-                subscriptionId: subscription.id,
+                subscriptionId,
               },
             };
 
@@ -466,12 +481,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('Fetching template details...', subscriptionIdLogOptions);
 
-            const template = templates[subscription.templateId];
+            const template = templates[templateId];
             if (isNil(template)) {
-              node.logger.warn(
-                `TemplateId ${subscription.templateId} not found in templates`,
-                subscriptionIdLogOptions
-              );
+              node.logger.warn(`TemplateId ${templateId} not found in templates`, subscriptionIdLogOptions);
               continue;
             }
 
@@ -480,25 +492,28 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('Making API request...', subscriptionIdLogOptions);
 
-            const [error, logsData] = await retryGo(() =>
-              readApiValue({
+            const [errorCallApi, logsData] = await retryGo(() =>
+              callApi({
                 airnodeAddress,
                 oises,
                 apiCredentials,
-                id: subscription.id,
-                templateId: subscription.templateId,
-                overrideParameters: subscription.overrideParameters,
-                ...template,
+                id: subscriptionId,
+                templateId,
+                overrideParameters,
+                oisTitle,
+                endpointName,
+                endpointId: template.endpointId,
+                templateParameters: template.templateParameters,
               })
             );
-            if (!isNil(error) || isNil(logsData)) {
+            if (!isNil(errorCallApi) || isNil(logsData)) {
               node.logger.warn('Failed to fecth API value', subscriptionIdLogOptions);
               continue;
             }
             const [logs, data] = logsData;
             node.logger.logPending(logs, subscriptionIdLogOptions);
 
-            const apiValue = data[subscription.id];
+            const apiValue = data[subscriptionId];
             if (isNil(apiValue)) {
               node.logger.warn('API value not found. Skipping update...', subscriptionIdLogOptions);
               continue;
@@ -513,7 +528,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             let conditionFunction: ethers.utils.FunctionFragment;
             let conditionParameters: string;
             try {
-              const decodedConditions = abi.decode(subscription.conditions);
+              const decodedConditions = abi.decode(conditions);
               const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
                 ['bytes4'],
                 decodedConditions._conditionFunctionId
@@ -527,13 +542,16 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               });
               continue;
             }
-            const [err, [conditionsMet]] = await retryGo(() =>
+            const [errorConditionFunction, [conditionsMet]] = await retryGo(() =>
               dapiServer
                 .connect(voidSigner)
-                .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters)
+                .functions[conditionFunction.name](subscriptionId, encodedFulfillmentData, conditionParameters)
             );
-            if (err) {
-              node.logger.error('Failed to check conditions', { ...subscriptionIdLogOptions, error: err });
+            if (errorConditionFunction) {
+              node.logger.error('Failed to check conditions', {
+                ...subscriptionIdLogOptions,
+                error: errorConditionFunction,
+              });
               continue;
             }
             if (!conditionsMet) {
@@ -570,7 +588,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                 ethers.utils.keccak256(
                   ethers.utils.solidityPack(
                     ['bytes32', 'uint256', 'address'],
-                    [subscription.id, timestamp, sponsorWallet.address]
+                    [subscriptionId, timestamp, sponsorWallet.address]
                   )
                 )
               )
@@ -581,16 +599,25 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('Fulfilling subscription...', subscriptionIdLogOptions);
 
-            // TODO: add gas price using override but use @api3/airnode-node/src/evm/gas-price.ts
+            let fulfillFunction: ethers.utils.FunctionFragment;
+            try {
+              fulfillFunction = dapiServer.interface.getFunction(fulfillFunctionId);
+            } catch (error) {
+              node.logger.error('Failed to get fulfill function', {
+                ...subscriptionIdLogOptions,
+                error: error as any,
+              });
+              continue;
+            }
             const currentNonce = nonce;
-            const [errFulfillPspBeaconUpdate, tx] = await retryGo<ethers.ContractTransaction>(() =>
+            const [errfulfillFunction, tx] = await retryGo<ethers.ContractTransaction>(() =>
               dapiServer
                 .connect(sponsorWallet)
-                .fulfillPspBeaconUpdate(
-                  subscription.id,
+                .functions[fulfillFunction.name](
+                  subscriptionId,
                   airnodeAddress,
-                  subscription.relayer,
-                  subscription.sponsor,
+                  relayer,
+                  sponsor,
                   timestamp,
                   encodedFulfillmentData,
                   signature,
@@ -601,12 +628,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                   }
                 )
             );
-            if (errFulfillPspBeaconUpdate) {
+            if (errfulfillFunction) {
               node.logger.error(
-                `failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${currentNonce}. Skipping update`,
+                `failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${currentNonce}`,
                 {
                   ...subscriptionIdLogOptions,
-                  error: errFulfillPspBeaconUpdate,
+                  error: errfulfillFunction,
                 }
               );
               continue;

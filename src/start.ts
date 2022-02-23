@@ -8,7 +8,7 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
-import { readApiValue } from './call-api';
+import { callApi } from './call-api';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 
@@ -68,14 +68,17 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
       const template = templates[trigger.templateId];
       const encodedParameters = abi.encode([...template.templateParameters, ...trigger.overrideParameters]);
       const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [trigger.templateId, encodedParameters]);
-      return readApiValue({
+      return callApi({
         airnodeAddress,
         oises,
         apiCredentials,
         id: beaconId,
         templateId: trigger.templateId,
         overrideParameters: trigger.overrideParameters,
-        ...template,
+        oisTitle: trigger.oisTitle,
+        endpointName: trigger.endpointName,
+        endpointId: template.endpointId,
+        templateParameters: template.templateParameters,
       });
     })
   );

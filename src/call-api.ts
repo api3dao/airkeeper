@@ -7,7 +7,7 @@ import isNil from 'lodash/isNil';
 import { ApiValuesById, CallApiOptions } from './types';
 import { retryGo } from './utils';
 
-export const readApiValue = async ({
+export const callApi = async ({
   airnodeAddress,
   oises,
   apiCredentials,
@@ -21,17 +21,18 @@ export const readApiValue = async ({
 }: CallApiOptions): Promise<node.LogsData<ApiValuesById>> => {
   const configParameters = [...templateParameters, ...overrideParameters];
 
-  // Verify endpointId
+  // Derive endpointId
   const expectedEndpointId = ethers.utils.keccak256(
     ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
   );
+  // Verify endpointId
   if (endpointId && expectedEndpointId !== endpointId) {
     const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
     const log = node.logger.pend('ERROR', message);
     return [[log], { [id]: null }];
   }
 
-  // Verify templateId
+  // Encode template parameters
   let encodedParameters;
   try {
     encodedParameters = abi.encode(templateParameters);
@@ -40,12 +41,14 @@ export const readApiValue = async ({
     const log = node.logger.pend('ERROR', message);
     return [[log], { [id]: null }];
   }
+  // Derive templateId
   const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
     airnodeAddress,
     endpointId: expectedEndpointId,
     encodedParameters,
     id: templateId,
   });
+  // Verify templateId
   if (expectedTemplateId !== templateId) {
     const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
     const log = node.logger.pend('ERROR', message);
@@ -64,10 +67,14 @@ export const readApiValue = async ({
     const log = node.logger.pend('ERROR', message);
     return [[log], { [id]: null }];
   }
+
+  // Remove reserved parameters
   const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
     apiCallParameters || {},
     ois.RESERVED_PARAMETERS
   );
+
+  // Remove oisTitle from credentials
   const adapterApiCredentials = apiCredentials
     .filter((c) => c.oisTitle === oisTitle)
     .map((c) => node.utils.removeKey(c, 'oisTitle'));

@@ -17,19 +17,27 @@
         "chainIds": ["31337"],
         "templateId": "0x6f737bbf31dfed584a16f53b7d725ff64bee67e79a468259456fb40aa19c60c4",
         "overrideParameters": [{ "type": "string32", "name": "from", "value": "ETH" }],
+        "oisTitle": "Currency Converter API",
+        "endpointName": "convertToUSD",
         "deviationPercentage": "5",
         "keeperSponsor": "0x2479808b1216E998309A727df8A0A98A1130A162",
         "requestSponsor": "0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec"
       }
     ],
-    "proto-psp": ["0xdf6d2785e1fc71ba3aa08fccb77d74ac4ba678208bc33c445152ea999a0cc8af"]
+    "proto-psp": [
+      {
+        "subscriptionId": "0xdf6d2785e1fc71ba3aa08fccb77d74ac4ba678208bc33c445152ea999a0cc8af",
+        "overrideParameters": [{ "type": "string32", "name": "from", "value": "ETH" }],
+        "oisTitle": "Currency Converter API",
+        "endpointName": "convertToUSD"
+      }
+    ]
   },
   "subscriptions": {
     "0xdf6d2785e1fc71ba3aa08fccb77d74ac4ba678208bc33c445152ea999a0cc8af": {
       "chainId": "31337",
       "airnodeAddress": "0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace",
       "templateId": "0x6f737bbf31dfed584a16f53b7d725ff64bee67e79a468259456fb40aa19c60c4",
-      "overrideParameters": [{ "type": "string32", "name": "from", "value": "ETH" }],
       "parameters": "0x",
       "conditions": "0x31624200000000000000000000000000000000000000000000000000000000005f636f6e646974696f6e46756e6374696f6e4964000000000000000000000000dc96acc8000000000000000000000000000000000000000000000000000000005f636f6e646974696f6e506172616d657465727300000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000989680",
       "relayer": "0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace",
@@ -40,8 +48,6 @@
   },
   "templates": {
     "0x6f737bbf31dfed584a16f53b7d725ff64bee67e79a468259456fb40aa19c60c4": {
-      "oisTitle": "Currency Converter API",
-      "endpointName": "convertToUSD",
       "endpointId": "0x13dea3311fe0d6b84f4daeab831befbc49e19e6494c41e9e065a09c3c68f43b6",
       "templateParameters": [
         { "type": "string32", "name": "to", "value": "USD" },

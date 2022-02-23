@@ -3,9 +3,9 @@ import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
-import { readApiValue } from './call-api';
+import { callApi } from './call-api';
 
-describe('readApiValue', () => {
+describe('callApi', () => {
   const airnodeAddress = '0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace';
   const oises: ois.OIS[] = [
     {
@@ -142,7 +142,7 @@ describe('readApiValue', () => {
       data: apiResponse,
     });
 
-    const [logs, res] = await readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
+    const [logs, res] = await callApi({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
 
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(
@@ -183,7 +183,7 @@ describe('readApiValue', () => {
   it('returns null if templateId fails verification', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
-    const [logs, res] = await readApiValue({
+    const [logs, res] = await callApi({
       airnodeAddress,
       oises,
       apiCredentials,
@@ -220,7 +220,7 @@ describe('readApiValue', () => {
       })),
     }));
 
-    const [logs, res] = await readApiValue({
+    const [logs, res] = await callApi({
       airnodeAddress,
       oises: oisesWithoutType,
       apiCredentials,
@@ -246,7 +246,7 @@ describe('readApiValue', () => {
     const error = new Error('Network is down');
     spy.mockRejectedValueOnce(error);
 
-    const [logs, res] = await readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
+    const [logs, res] = await callApi({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -291,7 +291,7 @@ describe('readApiValue', () => {
       throw error;
     });
 
-    const [logs, res] = await readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
+    const [logs, res] = await callApi({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
