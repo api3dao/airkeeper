@@ -21,39 +21,40 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  const nodeConfig = loadNodeConfig();
+  const airnodeConfig = loadNodeConfig();
   // This file will be merged with config.json from above
-  const keeperConfig: Config = parseConfig('airkeeper');
+  const airkeeperConfig: Config = parseConfig('airkeeper');
 
-  const baseLogOptions = node.logger.buildBaseOptions(nodeConfig, {
+  const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
     coordinatorId: node.utils.randomHexString(8),
   });
   node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
   const config = {
-    ...nodeConfig,
-    chains: keeperConfig.chains.map((chain) => {
+    ...airnodeConfig,
+    chains: airkeeperConfig.chains.map((chain) => {
       if (isNil(chain.id)) {
         throw new Error(`Missing 'id' property in chain config: ${JSON.stringify(chain)}`);
       }
-      const configChain = nodeConfig.chains.find((c) => c.id === chain.id);
+      const configChain = airnodeConfig.chains.find((c) => c.id === chain.id);
       if (isNil(configChain)) {
         throw new Error(`Chain id ${chain.id} not found in node config.json`);
       }
       return merge(configChain, chain);
     }),
-    triggers: { ...nodeConfig.triggers, ...keeperConfig.triggers },
+    triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
+    templates: airkeeperConfig.templates,
   };
-  const { chains, triggers, ois: oises, apiCredentials } = config;
+  const { chains, triggers, ois: oises, apiCredentials, templates } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
   const airnodeAddress = (
-    keeperConfig.airnodeXpub
-      ? ethers.utils.HDNode.fromExtendedKey(keeperConfig.airnodeXpub).derivePath('0/0')
+    airkeeperConfig.airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.airnodeXpub).derivePath('0/0')
       : airnodeHDNode.derivePath(ethers.utils.defaultPath)
   ).address;
 
-  if (keeperConfig.airnodeAddress && keeperConfig.airnodeAddress !== airnodeAddress) {
+  if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
 
@@ -64,9 +65,18 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((trigger) =>
     retryGo(() => {
-      const encodedParameters = abi.encode([...trigger.templateParameters, ...trigger.overrideParameters]);
+      const template = templates[trigger.templateId];
+      const encodedParameters = abi.encode([...template.templateParameters, ...trigger.overrideParameters]);
       const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [trigger.templateId, encodedParameters]);
-      return readApiValue({ airnodeAddress, oises, apiCredentials, id: beaconId, ...trigger });
+      return readApiValue({
+        airnodeAddress,
+        oises,
+        apiCredentials,
+        id: beaconId,
+        templateId: trigger.templateId,
+        overrideParameters: trigger.overrideParameters,
+        ...template,
+      });
     })
   );
   const responses = await Promise.all(apiValuePromises);
@@ -94,12 +104,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   node.logger.debug('processing chain providers...', baseLogOptions);
 
-  const evmChains = chains.filter((chain: node.ChainConfig & ChainConfig) => chain.type === 'evm');
+  const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
   if (isEmpty(chains)) {
     throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
   }
   const providerPromises = flatMap(
-    evmChains.map((chain: node.ChainConfig & ChainConfig) => {
+    evmChains.map((chain: ChainConfig) => {
       return map(chain.providers, async (chainProvider, providerName) => {
         const providerLogOptions = {
           ...baseLogOptions,
@@ -191,10 +201,10 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             chainIds,
             templateId,
             overrideParameters,
-            templateParameters,
             deviationPercentage,
             requestSponsor,
           } of rrpBeaconServerKeeperJobs) {
+            const { templateParameters } = templates[templateId];
             const configParameters = [...templateParameters, ...overrideParameters];
             // **************************************************************************
             // 3.2.3.1 Derive beaconId

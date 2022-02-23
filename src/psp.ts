@@ -8,7 +8,7 @@ import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { readApiValue } from './call-api';
-import { PspChainConfig, PspConfig, Subscription } from './types';
+import { ChainConfig, Config, Subscription } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 
 export const GAS_LIMIT = 500_000;
@@ -19,33 +19,32 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  const nodeConfig = loadNodeConfig();
+  const airnodeConfig = loadNodeConfig();
   // This file will be merged with config.json from above
-  const pspConfig: PspConfig = parseConfig('psp');
+  const airkeeperConfig: Config = parseConfig('airkeeper');
 
-  const baseLogOptions = node.logger.buildBaseOptions(nodeConfig, {
+  const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
     coordinatorId: node.utils.randomHexString(8),
   });
   node.logger.info(`PSP beacon update started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const { chains: pspChains, triggers: pspTriggers, subscriptions, templates } = pspConfig;
   const config = {
-    ...nodeConfig,
-    chains: pspChains.map((chain) => {
+    ...airnodeConfig,
+    chains: airkeeperConfig.chains.map((chain) => {
       if (isNil(chain.id)) {
         throw new Error(`Missing 'id' property in chain config: ${JSON.stringify(chain)}`);
       }
-      const configChain = nodeConfig.chains.find((c) => c.id === chain.id);
+      const configChain = airnodeConfig.chains.find((c) => c.id === chain.id);
       if (isNil(configChain)) {
         throw new Error(`Chain id ${chain.id} not found in node config.json`);
       }
       return merge(configChain, chain);
     }),
-    triggers: { ...nodeConfig.triggers, ...pspTriggers },
-    subscriptions,
-    templates,
+    triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
+    subscriptions: airkeeperConfig.subscriptions,
+    templates: airkeeperConfig.templates,
   };
-  const { chains, nodeSettings, triggers, ois: oises, apiCredentials } = config;
+  const { chains, nodeSettings, triggers, ois: oises, apiCredentials, subscriptions, templates } = config;
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
   const { address: airnodeAddress } = airnodeWallet;
@@ -55,12 +54,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   node.logger.debug('Processing chain providers...', baseLogOptions);
 
-  const evmChains = chains.filter((chain: PspChainConfig) => chain.type === 'evm');
+  const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
   if (isEmpty(chains)) {
     throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
   }
   const providerPromises = flatMap(
-    evmChains.map((chain: PspChainConfig) =>
+    evmChains.map((chain: ChainConfig) =>
       map(chain.providers, async (chainProvider, providerName) => {
         const providerLogOptions = {
           ...baseLogOptions,
@@ -487,7 +486,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                 oises,
                 apiCredentials,
                 id: subscription.id,
-                ...{ templateId: subscription.templateId, ...template },
+                templateId: subscription.templateId,
+                overrideParameters: subscription.overrideParameters,
+                ...template,
               })
             );
             if (!isNil(error) || isNil(logsData)) {

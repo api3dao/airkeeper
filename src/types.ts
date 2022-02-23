@@ -28,7 +28,10 @@ export interface GasTarget {
 export interface ChainConfig extends node.ChainConfig {
   readonly contracts: node.ChainContracts & {
     readonly RrpBeaconServer: string;
+    readonly AirnodeProtocol: string;
+    readonly DapiServer: string;
   };
+  // readonly allocators: Allocator[];
   readonly options: ChainOptions;
 }
 
@@ -37,21 +40,10 @@ export interface ChainConfig extends node.ChainConfig {
 //   readonly startIndex: number;
 //   readonly endIndex: number;
 // }
-
-export interface PspChainConfig extends node.ChainConfig {
-  readonly contracts: node.ChainContracts & {
-    readonly AirnodeProtocol: string;
-    readonly DapiServer: string;
-  };
-  // readonly allocators: Allocator[];
-}
 export interface RrpBeaconServerKeeperTrigger {
   readonly chainIds: string[];
   readonly templateId: string;
-  readonly templateParameters: abi.InputParameter[];
   readonly overrideParameters: abi.InputParameter[];
-  readonly endpointName: string;
-  readonly oisTitle: string;
   readonly deviationPercentage: string;
   readonly keeperSponsor: string;
   readonly requestSponsor: string;
@@ -63,12 +55,6 @@ export interface Config extends node.Config {
   readonly chains: ChainConfig[];
   readonly triggers: node.Triggers & {
     rrpBeaconServerKeeperJobs: RrpBeaconServerKeeperTrigger[];
-  };
-}
-
-export interface PspConfig {
-  readonly chains: PspChainConfig[];
-  readonly triggers: node.Triggers & {
     'proto-psp': string[];
   };
   readonly subscriptions: { [key: string]: Subscription };
@@ -79,6 +65,7 @@ export interface Subscription {
   readonly chainId: string;
   readonly airnodeAddress: string;
   readonly templateId: string;
+  readonly overrideParameters: abi.InputParameter[];
   readonly parameters: string;
   readonly conditions: string;
   readonly relayer: string;
@@ -92,7 +79,6 @@ export interface Template {
   readonly endpointName: string;
   readonly endpointId: string;
   readonly templateParameters: abi.InputParameter[];
-  readonly overrideParameters: abi.InputParameter[];
 }
 
 export interface CallApiOptions {
