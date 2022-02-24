@@ -1,4 +1,3 @@
-import * as abi from '@api3/airnode-abi';
 import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
@@ -8,56 +7,16 @@ import { ApiValuesById, CallApiOptions } from './types';
 import { retryGo } from './utils';
 
 export const callApi = async ({
-  airnodeAddress,
   oises,
   apiCredentials,
   id,
-  templateId,
+  templateParameters,
   oisTitle,
   endpointName,
-  endpointId,
-  templateParameters,
-  overrideParameters,
 }: CallApiOptions): Promise<node.LogsData<ApiValuesById>> => {
-  const configParameters = [...templateParameters, ...overrideParameters];
-
-  // Derive endpointId
-  const expectedEndpointId = ethers.utils.keccak256(
-    ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
-  );
-  // Verify endpointId
-  if (endpointId && expectedEndpointId !== endpointId) {
-    const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
-    const log = node.logger.pend('ERROR', message);
-    return [[log], { [id]: null }];
-  }
-
-  // Encode template parameters
-  let encodedParameters;
-  try {
-    encodedParameters = abi.encode(templateParameters);
-  } catch (error) {
-    const message = `failed to encode template parameters '${JSON.stringify(templateParameters)}'`;
-    const log = node.logger.pend('ERROR', message);
-    return [[log], { [id]: null }];
-  }
-  // Derive templateId
-  const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
-    airnodeAddress,
-    endpointId: expectedEndpointId,
-    encodedParameters,
-    id: templateId,
-  });
-  // Verify templateId
-  if (expectedTemplateId !== templateId) {
-    const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
-    const log = node.logger.pend('ERROR', message);
-    return [[log], { [id]: null }];
-  }
-
   const configOis = oises.find((o) => o.title === oisTitle)!;
   const configEndpoint = configOis.endpoints.find((e) => e.name === endpointName)!;
-  const apiCallParameters = configParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+  const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
   const reservedParameters = node.adapters.http.parameters.getReservedParameters(
     configEndpoint,
     apiCallParameters || {}

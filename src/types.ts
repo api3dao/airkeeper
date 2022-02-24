@@ -3,26 +3,15 @@ import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 
-export interface ChainOptions {
-  readonly txType: 'legacy' | 'eip1559';
-  readonly baseFeeMultiplier?: string;
-  readonly priorityFee?: PriorityFee;
-}
-
-export interface FetchOptions {
-  readonly provider: ethers.providers.JsonRpcProvider;
-  readonly chainOptions: ChainOptions;
-}
-
 export interface PriorityFee {
   readonly value: string;
   readonly unit?: 'wei' | 'kwei' | 'mwei' | 'gwei' | 'szabo' | 'finney' | 'ether';
 }
 
-export interface GasTarget {
-  readonly maxPriorityFeePerGas?: ethers.BigNumber;
-  readonly maxFeePerGas?: ethers.BigNumber;
-  readonly gasPrice?: ethers.BigNumber;
+export interface ChainOptions {
+  readonly txType: 'legacy' | 'eip1559';
+  readonly baseFeeMultiplier?: string;
+  readonly priorityFee?: PriorityFee;
 }
 
 export interface ChainConfig extends node.ChainConfig {
@@ -36,31 +25,11 @@ export interface ChainConfig extends node.ChainConfig {
 export interface RrpBeaconServerKeeperTrigger {
   readonly chainIds: string[];
   readonly templateId: string;
-  readonly overrideParameters: abi.InputParameter[];
-  readonly oisTitle: string;
-  readonly endpointName: string;
+  readonly templateParameters: abi.InputParameter[];
+  readonly endpointId: string;
   readonly deviationPercentage: string;
   readonly keeperSponsor: string;
   readonly requestSponsor: string;
-}
-
-export interface PspTrigger {
-  readonly subscriptionId: string;
-  readonly overrideParameters: abi.InputParameter[];
-  readonly oisTitle: string;
-  readonly endpointName: string;
-}
-
-export interface Config extends node.Config {
-  readonly airnodeAddress?: string;
-  readonly airnodeXpub?: string;
-  readonly chains: ChainConfig[];
-  readonly triggers: node.Triggers & {
-    rrpBeaconServerKeeperJobs: RrpBeaconServerKeeperTrigger[];
-    'proto-psp': PspTrigger[];
-  };
-  readonly subscriptions: { [key: string]: Subscription };
-  readonly templates: { [key: string]: Template };
 }
 
 export interface Subscription {
@@ -80,17 +49,31 @@ export interface Template {
   readonly templateParameters: abi.InputParameter[];
 }
 
+export interface Endpoint {
+  readonly oisTitle: string;
+  readonly endpointName: string;
+}
+
+export interface Config extends node.Config {
+  readonly airnodeAddress?: string;
+  readonly airnodeXpub?: string;
+  readonly chains: ChainConfig[];
+  readonly triggers: node.Triggers & {
+    rrpBeaconServerKeeperJobs: RrpBeaconServerKeeperTrigger[];
+    'proto-psp': string[];
+  };
+  readonly subscriptions: { [key: string]: Subscription };
+  readonly templates: { [key: string]: Template };
+  readonly endpoints: { [key: string]: Endpoint };
+}
+
 export interface CallApiOptions {
-  airnodeAddress: string;
   oises: ois.OIS[];
   apiCredentials: node.ApiCredentials[];
   id: string;
-  templateId: string;
+  templateParameters: abi.InputParameter[];
   oisTitle: string;
   endpointName: string;
-  endpointId?: string;
-  templateParameters: abi.InputParameter[];
-  overrideParameters: abi.InputParameter[];
 }
 
 export interface ApiValuesById {

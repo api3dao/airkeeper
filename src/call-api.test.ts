@@ -6,7 +6,6 @@ import { ethers } from 'ethers';
 import { callApi } from './call-api';
 
 describe('callApi', () => {
-  const airnodeAddress = '0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace';
   const oises: ois.OIS[] = [
     {
       oisFormat: '1.0.0',
@@ -114,25 +113,29 @@ describe('callApi', () => {
       securitySchemeValue: '${SS_CURRENCY_CONVERTER_API_KEY}',
     },
   ];
-  const job = {
-    chainIds: ['31337', '1'],
-    templateId: '0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46',
-    templateParameters: [
-      { type: 'string32', name: 'to', value: 'USD' },
-      { type: 'string32', name: '_type', value: 'int256' },
-      { type: 'string32', name: '_path', value: 'result' },
-      { type: 'string32', name: '_times', value: '100000' },
-    ],
-    overrideParameters: [{ type: 'string32', name: 'from', value: 'ETH' }],
-    oisTitle: 'Currency Converter API',
-    endpointName: 'convertToUSD',
-    deviationPercentage: '0.05',
-    keeperSponsor: '0x2479808b1216E998309A727df8A0A98A1130A162',
-    requestSponsor: '0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec',
-  };
 
-  const encodedParameters = abi.encode([...job.templateParameters, ...job.overrideParameters]);
-  const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [job.templateId, encodedParameters]);
+  const templateId = '0x6f737bbf31dfed584a16f53b7d725ff64bee67e79a468259456fb40aa19c60c4';
+  const templateParameters = [
+    { type: 'string32', name: 'to', value: 'USD' },
+    { type: 'string32', name: '_type', value: 'int256' },
+    { type: 'string32', name: '_path', value: 'result' },
+    { type: 'string32', name: '_times', value: '100000' },
+    { type: 'string32', name: 'from', value: 'ETH' },
+  ];
+  const oisTitle = 'Currency Converter API';
+  const endpointName = 'convertToUSD';
+
+  const encodedParameters = abi.encode(templateParameters);
+  const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
+
+  const callApiOptions = {
+    oises,
+    apiCredentials,
+    id: beaconId,
+    templateParameters,
+    oisTitle,
+    endpointName,
+  };
 
   it('calls the adapter with the given parameters', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
@@ -142,7 +145,7 @@ describe('callApi', () => {
       data: apiResponse,
     });
 
-    const [logs, res] = await callApi({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
+    const [logs, res] = await callApi(callApiOptions);
 
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(
@@ -159,7 +162,7 @@ describe('callApi', () => {
     );
     expect(res).toBeDefined();
     expect(res).toEqual({
-      '0xef655bb09740bae4e70ab7641351f20d1be8ebdf93799cc988c88b89007fc6e3': ethers.BigNumber.from(72339202),
+      '0xda81ccdbd098065ac2f16228ff382885f8f5d52de4d765e2e1e5b2036add70b6': ethers.BigNumber.from(72339202),
     });
     expect(spy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
@@ -180,35 +183,6 @@ describe('callApi', () => {
     });
   });
 
-  it('returns null if templateId fails verification', async () => {
-    const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-
-    const [logs, res] = await callApi({
-      airnodeAddress,
-      oises,
-      apiCredentials,
-      id: beaconId,
-      ...{
-        ...job,
-        templateParameters: [...job.templateParameters, { type: 'string32', name: 'from', value: 'BTC' }],
-      },
-    });
-
-    expect(logs).toHaveLength(1);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          level: 'ERROR',
-          message: expect.stringMatching(
-            "templateId '0xb3df2ca7646e7823c18038ed320ae3fa29bcd7452fdcd91398833da362df1b46' does not match expected templateId '[^']*'"
-          ),
-        },
-      ])
-    );
-    expect(Object.values(res)).toEqual([null]);
-    expect(spy).not.toHaveBeenCalled();
-  });
-
   it("returns null if reserved parameter '_type' is missing", async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
@@ -221,11 +195,8 @@ describe('callApi', () => {
     }));
 
     const [logs, res] = await callApi({
-      airnodeAddress,
+      ...callApiOptions,
       oises: oisesWithoutType,
-      apiCredentials,
-      id: beaconId,
-      ...job,
     });
 
     expect(logs).toHaveLength(1);
@@ -246,7 +217,7 @@ describe('callApi', () => {
     const error = new Error('Network is down');
     spy.mockRejectedValueOnce(error);
 
-    const [logs, res] = await callApi({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
+    const [logs, res] = await callApi(callApiOptions);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -291,7 +262,7 @@ describe('callApi', () => {
       throw error;
     });
 
-    const [logs, res] = await callApi({ airnodeAddress, oises, apiCredentials, id: beaconId, ...job });
+    const [logs, res] = await callApi(callApiOptions);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(

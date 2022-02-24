@@ -8,7 +8,7 @@ import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { callApi as callApi } from './call-api';
-import { ChainConfig, Config, PspTrigger, Subscription } from './types';
+import { ChainConfig, Config, Subscription } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 
 export const GAS_LIMIT = 500_000;
@@ -119,8 +119,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
     triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
     subscriptions: airkeeperConfig.subscriptions,
     templates: airkeeperConfig.templates,
+    endpoints: airkeeperConfig.endpoints,
   };
-  const { chains, nodeSettings, triggers, ois: oises, apiCredentials, subscriptions, templates } = config;
+  const { chains, nodeSettings, triggers, ois: oises, apiCredentials, subscriptions, templates, endpoints } = config;
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
   const { address: airnodeAddress } = airnodeWallet;
@@ -173,14 +174,11 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         // **************************************************************************
         node.logger.debug('Fetching subscriptions details...', providerLogOptions);
 
-        const pspTriggersWithSubscriptions: (PspTrigger & Subscription)[] = [];
-        triggers['proto-psp'].forEach((pspTrigger) => {
-          const subscription = subscriptions[pspTrigger.subscriptionId];
+        const enabledSubscriptions: (Subscription & { subscriptionId: string })[] = [];
+        triggers['proto-psp'].forEach((subscriptionId) => {
+          const subscription = subscriptions[subscriptionId];
           if (isNil(subscription)) {
-            node.logger.warn(
-              `SubscriptionId ${pspTrigger.subscriptionId} not found in subscriptions`,
-              providerLogOptions
-            );
+            node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, providerLogOptions);
             return;
           }
 
@@ -203,20 +201,20 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               subscription.fulfillFunctionId,
             ]
           );
-          if (pspTrigger.subscriptionId !== expectedSubscriptionId) {
+          if (subscriptionId !== expectedSubscriptionId) {
             node.logger.warn(
-              `SubscriptionId ${pspTrigger.subscriptionId} does not match expected ${expectedSubscriptionId}`,
+              `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
               providerLogOptions
             );
             return;
           }
 
-          pspTriggersWithSubscriptions.push({
-            ...pspTrigger,
+          enabledSubscriptions.push({
             ...subscription,
+            subscriptionId,
           });
         });
-        if (isEmpty(pspTriggersWithSubscriptions)) {
+        if (isEmpty(enabledSubscriptions)) {
           node.logger.info('No proto-psp subscriptions to process', providerLogOptions);
           return;
         }
@@ -226,8 +224,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         // **************************************************************************
         node.logger.debug('Processing sponsor addresses...', providerLogOptions);
 
-        const pspTriggersWithSubscriptionsBySponsor = groupBy(pspTriggersWithSubscriptions, 'sponsor');
-        const sponsorAddresses = Object.keys(pspTriggersWithSubscriptionsBySponsor);
+        const subscriptionsBySponsor = groupBy(enabledSubscriptions, 'sponsor');
+        const sponsorAddresses = Object.keys(subscriptionsBySponsor);
 
         const sponsorWalletPromises = sponsorAddresses.map(async (sponsor) => {
           // **************************************************************************
@@ -271,17 +269,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('Processing rrpBeaconServerKeeperJobs...', sponsorWalletLogOptions);
 
-          const sponsorPspTriggersWithSubscriptions = pspTriggersWithSubscriptionsBySponsor[sponsor];
-          for (const {
-            overrideParameters,
-            oisTitle,
-            endpointName,
-            subscriptionId,
-            templateId,
-            conditions,
-            relayer,
-            fulfillFunctionId,
-          } of sponsorPspTriggersWithSubscriptions || []) {
+          const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
+          for (const { subscriptionId, templateId, conditions, relayer, fulfillFunctionId } of sponsorSubscriptions ||
+            []) {
             const subscriptionIdLogOptions = {
               ...sponsorWalletLogOptions,
               additional: {
@@ -300,6 +290,46 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               node.logger.warn(`TemplateId ${templateId} not found in templates`, subscriptionIdLogOptions);
               continue;
             }
+            // **************************************************************************
+            // Verify templateId
+            // **************************************************************************
+            const encodedParameters = abi.encode(template.templateParameters);
+            const expectedTemplateId = ethers.utils.solidityKeccak256(
+              ['bytes32', 'bytes'],
+              [template.endpointId, encodedParameters]
+            );
+            if (expectedTemplateId !== templateId) {
+              node.logger.warn(
+                `TemplateId ${templateId} does not match expected ${expectedTemplateId}`,
+                subscriptionIdLogOptions
+              );
+              continue;
+            }
+
+            // **************************************************************************
+            // Fetch endpoint details
+            // **************************************************************************
+            node.logger.debug('Fetching template details...', subscriptionIdLogOptions);
+
+            const endpoint = endpoints[template.endpointId];
+            if (isNil(endpoint)) {
+              node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, subscriptionIdLogOptions);
+              continue;
+            }
+
+            // **************************************************************************
+            // Verify endpointId
+            // **************************************************************************
+            const expectedEndpointId = ethers.utils.keccak256(
+              ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
+            );
+            if (expectedEndpointId !== template.endpointId) {
+              node.logger.warn(
+                `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
+                subscriptionIdLogOptions
+              );
+              continue;
+            }
 
             // **************************************************************************
             // Make API call
@@ -308,16 +338,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
             const [errorCallApi, logsData] = await retryGo(() =>
               callApi({
-                airnodeAddress,
                 oises,
                 apiCredentials,
                 id: subscriptionId,
-                templateId,
-                overrideParameters,
-                oisTitle,
-                endpointName,
-                endpointId: template.endpointId,
                 templateParameters: template.templateParameters,
+                oisTitle: endpoint.oisTitle,
+                endpointName: endpoint.endpointName,
               })
             );
             if (!isNil(errorCallApi) || isNil(logsData)) {

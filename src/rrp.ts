@@ -9,7 +9,7 @@ import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { callApi } from './call-api';
-import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
+import { ApiValuesById, ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 
 export const GAS_LIMIT = 500_000;
@@ -43,9 +43,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
       return merge(configChain, chain);
     }),
     triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
-    templates: airkeeperConfig.templates,
+    endpoints: airkeeperConfig.endpoints,
   };
-  const { chains, triggers, ois: oises, apiCredentials, templates } = config;
+  const { chains, triggers, ois: oises, apiCredentials, endpoints } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
   const airnodeAddress = (
@@ -63,22 +63,43 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   node.logger.debug('making API requests...', baseLogOptions);
 
-  const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((trigger) =>
+  const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
     retryGo(() => {
-      const template = templates[trigger.templateId];
-      const encodedParameters = abi.encode([...template.templateParameters, ...trigger.overrideParameters]);
-      const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [trigger.templateId, encodedParameters]);
-      return callApi({
+      const { oisTitle, endpointName } = endpoints[endpointId];
+
+      const encodedParameters = abi.encode(templateParameters);
+      const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
+
+      // Verify endpointId
+      const expectedEndpointId = ethers.utils.keccak256(
+        ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
+      );
+      if (expectedEndpointId !== endpointId) {
+        const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
+        const log = node.logger.pend('ERROR', message);
+        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValuesById>);
+      }
+
+      // Verify templateId
+      const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
         airnodeAddress,
+        endpointId: expectedEndpointId,
+        encodedParameters,
+        id: templateId,
+      });
+      if (expectedTemplateId !== templateId) {
+        const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
+        const log = node.logger.pend('ERROR', message);
+        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValuesById>);
+      }
+
+      return callApi({
         oises,
         apiCredentials,
         id: beaconId,
-        templateId: trigger.templateId,
-        overrideParameters: trigger.overrideParameters,
-        oisTitle: trigger.oisTitle,
-        endpointName: trigger.endpointName,
-        endpointId: template.endpointId,
-        templateParameters: template.templateParameters,
+        templateParameters,
+        oisTitle,
+        endpointName,
       });
     })
   );
@@ -203,18 +224,16 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           for (const {
             chainIds,
             templateId,
-            overrideParameters,
+            templateParameters,
             deviationPercentage,
             requestSponsor,
           } of rrpBeaconServerKeeperJobs) {
-            const { templateParameters } = templates[templateId];
-            const configParameters = [...templateParameters, ...overrideParameters];
             // **************************************************************************
             // 3.2.3.1 Derive beaconId
             // **************************************************************************
             node.logger.debug('deriving beaconId...', keeperSponsorWalletLogOptions);
 
-            const encodedParameters = abi.encode(configParameters);
+            const encodedParameters = abi.encode(templateParameters);
             const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
 
             const beaconIdLogOptions = {
