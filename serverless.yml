@@ -17,8 +17,8 @@ package:
     - 'config/*.json'
 
 functions:
-  airkeeper-beacon-update:
-    handler: dist/src/start.beaconUpdate
+  rrp-beacon-update:
+    handler: dist/src/rrp.beaconUpdate
     timeout: 60
     events:
       - schedule: rate(1 minute)

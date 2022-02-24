@@ -5,7 +5,14 @@
 Airkeeper will fetch the value from the API (similarly to Airnode) and if a specifided condition is true then it will
 update the beacon value.
 
-<!-- TODO: what will happen with previous beacon update function (RrpBeaconServer)? will PSP (DapiServer) replace it or should we keep supporting both? -->
+There are two different lambda functions that can be used to update the beacon value:
+
+1. `rrp-beacon-update` that uses the
+   [RrpBeaconServer](https://github.com/api3dao/airnode/blob/v0.4/packages/airnode-protocol/contracts/rrp/requesters/RrpBeaconServer.sol)
+   contract from airnode-protocol v0.4.
+1. `psp-beacon-update` that uses the [DapiServer]() contract from airnode-protocol v1.
+
+See [Beacons](https://docs.api3.org/beacon/v0.1/functions/)
 
 ## Setup
 
