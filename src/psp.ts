@@ -13,6 +13,82 @@ import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './uti
 
 export const GAS_LIMIT = 500_000;
 
+//TODO: where to get abi from?
+const dapiServerAbi = [
+  {
+    inputs: [
+      {
+        internalType: 'bytes32',
+        name: 'subscriptionId',
+        type: 'bytes32',
+      },
+      {
+        internalType: 'bytes',
+        name: 'data',
+        type: 'bytes',
+      },
+      {
+        internalType: 'bytes',
+        name: 'conditionParameters',
+        type: 'bytes',
+      },
+    ],
+    name: 'conditionPspBeaconUpdate',
+    outputs: [
+      {
+        internalType: 'bool',
+        name: '',
+        type: 'bool',
+      },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [
+      {
+        internalType: 'bytes32',
+        name: 'subscriptionId',
+        type: 'bytes32',
+      },
+      {
+        internalType: 'address',
+        name: 'airnode',
+        type: 'address',
+      },
+      {
+        internalType: 'address',
+        name: 'relayer',
+        type: 'address',
+      },
+      {
+        internalType: 'address',
+        name: 'sponsor',
+        type: 'address',
+      },
+      {
+        internalType: 'uint256',
+        name: 'timestamp',
+        type: 'uint256',
+      },
+      {
+        internalType: 'bytes',
+        name: 'data',
+        type: 'bytes',
+      },
+      {
+        internalType: 'bytes',
+        name: 'signature',
+        type: 'bytes',
+      },
+    ],
+    name: 'fulfillPspBeaconUpdate',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+];
+
 export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
@@ -88,199 +164,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           return;
         }
 
-        /*
-        //TODO: where to get abi from?
-        const airnodeProtocolAbi = [
-          {
-            inputs: [
-              {
-                internalType: 'address',
-                name: '',
-                type: 'address',
-              },
-              {
-                internalType: 'bytes32',
-                name: '',
-                type: 'bytes32',
-              },
-            ],
-            name: 'sponsorToSubscriptionIdToPspSponsorshipStatus',
-            outputs: [
-              {
-                internalType: 'bool',
-                name: '',
-                type: 'bool',
-              },
-            ],
-            stateMutability: 'view',
-            type: 'function',
-          },
-        ];
-        const airnodeProtocol = new ethers.Contract(chain.contracts.AirnodeProtocol, airnodeProtocolAbi, provider);
-        */
-
-        //TODO: where to get abi from?
-        const dapiServerAbi = [
-          {
-            inputs: [
-              {
-                internalType: 'bytes32',
-                name: 'subscriptionId',
-                type: 'bytes32',
-              },
-              {
-                internalType: 'bytes',
-                name: 'data',
-                type: 'bytes',
-              },
-              {
-                internalType: 'bytes',
-                name: 'conditionParameters',
-                type: 'bytes',
-              },
-            ],
-            name: 'conditionPspBeaconUpdate',
-            outputs: [
-              {
-                internalType: 'bool',
-                name: '',
-                type: 'bool',
-              },
-            ],
-            stateMutability: 'view',
-            type: 'function',
-          },
-          {
-            inputs: [
-              {
-                internalType: 'bytes32',
-                name: 'subscriptionId',
-                type: 'bytes32',
-              },
-              {
-                internalType: 'address',
-                name: 'airnode',
-                type: 'address',
-              },
-              {
-                internalType: 'address',
-                name: 'relayer',
-                type: 'address',
-              },
-              {
-                internalType: 'address',
-                name: 'sponsor',
-                type: 'address',
-              },
-              {
-                internalType: 'uint256',
-                name: 'timestamp',
-                type: 'uint256',
-              },
-              {
-                internalType: 'bytes',
-                name: 'data',
-                type: 'bytes',
-              },
-              {
-                internalType: 'bytes',
-                name: 'signature',
-                type: 'bytes',
-              },
-            ],
-            name: 'fulfillPspBeaconUpdate',
-            outputs: [],
-            stateMutability: 'nonpayable',
-            type: 'function',
-          },
-        ];
         const dapiServer = new ethers.Contract(chain.contracts.DapiServer, dapiServerAbi, provider);
 
         const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
-
-        /* 
-        // **************************************************************************
-        // Fetch subscriptions from allocators
-        // DISABLED: https://github.com/api3dao/airkeeper/pull/28#discussion_r808586658
-        // **************************************************************************
-        node.logger.debug('Fetching subcriptions...', providerLogOptions);
-
-        
-        const subscriptionIds: string[] = [];
-        //TODO: where to get abi from?
-        const allocatorAbi = [
-          {
-            inputs: [
-              {
-                internalType: 'address',
-                name: '',
-                type: 'address',
-              },
-              {
-                internalType: 'uint256',
-                name: '',
-                type: 'uint256',
-              },
-            ],
-            name: 'airnodeToSlotIndexToSlot',
-            outputs: [
-              {
-                internalType: 'bytes32',
-                name: 'subscriptionId',
-                type: 'bytes32',
-              },
-              {
-                internalType: 'address',
-                name: 'setter',
-                type: 'address',
-              },
-              {
-                internalType: 'uint64',
-                name: 'expirationTimestamp',
-                type: 'uint64',
-              },
-            ],
-            stateMutability: 'view',
-            type: 'function',
-          },
-          {
-            inputs: [
-              {
-                internalType: 'bytes[]',
-                name: 'data',
-                type: 'bytes[]',
-              },
-            ],
-            name: 'multicall',
-            outputs: [
-              {
-                internalType: 'bytes[]',
-                name: 'results',
-                type: 'bytes[]',
-              },
-            ],
-            stateMutability: 'nonpayable',
-            type: 'function',
-          },
-        ];
-        for (const { address, startIndex, endIndex } of chain.allocators) {
-          const allocator = new ethers.Contract(address, allocatorAbi, provider);
-          const staticCalldatas = [];
-          for (let i = startIndex; i <= endIndex; i++) {
-            staticCalldatas.push(
-              allocator.interface.encodeFunctionData('airnodeToSlotIndexToSlot', [airnodeAddress, i])
-            );
-          }
-          // TODO: retryGo?
-          const resultDatas = await allocator.callStatic.multicall(staticCalldatas);
-          resultDatas.forEach((resultData: ethers.utils.BytesLike) => {
-            const result = allocator.interface.decodeFunctionResult('airnodeToSlotIndexToSlot', resultData);
-            if (result.subscriptionId && result.expirationTimestamp.gt(nowInSeconds())) {
-              subscriptionIds.push(result.subscriptionId);
-            }
-          });
-        }
-        */
 
         // **************************************************************************
         // Fetch subscriptions details
@@ -403,78 +289,6 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                 subscriptionId,
               },
             };
-
-            /* 
-          // **************************************************************************
-          // Check sponsorship status
-          // DISABLED: https://github.com/api3dao/airkeeper/pull/28#discussion_r808586658
-          // **************************************************************************
-          node.logger.debug('Checking sponsorship status...', subscriptionIdLogOptions);
-
-          if (!airnodeProtocol.sponsorToSubscriptionIdToPspSponsorshipStatus(subscription.sponsor, subscriptionId)) {
-            node.logger.info('Subscription not sponsored', subscriptionIdLogOptions);
-            continue;
-          }
-          */
-
-            /* 
-          // **************************************************************************
-          // Check authorization status
-          // DISABLED: https://github.com/api3dao/airkeeper/pull/28#discussion_r808586658
-          // **************************************************************************
-          node.logger.debug('Checking authorization status...', subscriptionIdLogOptions);
-
-          // This needs a little bit of thinking 🤔
-          // By default subscription.requester is set to the dapiServer address when calling dapiServer.registerBeaconUpdateSubscription()
-          // Reference: airnode/packages/airnode-node/src/evm/authorization/authorization-fetching.ts
-          const endpointId = ethers.utils.keccak256(
-            ethers.utils.defaultAbiCoder.encode(
-              ['string', 'string'],
-              [subscription.oisTitle, subscription.endpointName]
-            )
-          );
-          const authorizerAbi = [
-            {
-              inputs: [
-                {
-                  internalType: 'address',
-                  name: 'airnode',
-                  type: 'address',
-                },
-                {
-                  internalType: 'bytes32',
-                  name: 'endpointId',
-                  type: 'bytes32',
-                },
-                {
-                  internalType: 'address',
-                  name: 'requester',
-                  type: 'address',
-                },
-              ],
-              name: 'isAuthorized',
-              outputs: [
-                {
-                  internalType: 'bool',
-                  name: '',
-                  type: 'bool',
-                },
-              ],
-              stateMutability: 'view',
-              type: 'function',
-            },
-          ];
-          const authorizesRequesterForAirnodeEndpoint = async (authorizerAddress: string): Promise<any> => {
-            const authorizer = new ethers.Contract(authorizerAddress, authorizerAbi, provider);
-            return await authorizer.isAuthorized(airnodeAddress, endpointId, subscription.requester);
-          };
-          const authorized =
-            isEmpty(chain.authorizers) || chain.authorizers.some(authorizesRequesterForAirnodeEndpoint);
-          if (!authorized) {
-            node.logger.info('Requester not authorized', subscriptionIdLogOptions);
-            continue;
-          }
-          */
 
             // **************************************************************************
             // Fetch template details

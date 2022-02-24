@@ -28,18 +28,11 @@ export interface GasTarget {
 export interface ChainConfig extends node.ChainConfig {
   readonly contracts: node.ChainContracts & {
     readonly RrpBeaconServer: string;
-    readonly AirnodeProtocol: string;
     readonly DapiServer: string;
   };
-  // readonly allocators: Allocator[];
   readonly options: ChainOptions;
 }
 
-// export interface Allocator {
-//   readonly address: string;
-//   readonly startIndex: number;
-//   readonly endIndex: number;
-// }
 export interface RrpBeaconServerKeeperTrigger {
   readonly chainIds: string[];
   readonly templateId: string;
