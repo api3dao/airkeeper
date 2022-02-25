@@ -115,24 +115,19 @@ describe('callApi', () => {
   ];
 
   const templateId = '0x6f737bbf31dfed584a16f53b7d725ff64bee67e79a468259456fb40aa19c60c4';
-  const templateParameters = [
-    { type: 'string32', name: 'to', value: 'USD' },
-    { type: 'string32', name: '_type', value: 'int256' },
-    { type: 'string32', name: '_path', value: 'result' },
-    { type: 'string32', name: '_times', value: '100000' },
-    { type: 'string32', name: 'from', value: 'ETH' },
-  ];
+  const templateParameters =
+    '0x3173737373730000000000000000000000000000000000000000000000000000746f00000000000000000000000000000000000000000000000000000000000055534400000000000000000000000000000000000000000000000000000000005f74797065000000000000000000000000000000000000000000000000000000696e7432353600000000000000000000000000000000000000000000000000005f70617468000000000000000000000000000000000000000000000000000000726573756c7400000000000000000000000000000000000000000000000000005f74696d65730000000000000000000000000000000000000000000000000000313030303030300000000000000000000000000000000000000000000000000066726f6d000000000000000000000000000000000000000000000000000000004554480000000000000000000000000000000000000000000000000000000000';
   const oisTitle = 'Currency Converter API';
   const endpointName = 'convertToUSD';
 
-  const encodedParameters = abi.encode(templateParameters);
-  const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
+  const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, templateParameters]);
+  const apiCallParameters = abi.decode(templateParameters);
 
   const callApiOptions = {
     oises,
     apiCredentials,
     id: beaconId,
-    templateParameters,
+    apiCallParameters,
     oisTitle,
     endpointName,
   };
@@ -156,13 +151,13 @@ describe('callApi', () => {
         },
         {
           level: 'INFO',
-          message: 'API value: 72339202',
+          message: 'API value: 723392028',
         },
       ])
     );
     expect(res).toBeDefined();
     expect(res).toEqual({
-      '0xda81ccdbd098065ac2f16228ff382885f8f5d52de4d765e2e1e5b2036add70b6': ethers.BigNumber.from(72339202),
+      '0xf21cbb84382b7a349b958283e024ac34967d028696dc6e86fd2c6245b0b168ca': ethers.BigNumber.from(723392028),
     });
     expect(spy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];

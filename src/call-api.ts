@@ -10,13 +10,12 @@ export const callApi = async ({
   oises,
   apiCredentials,
   id,
-  templateParameters,
+  apiCallParameters,
   oisTitle,
   endpointName,
 }: CallApiOptions): Promise<node.LogsData<ApiValuesById>> => {
   const configOis = oises.find((o) => o.title === oisTitle)!;
   const configEndpoint = configOis.endpoints.find((e) => e.name === endpointName)!;
-  const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
   const reservedParameters = node.adapters.http.parameters.getReservedParameters(
     configEndpoint,
     apiCallParameters || {}

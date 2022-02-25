@@ -9,11 +9,9 @@ import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { callApi } from './call-api';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from './constants';
 import { ApiValuesById, ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
-
-export const GAS_LIMIT = 500_000;
-export const BLOCK_COUNT_HISTORY_LIMIT = 300;
 
 export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -93,11 +91,13 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValuesById>);
       }
 
+      const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+
       return callApi({
         oises,
         apiCredentials,
         id: beaconId,
-        templateParameters,
+        apiCallParameters,
         oisTitle,
         endpointName,
       });
@@ -213,7 +213,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             });
             return;
           }
-          let nonce = keeperSponsorWalletTransactionCount;
+          let nextNonce = keeperSponsorWalletTransactionCount;
 
           // **************************************************************************
           // 3.2.3 Process each rrpBeaconServerKeeperJob in serial to keep nonces in order
@@ -424,19 +424,26 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
              */
 
             const requestSponsorWallet = node.evm.deriveSponsorWallet(airnodeHDNode, requestSponsor);
-            const currentNonce = nonce;
+            const nonce = nextNonce++;
+            const overrides = {
+              gasLimit: GAS_LIMIT,
+              ...gasTarget,
+              nonce,
+            };
             const [errRequestBeaconUpdate, tx] = await retryGo(() =>
               rrpBeaconServer
                 .connect(keeperSponsorWallet)
-                .requestBeaconUpdate(templateId, requestSponsor, requestSponsorWallet.address, encodedParameters, {
-                  gasLimit: GAS_LIMIT,
-                  ...gasTarget,
-                  nonce: nonce++,
-                })
+                .requestBeaconUpdate(
+                  templateId,
+                  requestSponsor,
+                  requestSponsorWallet.address,
+                  encodedParameters,
+                  overrides
+                )
             );
             if (errRequestBeaconUpdate) {
               node.logger.error(
-                `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${currentNonce}. skipping update`,
+                `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${nonce}. skipping update`,
                 {
                   ...beaconIdLogOptions,
                   error: errRequestBeaconUpdate,

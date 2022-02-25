@@ -2,8 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
-
-export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
+import { DEFAULT_RETRY_TIMEOUT_MS } from './constants';
 
 const loadNodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node

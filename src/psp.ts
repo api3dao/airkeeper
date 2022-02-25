@@ -7,11 +7,10 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
-import { callApi as callApi } from './call-api';
+import { callApi } from './call-api';
+import { GAS_LIMIT } from './constants';
 import { ChainConfig, Config, Subscription } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
-
-export const GAS_LIMIT = 500_000;
 
 //TODO: where to get abi from?
 const dapiServerAbi = [
@@ -154,8 +153,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
         const chainProviderUrl = chainProvider.url || '';
         const provider = node.evm.buildEVMProvider(chainProviderUrl, chain.id);
+        const dapiServer = new ethers.Contract(chain.contracts.DapiServer, dapiServerAbi, provider);
+        const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
-        // Fetch current block number from chain via provider
+        // **************************************************************************
+        // Fetch current block number
+        // **************************************************************************
         const [errorGetBlockNumber, currentBlock] = await retryGo(() => provider.getBlockNumber());
         if (errorGetBlockNumber || isNil(currentBlock)) {
           node.logger.error('Failed to fetch the blockNumber', {
@@ -165,9 +168,22 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           return;
         }
 
-        const dapiServer = new ethers.Contract(chain.contracts.DapiServer, dapiServerAbi, provider);
+        // **************************************************************************
+        // Fetch current gas fee data
+        // **************************************************************************
+        node.logger.debug('Fetching gas price...', providerLogOptions);
 
-        const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
+        const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
+          provider,
+          chainOptions: chain.options,
+        });
+        if (!isEmpty(gasPriceLogs)) {
+          node.logger.logPending(gasPriceLogs, providerLogOptions);
+        }
+        if (!gasTarget) {
+          node.logger.error('Failed to fetch gas price', providerLogOptions);
+          return;
+        }
 
         // **************************************************************************
         // Fetch subscriptions details
@@ -209,6 +225,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             return;
           }
 
+          // TODO: should we also check that airnodeWallet.address === subscription.airnodeAddress? 🤔
+
           enabledSubscriptions.push({
             ...subscription,
             subscriptionId,
@@ -237,7 +255,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           const sponsorWallet = deriveSponsorWallet(
             nodeSettings.airnodeWalletMnemonic,
             sponsor,
-            '3' // TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
+            '2' // TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
           ).connect(provider);
 
           const sponsorWalletLogOptions = {
@@ -262,12 +280,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             });
             return;
           }
-          let nonce = sponsorWalletTransactionCount;
+          let nextNonce = sponsorWalletTransactionCount;
 
           // **************************************************************************
           // Process each psp subscription in serial to keep nonces in order
           // **************************************************************************
-          node.logger.debug('Processing rrpBeaconServerKeeperJobs...', sponsorWalletLogOptions);
+          node.logger.debug('Processing subscriptions...', sponsorWalletLogOptions);
 
           const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
           for (const { subscriptionId, templateId, conditions, relayer, fulfillFunctionId } of sponsorSubscriptions ||
@@ -293,10 +311,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             // Verify templateId
             // **************************************************************************
-            const encodedParameters = abi.encode(template.templateParameters);
             const expectedTemplateId = ethers.utils.solidityKeccak256(
               ['bytes32', 'bytes'],
-              [template.endpointId, encodedParameters]
+              [template.endpointId, template.templateParameters]
             );
             if (expectedTemplateId !== templateId) {
               node.logger.warn(
@@ -336,12 +353,13 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('Making API request...', subscriptionIdLogOptions);
 
+            const apiCallParameters = abi.decode(template.templateParameters);
             const [errorCallApi, logsData] = await retryGo(() =>
               callApi({
                 oises,
                 apiCredentials,
                 id: subscriptionId,
-                templateParameters: template.templateParameters,
+                apiCallParameters,
                 oisTitle: endpoint.oisTitle,
                 endpointName: endpoint.endpointName,
               })
@@ -370,10 +388,14 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             try {
               const decodedConditions = abi.decode(conditions);
               const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
-                ['bytes4'],
+                ['bytes32'],
                 decodedConditions._conditionFunctionId
               );
-              conditionFunction = dapiServer.interface.getFunction(decodedConditionFunctionId);
+              // TODO: is this really needed?
+              // Airnode ABI only supports bytes32 but
+              // function selector is '0x' plus 4 bytes and
+              // that is why we need to ignore the trailing zeros
+              conditionFunction = dapiServer.interface.getFunction(decodedConditionFunctionId.substring(0, 2 + 4 * 2));
               conditionParameters = decodedConditions._conditionParameters;
             } catch (err) {
               node.logger.error('Failed to decode conditions', {
@@ -382,6 +404,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               });
               continue;
             }
+
             const [errorConditionFunction, [conditionsMet]] = await retryGo(() =>
               dapiServer
                 .connect(voidSigner)
@@ -396,23 +419,6 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             }
             if (!conditionsMet) {
               node.logger.warn('Conditions not met. Skipping update...', subscriptionIdLogOptions);
-              continue;
-            }
-
-            // **************************************************************************
-            // Fetch current gas fee data
-            // **************************************************************************
-            node.logger.debug('Fetching gas price...', subscriptionIdLogOptions);
-
-            const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
-              provider,
-              chainOptions: chain.options,
-            });
-            if (!isEmpty(gasPriceLogs)) {
-              node.logger.logPending(gasPriceLogs, subscriptionIdLogOptions);
-            }
-            if (!gasTarget) {
-              node.logger.warn('Failed to fetch gas price. Skipping update...', subscriptionIdLogOptions);
               continue;
             }
 
@@ -449,7 +455,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               });
               continue;
             }
-            const currentNonce = nonce;
+            const nonce = nextNonce++;
+            const overrides = {
+              gasLimit: GAS_LIMIT,
+              ...gasTarget,
+              nonce,
+            };
             const [errfulfillFunction, tx] = await retryGo<ethers.ContractTransaction>(() =>
               dapiServer
                 .connect(sponsorWallet)
@@ -461,16 +472,12 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                   timestamp,
                   encodedFulfillmentData,
                   signature,
-                  {
-                    gasLimit: GAS_LIMIT,
-                    ...gasTarget,
-                    nonce: nonce++,
-                  }
+                  overrides
                 )
             );
             if (errfulfillFunction) {
               node.logger.error(
-                `failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${currentNonce}`,
+                `failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`,
                 {
                   ...subscriptionIdLogOptions,
                   error: errfulfillFunction,

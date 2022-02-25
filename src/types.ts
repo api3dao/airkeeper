@@ -46,7 +46,7 @@ export interface Subscription {
 
 export interface Template {
   readonly endpointId: string;
-  readonly templateParameters: abi.InputParameter[];
+  readonly templateParameters: string;
 }
 
 export interface Endpoint {
@@ -71,7 +71,7 @@ export interface CallApiOptions {
   oises: ois.OIS[];
   apiCredentials: node.ApiCredentials[];
   id: string;
-  templateParameters: abi.InputParameter[];
+  apiCallParameters: node.ApiCallParameters;
   oisTitle: string;
   endpointName: string;
 }
