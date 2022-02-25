@@ -308,6 +308,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               node.logger.warn(`TemplateId ${templateId} not found in templates`, subscriptionIdLogOptions);
               continue;
             }
+
             // **************************************************************************
             // Verify templateId
             // **************************************************************************
@@ -358,7 +359,6 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               callApi({
                 oises,
                 apiCredentials,
-                id: subscriptionId,
                 apiCallParameters,
                 oisTitle: endpoint.oisTitle,
                 endpointName: endpoint.endpointName,
@@ -368,10 +368,9 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               node.logger.warn('Failed to fecth API value', subscriptionIdLogOptions);
               continue;
             }
-            const [logs, data] = logsData;
+            const [logs, apiValue] = logsData;
             node.logger.logPending(logs, subscriptionIdLogOptions);
 
-            const apiValue = data[subscriptionId];
             if (isNil(apiValue)) {
               node.logger.warn('API value not found. Skipping update...', subscriptionIdLogOptions);
               continue;

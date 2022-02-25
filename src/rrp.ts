@@ -10,8 +10,12 @@ import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { callApi } from './call-api';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from './constants';
-import { ApiValuesById, ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
+import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
 import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
+
+type ApiValueByBeaconId = {
+  [beaconId: string]: ethers.BigNumber | null;
+};
 
 export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -75,7 +79,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
       if (expectedEndpointId !== endpointId) {
         const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
         const log = node.logger.pend('ERROR', message);
-        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValuesById>);
+        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
       }
 
       // Verify templateId
@@ -88,7 +92,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
       if (expectedTemplateId !== templateId) {
         const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
         const log = node.logger.pend('ERROR', message);
-        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValuesById>);
+        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
       }
 
       const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
@@ -96,11 +100,10 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
       return callApi({
         oises,
         apiCredentials,
-        id: beaconId,
         apiCallParameters,
         oisTitle,
         endpointName,
-      });
+      }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
     })
   );
   const responses = await Promise.all(apiValuePromises);

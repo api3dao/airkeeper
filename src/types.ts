@@ -70,14 +70,9 @@ export interface Config extends node.Config {
 export interface CallApiOptions {
   oises: ois.OIS[];
   apiCredentials: node.ApiCredentials[];
-  id: string;
   apiCallParameters: node.ApiCallParameters;
   oisTitle: string;
   endpointName: string;
-}
-
-export interface ApiValuesById {
-  readonly [id: string]: ethers.BigNumber | null;
 }
 
 export interface LogsAndApiValuesByBeaconId {

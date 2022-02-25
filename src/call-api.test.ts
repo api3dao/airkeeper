@@ -156,9 +156,7 @@ describe('callApi', () => {
       ])
     );
     expect(res).toBeDefined();
-    expect(res).toEqual({
-      '0xf21cbb84382b7a349b958283e024ac34967d028696dc6e86fd2c6245b0b168ca': ethers.BigNumber.from(723392028),
-    });
+    expect(res).toEqual(ethers.BigNumber.from(723392028));
     expect(spy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
     expect(spy).toHaveBeenCalledWith({
@@ -203,7 +201,7 @@ describe('callApi', () => {
         },
       ])
     );
-    expect(Object.values(res)).toEqual([null]);
+    expect(res).toEqual(null);
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -224,7 +222,7 @@ describe('callApi', () => {
         },
       ])
     );
-    expect(Object.values(res)).toEqual([null]);
+    expect(res).toEqual(null);
     expect(spy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
     expect(spy).toHaveBeenCalledWith({
@@ -269,7 +267,7 @@ describe('callApi', () => {
         },
       ])
     );
-    expect(Object.values(res)).toEqual([null]);
+    expect(res).toEqual(null);
     expect(buildAndExecuteRequestSpy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
     expect(buildAndExecuteRequestSpy).toHaveBeenCalledWith({
