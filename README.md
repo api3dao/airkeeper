@@ -9,10 +9,23 @@ There are two different lambda functions that can be used to update the beacon v
 
 1. `rrp-beacon-update` that uses the
    [RrpBeaconServer](https://github.com/api3dao/airnode/blob/v0.4/packages/airnode-protocol/contracts/rrp/requesters/RrpBeaconServer.sol)
-   contract from airnode-protocol v0.4.
-1. `psp-beacon-update` that uses the [DapiServer]() contract from airnode-protocol v1.
+   contract from airnode-protocol v0.4. See [Beacons](https://docs.api3.org/beacon/v0.1/functions/)
 
-See [Beacons](https://docs.api3.org/beacon/v0.1/functions/)
+   This function will fetch the API values for all triggers set in the airkeeper.json file, read current the beacon
+   value in RrpBeaconServer and update it if the API value is not within the threshold (also defined in the
+   airkeeper.json file).
+
+1. `psp-beacon-update` that uses the
+   [DapiServer](https://github.com/api3dao/airnode/blob/991af4d69e82c1954a5c6c8e247cde8eb76101de/packages/airnode-protocol-v1/contracts/dapis/DapiServer.sol)
+   contract from airnode-protocol v1. <!-- TODO: DapiServer.sol url might change -->
+
+   This function will fetch the API values for all subscriptions in the airkeeper.json file, call a condition function
+   on chain and update the beacon value if the condition is true.
+
+Both functions will require a sponsor to be defined in the airkeeper.json file in order to derive a sponsor wallet that
+will be used by Airkeeper to submit transactions. These sponsor wallet must be funded by the sponsor before Airkeeper
+can start updating beacon values. Protcol ID used when deriving the sponsor wallet for RRP beacon updates will be
+`12345` and for PSP it will be `2`.
 
 ## Setup
 
@@ -21,12 +34,12 @@ See [Beacons](https://docs.api3.org/beacon/v0.1/functions/)
   file from the Airnode repo. Examples of these two files can be found in the /config directory of this repo.
 
 - Airkeeper will also require an additional configuration file that will be merged with the one mentioned above and it
-  will contain the configuration specific to Airkeeper. This file needs to be called `airkeeper.json` and you can find
-  an example in the /config directory of this repo.
-  <!-- TODO: add more details on each configuration property -->
+  will contain the configuration specific to Airkeeper. This file needs to be called `airkeeper.json` and you can also
+  find an example in the /config directory of this repo.
+  <!-- TODO: add more details on each configuration property or link to docs -->
 
-- Another requirement is to have an AWS account and cloud provider credentials must be provided in the `aws.env` file.
-  An example of this file can be found in the /config directory of this repo.
+- Another requirement is to have an AWS account where these lambda functions will be deployed. Cloud provider
+  credentials must be provided in the `aws.env` file and placed in the /config directory of this repo.
 
 ## Docker instructions
 
@@ -34,8 +47,8 @@ Use the docker image to deploy or remove an Airkeeper to and from a cloud provid
 
 The docker image supports two commands.
 
-- `deploy`: Deploys an Airkeeper using configuration files.
-- `remove`: Removes an Airkeeper previously deployed.
+- `deploy`: Deploys both Airkeeper lambda functions using configuration files.
+- `remove`: Removes both Airkeeper lambda functions previously deployed.
 
 ### Build docker image
 
@@ -101,7 +114,8 @@ In order to run Airkeeper locally, you will need to follow these steps:
    etc).
 1. Switch to the Airkeeper root directory and run `yarn install`.
 1. Add proper values to the `config.json` and `airkeeper.env` files.
-1. Finally run `yarn sls:invoke-local:psp` to invoke the `beaconUpdate` handler function.
+1. Finally run `yarn sls:invoke-local:psp` to invoke the `psp.beaconUpdate` handler function or run
+   `yarn sls:invoke-local:rrp` to invoke the `rrp.beaconUpdate` handler function.
 
 ### Running Airkeeper on AWS Lambda
 
@@ -116,6 +130,8 @@ Airkeeper is meant to be deployed to AWS lambda service and for this you will ne
 
 ## Additional considerations
 
+### RRP beacon update
+
 - Request sponsor account must first call `AirnodeRrp.setSponsorshipStatus(rrpBeaconServer.address, true)` to allow the
   RrpBeaconServer contract to make requests to AirnodeRrp contract.
 
@@ -127,3 +143,11 @@ Airkeeper is meant to be deployed to AWS lambda service and for this you will ne
   to allow the `keeperSponsorWallet` to update beacon server value.
 
 - The template used by the RrpBeaconServer contract is expected to contain all the parameters required in the API call.
+
+### Proto-PSP beacon update
+
+- Current PSP beacon update implementation is a prototype and allocators, authorizers and sponsorship have been ignored.
+  This is because the current implementation is not ready for production.
+
+- Subscription and template details are expected to be provided in the airkeeper.json file meaning that Airkeeper will
+  not fetch that information from AirnodeProtocol contract.
