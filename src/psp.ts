@@ -404,8 +404,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
               continue;
             }
 
-            // TODO: what if we wanted to call a condition function on a different contract?
-            //       can subscription.requester be used to determine the contract address?
+            // TODO: Should we also include the condition contract address to be called in subscription.conditions
+            //       and connect to that contract instead of dapiServer contract to call the conditionFunction?
             const [errorConditionFunction, result] = await retryGo(() =>
               dapiServer
                 .connect(voidSigner)

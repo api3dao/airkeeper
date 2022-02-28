@@ -151,3 +151,18 @@ Airkeeper is meant to be deployed to AWS lambda service and for this you will ne
 
 - Subscription and template details are expected to be provided in the airkeeper.json file meaning that Airkeeper will
   not fetch that information from AirnodeProtocol contract.
+
+## Scripts
+
+The scripts directory contains scripts that ca be used to test the lambda functions against a local running eth node.
+
+### Local PSP beacon update
+
+First you need to start a local node and grab private keys of funded test accounts to add them to each account in the
+psp-beacon-local.json config file.
+
+After that you can run the following command:
+
+- `yarn run setup:psp-local`: Deploys the DapiServer contract and registers a single subscription. Use the values
+  displayed in the console to fill in the `airkeeper.json` file. Then you can run `yarn sls:invoke-local:psp` to update
+  the beacon using PSP.

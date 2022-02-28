@@ -1,0 +1,21 @@
+{
+  "airnodeMnemonic": "achieve climb couple wait accident symbol spy blouse reduce foil echo label",
+  "privateKeys": {
+    "deployer": "0xac09...f80",
+    "manager": "0x59c6...90d",
+    "sponsor": "0x5de4...65a",
+    "randomPerson": "0x47e1...926a"
+  },
+  "endpoint": {
+    "oisTitle": "Currency Converter API",
+    "endpointName": "convertToUSD"
+  },
+  "templateParameters": [
+    { "type": "string32", "name": "to", "value": "USD" },
+    { "type": "string32", "name": "_type", "value": "int256" },
+    { "type": "string32", "name": "_path", "value": "result" },
+    { "type": "string32", "name": "_times", "value": "1000000" },
+    { "type": "string32", "name": "from", "value": "ETH" }
+  ],
+  "threshold": 10
+}

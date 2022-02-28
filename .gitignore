@@ -21,3 +21,4 @@ aws.env
 **/airkeeper.json
 **/config.json
 **/secrets.env
+**/psp-beacon-local.json
