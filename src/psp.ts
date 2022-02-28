@@ -406,19 +406,21 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
             // TODO: what if we wanted to call a condition function on a different contract?
             //       can subscription.requester be used to determine the contract address?
-            const [errorConditionFunction, [conditionsMet]] = await retryGo(() =>
+            const [errorConditionFunction, result] = await retryGo(() =>
               dapiServer
                 .connect(voidSigner)
                 .functions[conditionFunction.name](subscriptionId, encodedFulfillmentData, conditionParameters)
             );
-            if (errorConditionFunction) {
+            if (errorConditionFunction || isNil(result)) {
               node.logger.error('Failed to check conditions', {
                 ...subscriptionIdLogOptions,
                 error: errorConditionFunction,
               });
               continue;
             }
-            if (!conditionsMet) {
+            // The result will always be ethers.Result type even if solidity function retuns a single value
+            // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
+            if (!result[0]) {
               node.logger.warn('Conditions not met. Skipping update...', subscriptionIdLogOptions);
               continue;
             }
