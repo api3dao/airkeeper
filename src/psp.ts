@@ -6,11 +6,11 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
-import merge from 'lodash/merge';
 import { callApi } from './call-api';
+import { loadAirnodeConfig, mergeConfigs, parseConfig } from './config';
 import { GAS_LIMIT } from './constants';
 import { ChainConfig, Config, Subscription } from './types';
-import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
+import { deriveSponsorWallet, retryGo } from './utils';
 
 //TODO: where to get abi from?
 const dapiServerAbi = [
@@ -24,7 +24,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  const airnodeConfig = loadNodeConfig();
+  const airnodeConfig = loadAirnodeConfig();
   // This file will be merged with config.json from above
   const airkeeperConfig: Config = parseConfig('airkeeper');
 
@@ -33,23 +33,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   });
   node.logger.info(`PSP beacon update started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const config = {
-    ...airnodeConfig,
-    chains: airkeeperConfig.chains.map((chain) => {
-      if (isNil(chain.id)) {
-        throw new Error(`Missing 'id' property in chain config: ${JSON.stringify(chain)}`);
-      }
-      const configChain = airnodeConfig.chains.find((c) => c.id === chain.id);
-      if (isNil(configChain)) {
-        throw new Error(`Chain id ${chain.id} not found in node config.json`);
-      }
-      return merge(configChain, chain);
-    }),
-    triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
-    subscriptions: airkeeperConfig.subscriptions,
-    templates: airkeeperConfig.templates,
-    endpoints: airkeeperConfig.endpoints,
-  };
+  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
   const { chains, nodeSettings, triggers, ois: oises, apiCredentials, subscriptions, templates, endpoints } = config;
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
