@@ -14,78 +14,8 @@ import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './uti
 
 //TODO: where to get abi from?
 const dapiServerAbi = [
-  {
-    inputs: [
-      {
-        internalType: 'bytes32',
-        name: 'subscriptionId',
-        type: 'bytes32',
-      },
-      {
-        internalType: 'bytes',
-        name: 'data',
-        type: 'bytes',
-      },
-      {
-        internalType: 'bytes',
-        name: 'conditionParameters',
-        type: 'bytes',
-      },
-    ],
-    name: 'conditionPspBeaconUpdate',
-    outputs: [
-      {
-        internalType: 'bool',
-        name: '',
-        type: 'bool',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      {
-        internalType: 'bytes32',
-        name: 'subscriptionId',
-        type: 'bytes32',
-      },
-      {
-        internalType: 'address',
-        name: 'airnode',
-        type: 'address',
-      },
-      {
-        internalType: 'address',
-        name: 'relayer',
-        type: 'address',
-      },
-      {
-        internalType: 'address',
-        name: 'sponsor',
-        type: 'address',
-      },
-      {
-        internalType: 'uint256',
-        name: 'timestamp',
-        type: 'uint256',
-      },
-      {
-        internalType: 'bytes',
-        name: 'data',
-        type: 'bytes',
-      },
-      {
-        internalType: 'bytes',
-        name: 'signature',
-        type: 'bytes',
-      },
-    ],
-    name: 'fulfillPspBeaconUpdate',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
+  'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
+  'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
 ];
 
 export const beaconUpdate = async (_event: any = {}): Promise<any> => {
