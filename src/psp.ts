@@ -10,7 +10,8 @@ import { callApi } from './call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from './config';
 import { GAS_LIMIT } from './constants';
 import { ChainConfig, Config, Subscription } from './types';
-import { deriveSponsorWallet, retryGo } from './utils';
+import { retryGo } from './utils';
+import { deriveSponsorWallet } from './wallet';
 
 //TODO: where to get abi from?
 const dapiServerAbi = [

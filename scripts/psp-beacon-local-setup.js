@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const ethers = require('ethers');
 const abi = require('@api3/airnode-abi');
-const { deriveSponsorWallet } = require('../dist/src/utils.js');
+const { deriveSponsorWallet } = require('../dist/src/wallet.js');
 
 async function main() {
   const config = JSON.parse(fs.readFileSync(path.resolve('./scripts/config/psp-beacon-local.json')).toString());

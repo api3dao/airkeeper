@@ -11,7 +11,8 @@ import { callApi } from './call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from './config';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from './constants';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
-import { deriveSponsorWallet, retryGo } from './utils';
+import { retryGo } from './utils';
+import { deriveSponsorWallet } from './wallet';
 
 type ApiValueByBeaconId = {
   [beaconId: string]: ethers.BigNumber | null;
