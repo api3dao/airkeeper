@@ -1,11 +1,11 @@
+import * as abi from '@api3/airnode-abi';
 import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
-import { readApiValue } from './call-api';
+import { callApi } from './call-api';
 
-describe('readApiValue', () => {
-  const airnodeAddress = '0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace';
+describe('callApi', () => {
   const oises: ois.OIS[] = [
     {
       oisFormat: '1.0.0',
@@ -102,7 +102,6 @@ describe('readApiValue', () => {
               },
             },
           ],
-          testable: true,
         },
       ],
     },
@@ -111,24 +110,26 @@ describe('readApiValue', () => {
     {
       oisTitle: 'Currency Converter API',
       securitySchemeName: 'Currency Converter Security Scheme',
-      securitySchemeValue: '<enter your API key>',
+      securitySchemeValue: '${SS_CURRENCY_CONVERTER_API_KEY}',
     },
   ];
-  const job = {
-    chainIds: ['31337', '1'],
-    templateId: '0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d',
-    templateParameters: [
-      { type: 'bytes32', name: 'to', value: 'USD' },
-      { type: 'bytes32', name: '_type', value: 'int256' },
-      { type: 'bytes32', name: '_path', value: 'result' },
-      { type: 'bytes32', name: '_times', value: '1000000' },
-    ],
-    overrideParameters: [{ type: 'bytes32', name: 'from', value: 'ETH' }],
-    oisTitle: 'Currency Converter API',
-    endpointName: 'convertToUSD',
-    deviationPercentage: '0.05',
-    keeperSponsor: '0x2479808b1216E998309A727df8A0A98A1130A162',
-    requestSponsor: '0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec',
+
+  const templateId = '0x6f737bbf31dfed584a16f53b7d725ff64bee67e79a468259456fb40aa19c60c4';
+  const templateParameters =
+    '0x3173737373730000000000000000000000000000000000000000000000000000746f00000000000000000000000000000000000000000000000000000000000055534400000000000000000000000000000000000000000000000000000000005f74797065000000000000000000000000000000000000000000000000000000696e7432353600000000000000000000000000000000000000000000000000005f70617468000000000000000000000000000000000000000000000000000000726573756c7400000000000000000000000000000000000000000000000000005f74696d65730000000000000000000000000000000000000000000000000000313030303030300000000000000000000000000000000000000000000000000066726f6d000000000000000000000000000000000000000000000000000000004554480000000000000000000000000000000000000000000000000000000000';
+  const oisTitle = 'Currency Converter API';
+  const endpointName = 'convertToUSD';
+
+  const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, templateParameters]);
+  const apiCallParameters = abi.decode(templateParameters);
+
+  const callApiOptions = {
+    oises,
+    apiCredentials,
+    id: beaconId,
+    apiCallParameters,
+    oisTitle,
+    endpointName,
   };
 
   it('calls the adapter with the given parameters', async () => {
@@ -139,7 +140,7 @@ describe('readApiValue', () => {
       data: apiResponse,
     });
 
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, job);
+    const [logs, res] = await callApi(callApiOptions);
 
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(
@@ -155,9 +156,7 @@ describe('readApiValue', () => {
       ])
     );
     expect(res).toBeDefined();
-    expect(res).toEqual({
-      '0x4b08a2198ace6a21661c4dd942323bbbb4c8ab3bc7a3cfe11f1435022ae0e45e': ethers.BigNumber.from(723392028),
-    });
+    expect(res).toEqual(ethers.BigNumber.from(723392028));
     expect(spy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
     expect(spy).toHaveBeenCalledWith({
@@ -177,29 +176,6 @@ describe('readApiValue', () => {
     });
   });
 
-  it('returns null if templateId fails verification', async () => {
-    const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, {
-      ...job,
-      templateParameters: [...job.templateParameters, { type: 'bytes32', name: 'to', value: 'BTC' }],
-    });
-
-    expect(logs).toHaveLength(1);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          level: 'ERROR',
-          message: expect.stringMatching(
-            "templateId '0x50c604914d8ed35473149457a1a0912b785813b4e2e51bd2b75409ca25c50e1d' does not match expected templateId '[^']*'"
-          ),
-        },
-      ])
-    );
-    expect(Object.values(res)).toEqual([null]);
-    expect(spy).not.toHaveBeenCalled();
-  });
-
   it("returns null if reserved parameter '_type' is missing", async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
@@ -211,7 +187,10 @@ describe('readApiValue', () => {
       })),
     }));
 
-    const [logs, res] = await readApiValue(airnodeAddress, oisesWithoutType, apiCredentials, job);
+    const [logs, res] = await callApi({
+      ...callApiOptions,
+      oises: oisesWithoutType,
+    });
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -222,7 +201,7 @@ describe('readApiValue', () => {
         },
       ])
     );
-    expect(Object.values(res)).toEqual([null]);
+    expect(res).toEqual(null);
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -231,7 +210,7 @@ describe('readApiValue', () => {
     const error = new Error('Network is down');
     spy.mockRejectedValueOnce(error);
 
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, job);
+    const [logs, res] = await callApi(callApiOptions);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -243,7 +222,7 @@ describe('readApiValue', () => {
         },
       ])
     );
-    expect(Object.values(res)).toEqual([null]);
+    expect(res).toEqual(null);
     expect(spy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
     expect(spy).toHaveBeenCalledWith({
@@ -276,7 +255,7 @@ describe('readApiValue', () => {
       throw error;
     });
 
-    const [logs, res] = await readApiValue(airnodeAddress, oises, apiCredentials, job);
+    const [logs, res] = await callApi(callApiOptions);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -288,7 +267,7 @@ describe('readApiValue', () => {
         },
       ])
     );
-    expect(Object.values(res)).toEqual([null]);
+    expect(res).toEqual(null);
     expect(buildAndExecuteRequestSpy).toHaveBeenCalledTimes(1);
     const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
     expect(buildAndExecuteRequestSpy).toHaveBeenCalledWith({

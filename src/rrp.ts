@@ -1,4 +1,3 @@
-import * as path from 'path';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
@@ -9,57 +8,55 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import merge from 'lodash/merge';
-import { readApiValue } from './call-api';
-// TODO: use node.evm.getGasPrice() once @api3/airnode-node is updated to v0.4.x
-import { getGasPrice } from './gas-prices';
-import { ChainConfig, LogsAndApiValuesByBeaconId } from './types';
-import { deriveKeeperSponsorWallet, parseAirkeeperConfig, retryGo } from './utils';
-import 'source-map-support/register';
+import { callApi } from './call-api';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from './constants';
+import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
+import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
 
-export const GAS_LIMIT = 500_000;
-export const BLOCK_COUNT_HISTORY_LIMIT = 300;
+type ApiValueByBeaconId = {
+  [beaconId: string]: ethers.BigNumber | null;
+};
 
-export const handler = async (_event: any = {}): Promise<any> => {
+export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  // This file must be the same as the one used by the node
-  const nodeConfigPath = path.resolve(`${__dirname}/../../config/config.json`);
-  const nodeConfig = node.config.parseConfig(nodeConfigPath, process.env);
-  // This file will be merged with config.json from node
-  const keeperConfig = parseAirkeeperConfig();
+  const airnodeConfig = loadNodeConfig();
+  // This file will be merged with config.json from above
+  const airkeeperConfig: Config = parseConfig('airkeeper');
 
-  const baseLogOptions = node.logger.buildBaseOptions(nodeConfig, {
-    coordinatorId: node.utils.randomString(8),
+  const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
+    coordinatorId: node.utils.randomHexString(8),
   });
   node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
   const config = {
-    ...nodeConfig,
-    chains: keeperConfig.chains.map((chain) => {
+    ...airnodeConfig,
+    chains: airkeeperConfig.chains.map((chain) => {
       if (isNil(chain.id)) {
         throw new Error(`Missing 'id' property in chain config: ${JSON.stringify(chain)}`);
       }
-      const configChain = nodeConfig.chains.find((c) => c.id === chain.id);
+      const configChain = airnodeConfig.chains.find((c) => c.id === chain.id);
       if (isNil(configChain)) {
         throw new Error(`Chain id ${chain.id} not found in node config.json`);
       }
       return merge(configChain, chain);
     }),
-    triggers: { ...nodeConfig.triggers, ...keeperConfig.triggers },
+    triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
+    endpoints: airkeeperConfig.endpoints,
   };
-  const { chains, triggers, ois: oises, apiCredentials } = config;
+  const { chains, triggers, ois: oises, apiCredentials, endpoints } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
   const airnodeAddress = (
-    keeperConfig.airnodeXpub
-      ? ethers.utils.HDNode.fromExtendedKey(keeperConfig.airnodeXpub).derivePath('0/0')
+    airkeeperConfig.airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.airnodeXpub).derivePath('0/0')
       : airnodeHDNode.derivePath(ethers.utils.defaultPath)
   ).address;
 
-  if (keeperConfig.airnodeAddress && keeperConfig.airnodeAddress !== airnodeAddress) {
+  if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
 
@@ -68,8 +65,46 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   node.logger.debug('making API requests...', baseLogOptions);
 
-  const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map((job) =>
-    retryGo(() => readApiValue(airnodeAddress, oises, apiCredentials, job))
+  const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
+    retryGo(() => {
+      const { oisTitle, endpointName } = endpoints[endpointId];
+
+      const encodedParameters = abi.encode(templateParameters);
+      const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
+
+      // Verify endpointId
+      const expectedEndpointId = ethers.utils.keccak256(
+        ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
+      );
+      if (expectedEndpointId !== endpointId) {
+        const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
+        const log = node.logger.pend('ERROR', message);
+        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
+      }
+
+      // Verify templateId
+      const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
+        airnodeAddress,
+        endpointId: expectedEndpointId,
+        encodedParameters,
+        id: templateId,
+      });
+      if (expectedTemplateId !== templateId) {
+        const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
+        const log = node.logger.pend('ERROR', message);
+        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
+      }
+
+      const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+
+      return callApi({
+        oises,
+        apiCredentials,
+        apiCallParameters,
+        oisTitle,
+        endpointName,
+      }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
+    })
   );
   const responses = await Promise.all(apiValuePromises);
 
@@ -96,12 +131,12 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   node.logger.debug('processing chain providers...', baseLogOptions);
 
-  const evmChains = chains.filter((chain: node.ChainConfig & ChainConfig) => chain.type === 'evm');
+  const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
   if (isEmpty(chains)) {
     throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
   }
   const providerPromises = flatMap(
-    evmChains.map((chain: node.ChainConfig & ChainConfig) => {
+    evmChains.map((chain: ChainConfig) => {
       return map(chain.providers, async (chainProvider, providerName) => {
         const providerLogOptions = {
           ...baseLogOptions,
@@ -150,7 +185,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('deriving keeperSponsorWallet...', providerLogOptions);
 
-          const keeperSponsorWallet = deriveKeeperSponsorWallet(airnodeHDNode, keeperSponsor, provider);
+          const keeperSponsorWallet = deriveSponsorWallet(
+            config.nodeSettings.airnodeWalletMnemonic,
+            keeperSponsor,
+            '12345'
+          ).connect(provider);
 
           const keeperSponsorWalletLogOptions = {
             ...providerLogOptions,
@@ -177,7 +216,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             });
             return;
           }
-          let nonce = keeperSponsorWalletTransactionCount;
+          let nextNonce = keeperSponsorWalletTransactionCount;
 
           // **************************************************************************
           // 3.2.3 Process each rrpBeaconServerKeeperJob in serial to keep nonces in order
@@ -188,18 +227,16 @@ export const handler = async (_event: any = {}): Promise<any> => {
           for (const {
             chainIds,
             templateId,
-            overrideParameters,
             templateParameters,
             deviationPercentage,
             requestSponsor,
           } of rrpBeaconServerKeeperJobs) {
-            const configParameters = [...templateParameters, ...overrideParameters];
             // **************************************************************************
             // 3.2.3.1 Derive beaconId
             // **************************************************************************
             node.logger.debug('deriving beaconId...', keeperSponsorWalletLogOptions);
 
-            const encodedParameters = abi.encode(configParameters);
+            const encodedParameters = abi.encode(templateParameters);
             const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
 
             const beaconIdLogOptions = {
@@ -367,7 +404,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             node.logger.debug('fetching gas price...', beaconIdLogOptions);
 
-            const [gasPriceLogs, gasTarget] = await getGasPrice({
+            const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
               provider,
               chainOptions: chain.options,
             });
@@ -375,7 +412,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               node.logger.logPending(gasPriceLogs, beaconIdLogOptions);
             }
             if (!gasTarget) {
-              node.logger.error('unable to submit transactions without gas price. skipping update', beaconIdLogOptions);
+              node.logger.warn('failed to fetch gas price. Skipping update...', beaconIdLogOptions);
               continue;
             }
 
@@ -390,19 +427,26 @@ export const handler = async (_event: any = {}): Promise<any> => {
              */
 
             const requestSponsorWallet = node.evm.deriveSponsorWallet(airnodeHDNode, requestSponsor);
-            const currentNonce = nonce;
+            const nonce = nextNonce++;
+            const overrides = {
+              gasLimit: GAS_LIMIT,
+              ...gasTarget,
+              nonce,
+            };
             const [errRequestBeaconUpdate, tx] = await retryGo(() =>
               rrpBeaconServer
                 .connect(keeperSponsorWallet)
-                .requestBeaconUpdate(templateId, requestSponsor, requestSponsorWallet.address, encodedParameters, {
-                  gasLimit: GAS_LIMIT,
-                  ...gasTarget,
-                  nonce: nonce++,
-                })
+                .requestBeaconUpdate(
+                  templateId,
+                  requestSponsor,
+                  requestSponsorWallet.address,
+                  encodedParameters,
+                  overrides
+                )
             );
             if (errRequestBeaconUpdate) {
               node.logger.error(
-                `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${currentNonce}. skipping update`,
+                `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${nonce}. skipping update`,
                 {
                   ...beaconIdLogOptions,
                   error: errRequestBeaconUpdate,

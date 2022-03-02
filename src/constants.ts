@@ -1,0 +1,3 @@
+export const GAS_LIMIT = 500_000;
+export const BLOCK_COUNT_HISTORY_LIMIT = 300;
+export const DEFAULT_RETRY_TIMEOUT_MS = 5_000;
