@@ -54,24 +54,15 @@ const initializeState = (config: Config, logOptions: any): State => {
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
 
-  // **************************************************************************
-  // Fetch subscriptions details
-  // **************************************************************************
-  node.logger.debug('Fetching subscriptions details...', logOptions);
-
   const enabledSubscriptions: FullSubscription[] = [];
   triggers['proto-psp'].forEach((subscriptionId) => {
+    // Fetch subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
       node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, logOptions);
       return;
     }
-
-    // **************************************************************************
     // Verify subscriptionId
-    // **************************************************************************
-    node.logger.debug('Verifying subscriptionId...', logOptions);
-
     const expectedSubscriptionId = ethers.utils.solidityKeccak256(
       ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
       [
@@ -96,20 +87,13 @@ const initializeState = (config: Config, logOptions: any): State => {
 
     // TODO: should we also check that airnodeWallet.address === subscription.airnodeAddress? 🤔
 
-    // **************************************************************************
     // Fetch template details
-    // **************************************************************************
-    node.logger.debug('Fetching template details...', logOptions);
-
     const template = config.templates[subscription.templateId];
     if (isNil(template)) {
       node.logger.warn(`TemplateId ${subscription.templateId} not found in templates`, logOptions);
       return;
     }
-
-    // **************************************************************************
     // Verify templateId
-    // **************************************************************************
     const expectedTemplateId = ethers.utils.solidityKeccak256(
       ['bytes32', 'bytes'],
       [template.endpointId, template.templateParameters]
@@ -122,20 +106,13 @@ const initializeState = (config: Config, logOptions: any): State => {
       return;
     }
 
-    // **************************************************************************
     // Fetch endpoint details
-    // **************************************************************************
-    node.logger.debug('Fetching template details...', logOptions);
-
     const endpoint = config.endpoints[template.endpointId];
     if (isNil(endpoint)) {
       node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, logOptions);
       return;
     }
-
-    // **************************************************************************
     // Verify endpointId
-    // **************************************************************************
     const expectedEndpointId = ethers.utils.keccak256(
       ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
     );
@@ -231,14 +208,18 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
           return;
         }
 
-        // **************************************************************************
-        // Process each sponsor address in parallel
-        // **************************************************************************
         node.logger.debug('Processing sponsor addresses...', providerLogOptions);
 
-        const subscriptionsBySponsor = groupBy(initialState.subscriptions, 'sponsor');
+        // **************************************************************************
+        // Filter subscription by chainId and group them by sponsor
+        // **************************************************************************
+        const chainSubscriptions = initialState.subscriptions.filter(
+          (subscription) => subscription.chainId === chain.id
+        );
+        const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
         const sponsorAddresses = Object.keys(subscriptionsBySponsor);
 
+        // Process each sponsor address in parallel
         const sponsorWalletPromises = sponsorAddresses.map(async (sponsor) => {
           // **************************************************************************
           // Derive sponsorWallet address
@@ -276,11 +257,7 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
           }
           let nextNonce = sponsorWalletTransactionCount;
 
-          // **************************************************************************
           // Process each psp subscription in serial to keep nonces in order
-          // **************************************************************************
-          node.logger.debug('Processing subscriptions...', sponsorWalletLogOptions);
-
           const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
           for (const {
             subscriptionId,
