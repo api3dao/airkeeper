@@ -7,18 +7,18 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
-import { callApi } from './call-api';
-import { loadAirnodeConfig, mergeConfigs, parseConfig } from './config';
-import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from './constants';
-import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
-import { retryGo } from './utils';
-import { deriveSponsorWallet } from './wallet';
+import { callApi } from '../call-api';
+import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from '../constants';
+import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from '../types';
+import { retryGo } from '../utils';
+import { deriveSponsorWallet } from '../wallet';
 
 type ApiValueByBeaconId = {
   [beaconId: string]: ethers.BigNumber | null;
 };
 
-export const beaconUpdate = async (_event: any = {}): Promise<any> => {
+export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
   // **************************************************************************
@@ -119,7 +119,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   node.logger.debug('processing chain providers...', baseLogOptions);
 
   const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
-  if (isEmpty(chains)) {
+  if (isEmpty(evmChains)) {
     throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
   }
   const providerPromises = flatMap(

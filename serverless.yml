@@ -18,12 +18,12 @@ package:
 
 functions:
   rrp-beacon-update:
-    handler: dist/src/rrp.beaconUpdate
+    handler: dist/src/handlers/rrp.handler
     timeout: 60
     events:
       - schedule: rate(1 minute)
   psp-beacon-update:
-    handler: dist/src/psp.beaconUpdate
+    handler: dist/src/handlers/psp.handler
     timeout: 60
     events:
       - schedule: rate(1 minute)

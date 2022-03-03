@@ -6,12 +6,12 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
-import { callApi } from './call-api';
-import { loadAirnodeConfig, mergeConfigs, parseConfig } from './config';
-import { GAS_LIMIT } from './constants';
-import { ChainConfig, Config, Subscription } from './types';
-import { retryGo } from './utils';
-import { deriveSponsorWallet } from './wallet';
+import { callApi } from '../call-api';
+import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
+import { GAS_LIMIT } from '../constants';
+import { ChainConfig, Config, FullSubscription, State } from '../types';
+import { retryGo } from '../utils';
+import { deriveSponsorWallet } from '../wallet';
 
 //TODO: where to get abi from?
 const dapiServerAbi = [
@@ -19,40 +19,170 @@ const dapiServerAbi = [
   'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
 ];
 
-export const beaconUpdate = async (_event: any = {}): Promise<any> => {
+export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
-  // **************************************************************************
-  // 1. Load config
-  // **************************************************************************
   const airnodeConfig = loadAirnodeConfig();
   // This file will be merged with config.json from above
   const airkeeperConfig: Config = parseConfig('airkeeper');
+  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
 
+  const coordinatorId = node.utils.randomHexString(8);
   const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
-    coordinatorId: node.utils.randomHexString(8),
+    coordinatorId,
   });
   node.logger.info(`PSP beacon update started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
-  const { chains, nodeSettings, triggers, ois: oises, apiCredentials, subscriptions, templates, endpoints } = config;
+  await updateBeacon(config, coordinatorId);
 
-  const airnodeWallet = ethers.Wallet.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
-  const { address: airnodeAddress } = airnodeWallet;
+  const completedAt = new Date();
+  const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
+  node.logger.info(
+    `PSP beacon update finished at ${node.utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
+    baseLogOptions
+  );
+
+  const response = {
+    ok: true,
+    data: { message: 'PSP beacon update execution has finished' },
+  };
+  return { statusCode: 200, body: JSON.stringify(response) };
+};
+
+const initializeState = (config: Config, logOptions: any): State => {
+  const { triggers, subscriptions } = config;
+
+  const airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
 
   // **************************************************************************
-  // 2. Process chain providers in parallel
+  // Fetch subscriptions details
+  // **************************************************************************
+  node.logger.debug('Fetching subscriptions details...', logOptions);
+
+  const enabledSubscriptions: FullSubscription[] = [];
+  triggers['proto-psp'].forEach((subscriptionId) => {
+    const subscription = subscriptions[subscriptionId];
+    if (isNil(subscription)) {
+      node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, logOptions);
+      return;
+    }
+
+    // **************************************************************************
+    // Verify subscriptionId
+    // **************************************************************************
+    node.logger.debug('Verifying subscriptionId...', logOptions);
+
+    const expectedSubscriptionId = ethers.utils.solidityKeccak256(
+      ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+      [
+        subscription.chainId,
+        subscription.airnodeAddress,
+        subscription.templateId,
+        subscription.parameters,
+        subscription.conditions,
+        subscription.relayer,
+        subscription.sponsor,
+        subscription.requester,
+        subscription.fulfillFunctionId,
+      ]
+    );
+    if (subscriptionId !== expectedSubscriptionId) {
+      node.logger.warn(
+        `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
+        logOptions
+      );
+      return;
+    }
+
+    // TODO: should we also check that airnodeWallet.address === subscription.airnodeAddress? 🤔
+
+    // **************************************************************************
+    // Fetch template details
+    // **************************************************************************
+    node.logger.debug('Fetching template details...', logOptions);
+
+    const template = config.templates[subscription.templateId];
+    if (isNil(template)) {
+      node.logger.warn(`TemplateId ${subscription.templateId} not found in templates`, logOptions);
+      return;
+    }
+
+    // **************************************************************************
+    // Verify templateId
+    // **************************************************************************
+    const expectedTemplateId = ethers.utils.solidityKeccak256(
+      ['bytes32', 'bytes'],
+      [template.endpointId, template.templateParameters]
+    );
+    if (expectedTemplateId !== subscription.templateId) {
+      node.logger.warn(
+        `TemplateId ${subscription.templateId} does not match expected ${expectedTemplateId}`,
+        logOptions
+      );
+      return;
+    }
+
+    // **************************************************************************
+    // Fetch endpoint details
+    // **************************************************************************
+    node.logger.debug('Fetching template details...', logOptions);
+
+    const endpoint = config.endpoints[template.endpointId];
+    if (isNil(endpoint)) {
+      node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, logOptions);
+      return;
+    }
+
+    // **************************************************************************
+    // Verify endpointId
+    // **************************************************************************
+    const expectedEndpointId = ethers.utils.keccak256(
+      ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
+    );
+    if (expectedEndpointId !== template.endpointId) {
+      node.logger.warn(`EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`, logOptions);
+      return;
+    }
+
+    enabledSubscriptions.push({
+      ...subscription,
+      subscriptionId,
+      template,
+      endpoint,
+    });
+  });
+  if (isEmpty(enabledSubscriptions)) {
+    node.logger.info('No proto-psp subscriptions to process', logOptions);
+  }
+
+  return { config, logOptions, airnodeWallet, subscriptions: enabledSubscriptions };
+};
+
+const updateBeacon = async (config: Config, coordinatorId: string) => {
+  const baseLogOptions = node.logger.buildBaseOptions(config, {
+    coordinatorId,
+  });
+
+  // =================================================================
+  // STEP 1: Initialize state
+  // =================================================================
+  node.logger.debug('Initializing state...', baseLogOptions);
+
+  const initialState: State = initializeState(config, baseLogOptions);
+
+  // **************************************************************************
+  // STEP 2. Process chain providers in parallel
   // **************************************************************************
   node.logger.debug('Processing chain providers...', baseLogOptions);
 
-  const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
-  if (isEmpty(chains)) {
+  const evmChains = config.chains.filter((chain: ChainConfig) => chain.type === 'evm');
+  if (isEmpty(evmChains)) {
     throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
   }
   const providerPromises = flatMap(
     evmChains.map((chain: ChainConfig) =>
       map(chain.providers, async (chainProvider, providerName) => {
-        const providerLogOptions = {
+        const providerLogOptions: node.LogOptions = {
           ...baseLogOptions,
           meta: {
             ...baseLogOptions.meta,
@@ -68,6 +198,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
         const chainProviderUrl = chainProvider.url || '';
         const provider = node.evm.buildEVMProvider(chainProviderUrl, chain.id);
+
         const dapiServer = new ethers.Contract(chain.contracts.DapiServer, dapiServerAbi, provider);
         const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
@@ -101,63 +232,11 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
         }
 
         // **************************************************************************
-        // Fetch subscriptions details
-        // **************************************************************************
-        node.logger.debug('Fetching subscriptions details...', providerLogOptions);
-
-        const enabledSubscriptions: (Subscription & { subscriptionId: string })[] = [];
-        triggers['proto-psp'].forEach((subscriptionId) => {
-          const subscription = subscriptions[subscriptionId];
-          if (isNil(subscription)) {
-            node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, providerLogOptions);
-            return;
-          }
-
-          // **************************************************************************
-          // Verify subscriptionId
-          // **************************************************************************
-          node.logger.debug('Verifying subscriptionId...', providerLogOptions);
-
-          const expectedSubscriptionId = ethers.utils.solidityKeccak256(
-            ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-            [
-              subscription.chainId,
-              subscription.airnodeAddress,
-              subscription.templateId,
-              subscription.parameters,
-              subscription.conditions,
-              subscription.relayer,
-              subscription.sponsor,
-              subscription.requester,
-              subscription.fulfillFunctionId,
-            ]
-          );
-          if (subscriptionId !== expectedSubscriptionId) {
-            node.logger.warn(
-              `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
-              providerLogOptions
-            );
-            return;
-          }
-
-          // TODO: should we also check that airnodeWallet.address === subscription.airnodeAddress? 🤔
-
-          enabledSubscriptions.push({
-            ...subscription,
-            subscriptionId,
-          });
-        });
-        if (isEmpty(enabledSubscriptions)) {
-          node.logger.info('No proto-psp subscriptions to process', providerLogOptions);
-          return;
-        }
-
-        // **************************************************************************
         // Process each sponsor address in parallel
         // **************************************************************************
         node.logger.debug('Processing sponsor addresses...', providerLogOptions);
 
-        const subscriptionsBySponsor = groupBy(enabledSubscriptions, 'sponsor');
+        const subscriptionsBySponsor = groupBy(initialState.subscriptions, 'sponsor');
         const sponsorAddresses = Object.keys(subscriptionsBySponsor);
 
         const sponsorWalletPromises = sponsorAddresses.map(async (sponsor) => {
@@ -168,7 +247,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
           // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
           const sponsorWallet = deriveSponsorWallet(
-            nodeSettings.airnodeWalletMnemonic,
+            config.nodeSettings.airnodeWalletMnemonic,
             sponsor,
             '2' // TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
           ).connect(provider);
@@ -203,8 +282,14 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
           node.logger.debug('Processing subscriptions...', sponsorWalletLogOptions);
 
           const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
-          for (const { subscriptionId, templateId, conditions, relayer, fulfillFunctionId } of sponsorSubscriptions ||
-            []) {
+          for (const {
+            subscriptionId,
+            conditions,
+            relayer,
+            fulfillFunctionId,
+            template,
+            endpoint,
+          } of sponsorSubscriptions || []) {
             const subscriptionIdLogOptions = {
               ...sponsorWalletLogOptions,
               additional: {
@@ -214,57 +299,6 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             };
 
             // **************************************************************************
-            // Fetch template details
-            // **************************************************************************
-            node.logger.debug('Fetching template details...', subscriptionIdLogOptions);
-
-            const template = templates[templateId];
-            if (isNil(template)) {
-              node.logger.warn(`TemplateId ${templateId} not found in templates`, subscriptionIdLogOptions);
-              continue;
-            }
-
-            // **************************************************************************
-            // Verify templateId
-            // **************************************************************************
-            const expectedTemplateId = ethers.utils.solidityKeccak256(
-              ['bytes32', 'bytes'],
-              [template.endpointId, template.templateParameters]
-            );
-            if (expectedTemplateId !== templateId) {
-              node.logger.warn(
-                `TemplateId ${templateId} does not match expected ${expectedTemplateId}`,
-                subscriptionIdLogOptions
-              );
-              continue;
-            }
-
-            // **************************************************************************
-            // Fetch endpoint details
-            // **************************************************************************
-            node.logger.debug('Fetching template details...', subscriptionIdLogOptions);
-
-            const endpoint = endpoints[template.endpointId];
-            if (isNil(endpoint)) {
-              node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, subscriptionIdLogOptions);
-              continue;
-            }
-
-            // **************************************************************************
-            // Verify endpointId
-            // **************************************************************************
-            const expectedEndpointId = ethers.utils.keccak256(
-              ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
-            );
-            if (expectedEndpointId !== template.endpointId) {
-              node.logger.warn(
-                `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
-                subscriptionIdLogOptions
-              );
-              continue;
-            }
-
-            // **************************************************************************
             // Make API call
             // **************************************************************************
             node.logger.debug('Making API request...', subscriptionIdLogOptions);
@@ -272,8 +306,8 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
             const apiCallParameters = abi.decode(template.templateParameters);
             const [errorCallApi, logsData] = await retryGo(() =>
               callApi({
-                oises,
-                apiCredentials,
+                oises: config.ois,
+                apiCredentials: config.apiCredentials,
                 apiCallParameters,
                 oisTitle: endpoint.oisTitle,
                 endpointName: endpoint.endpointName,
@@ -347,7 +381,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
             const timestamp = Math.floor(Date.now() / 1000);
 
-            const signature = await airnodeWallet.signMessage(
+            const signature = await initialState.airnodeWallet.signMessage(
               ethers.utils.arrayify(
                 ethers.utils.keccak256(
                   ethers.utils.solidityPack(
@@ -384,7 +418,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
                 .connect(sponsorWallet)
                 .functions[fulfillFunction.name](
                   subscriptionId,
-                  airnodeAddress,
+                  initialState.airnodeWallet.address,
                   relayer,
                   sponsor,
                   timestamp,
@@ -413,17 +447,4 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   );
 
   await Promise.all(providerPromises);
-
-  const completedAt = new Date();
-  const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  node.logger.info(
-    `PSP beacon update finished at ${node.utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
-    baseLogOptions
-  );
-
-  const response = {
-    ok: true,
-    data: { message: 'PSP beacon update execution has finished' },
-  };
-  return { statusCode: 200, body: JSON.stringify(response) };
 };

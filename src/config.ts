@@ -25,7 +25,7 @@ const parseConfig = <T>(filename: string): T => {
   return JSON.parse(fs.readFileSync(configPath, 'utf8'));
 };
 
-const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Config) => {
+const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Config): Config => {
   return {
     ...airnodeConfig,
     chains: airkeeperConfig.chains.map((chain) => {

@@ -81,3 +81,16 @@ export interface LogsAndApiValuesByBeaconId {
     apiValue: ethers.BigNumber | null;
   };
 }
+
+export interface State {
+  config: Config;
+  logOptions: node.LogOptions;
+  airnodeWallet: ethers.Wallet;
+  subscriptions: FullSubscription[];
+}
+
+export interface FullSubscription extends Subscription {
+  subscriptionId: string;
+  template: Template;
+  endpoint: Endpoint;
+}
