@@ -49,7 +49,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   return { statusCode: 200, body: JSON.stringify(response) };
 };
 
-const initializeState = (config: Config, logOptions: any): State => {
+const initializeState = (config: Config, logOptions: node.LogOptions): State => {
   const { triggers, subscriptions } = config;
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
@@ -132,7 +132,60 @@ const initializeState = (config: Config, logOptions: any): State => {
     node.logger.info('No proto-psp subscriptions to process', logOptions);
   }
 
-  return { config, logOptions, airnodeWallet, subscriptions: enabledSubscriptions };
+  return {
+    config,
+    baseLogOptions: logOptions,
+    airnodeWallet,
+    subscriptions: enabledSubscriptions,
+    apiValuesBySubscriptionId: {},
+  };
+};
+
+const executeApiCalls = async (state: State): Promise<State> => {
+  const { config, baseLogOptions, subscriptions } = state;
+
+  const subscriptionsByTemplateId = groupBy(subscriptions, 'templateId');
+  const templateIds = Object.keys(subscriptionsByTemplateId);
+
+  let apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber } = {};
+  for (const templateId of templateIds) {
+    const subscriptions = subscriptionsByTemplateId[templateId];
+
+    const { template, endpoint } = subscriptions[0];
+    const templateIdLogOptions = {
+      ...baseLogOptions,
+      additional: {
+        templateId,
+      },
+    };
+    const apiCallParameters = abi.decode(template.templateParameters);
+    const [errorCallApi, logsData] = await retryGo(() =>
+      callApi({
+        oises: config.ois,
+        apiCredentials: config.apiCredentials,
+        apiCallParameters,
+        oisTitle: endpoint.oisTitle,
+        endpointName: endpoint.endpointName,
+      })
+    );
+    if (!isNil(errorCallApi) || isNil(logsData)) {
+      node.logger.warn('Failed to fecth API value', templateIdLogOptions);
+      continue;
+    }
+    const [logs, apiValue] = logsData;
+    node.logger.logPending(logs, templateIdLogOptions);
+
+    if (isNil(apiValue)) {
+      node.logger.warn('Failed to fetch API value. Skipping update...', templateIdLogOptions);
+      continue;
+    }
+
+    for (const { subscriptionId } of subscriptions) {
+      apiValuesBySubscriptionId = { ...apiValuesBySubscriptionId, [subscriptionId]: apiValue };
+    }
+  }
+
+  return { ...state, apiValuesBySubscriptionId };
 };
 
 const updateBeacon = async (config: Config, coordinatorId: string) => {
@@ -145,10 +198,17 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
   // =================================================================
   node.logger.debug('Initializing state...', baseLogOptions);
 
-  const initialState: State = initializeState(config, baseLogOptions);
+  let state: State = initializeState(config, baseLogOptions);
 
   // **************************************************************************
-  // STEP 2. Process chain providers in parallel
+  // STEP 2: Make API calls
+  // **************************************************************************
+  node.logger.debug('Making API requests...', baseLogOptions);
+
+  state = await executeApiCalls(state);
+
+  // **************************************************************************
+  // STEP 3. Process chain providers in parallel
   // **************************************************************************
   node.logger.debug('Processing chain providers...', baseLogOptions);
 
@@ -210,11 +270,10 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
 
         node.logger.debug('Processing sponsor addresses...', providerLogOptions);
 
-        // **************************************************************************
         // Filter subscription by chainId and group them by sponsor
-        // **************************************************************************
-        const chainSubscriptions = initialState.subscriptions.filter(
-          (subscription) => subscription.chainId === chain.id
+        // Also make sure that subscription has an associated API value
+        const chainSubscriptions = state.subscriptions.filter(
+          ({ subscriptionId, chainId }) => chainId === chain.id && state.apiValuesBySubscriptionId[subscriptionId]
         );
         const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
         const sponsorAddresses = Object.keys(subscriptionsBySponsor);
@@ -259,14 +318,7 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
 
           // Process each psp subscription in serial to keep nonces in order
           const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
-          for (const {
-            subscriptionId,
-            conditions,
-            relayer,
-            fulfillFunctionId,
-            template,
-            endpoint,
-          } of sponsorSubscriptions || []) {
+          for (const { subscriptionId, conditions, relayer, fulfillFunctionId } of sponsorSubscriptions || []) {
             const subscriptionIdLogOptions = {
               ...sponsorWalletLogOptions,
               additional: {
@@ -276,38 +328,14 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
             };
 
             // **************************************************************************
-            // Make API call
-            // **************************************************************************
-            node.logger.debug('Making API request...', subscriptionIdLogOptions);
-
-            const apiCallParameters = abi.decode(template.templateParameters);
-            const [errorCallApi, logsData] = await retryGo(() =>
-              callApi({
-                oises: config.ois,
-                apiCredentials: config.apiCredentials,
-                apiCallParameters,
-                oisTitle: endpoint.oisTitle,
-                endpointName: endpoint.endpointName,
-              })
-            );
-            if (!isNil(errorCallApi) || isNil(logsData)) {
-              node.logger.warn('Failed to fecth API value', subscriptionIdLogOptions);
-              continue;
-            }
-            const [logs, apiValue] = logsData;
-            node.logger.logPending(logs, subscriptionIdLogOptions);
-
-            if (isNil(apiValue)) {
-              node.logger.warn('API value not found. Skipping update...', subscriptionIdLogOptions);
-              continue;
-            }
-
-            // **************************************************************************
             // Check conditions
             // **************************************************************************
             node.logger.debug('Checking conditions...', subscriptionIdLogOptions);
 
-            const encodedFulfillmentData = ethers.utils.defaultAbiCoder.encode(['int256'], [apiValue]);
+            const encodedFulfillmentData = ethers.utils.defaultAbiCoder.encode(
+              ['int256'],
+              [state.apiValuesBySubscriptionId[subscriptionId]]
+            );
             let conditionFunction: ethers.utils.FunctionFragment;
             let conditionParameters: string;
             try {
@@ -358,7 +386,7 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
 
             const timestamp = Math.floor(Date.now() / 1000);
 
-            const signature = await initialState.airnodeWallet.signMessage(
+            const signature = await state.airnodeWallet.signMessage(
               ethers.utils.arrayify(
                 ethers.utils.keccak256(
                   ethers.utils.solidityPack(
@@ -395,7 +423,7 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
                 .connect(sponsorWallet)
                 .functions[fulfillFunction.name](
                   subscriptionId,
-                  initialState.airnodeWallet.address,
+                  state.airnodeWallet.address,
                   relayer,
                   sponsor,
                   timestamp,

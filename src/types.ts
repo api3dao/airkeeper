@@ -84,9 +84,10 @@ export interface LogsAndApiValuesByBeaconId {
 
 export interface State {
   config: Config;
-  logOptions: node.LogOptions;
+  baseLogOptions: node.LogOptions;
   airnodeWallet: ethers.Wallet;
   subscriptions: FullSubscription[];
+  apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber };
 }
 
 export interface FullSubscription extends Subscription {
