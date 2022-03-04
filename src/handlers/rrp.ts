@@ -145,7 +145,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         const airnodeRrp = protocol.AirnodeRrpFactory.connect(chain.contracts.AirnodeRrp, provider);
 
-        const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(chain.contracts.RrpBeaconServer, provider);
+        const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(chain.contracts.RrpBeaconServer!, provider);
 
         // Fetch current block number from chain via provider
         const [err, currentBlock] = await retryGo(() => provider.getBlockNumber());

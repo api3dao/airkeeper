@@ -16,8 +16,8 @@ export interface ChainOptions {
 
 export interface ChainConfig extends node.ChainConfig {
   readonly contracts: node.ChainContracts & {
-    readonly RrpBeaconServer: string;
-    readonly DapiServer: string;
+    readonly RrpBeaconServer?: string;
+    readonly DapiServer?: string;
   };
   readonly options: ChainOptions;
 }

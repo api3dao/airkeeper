@@ -233,7 +233,7 @@ const processProviders = async (state: State) => {
       };
 
       // **************************************************************************
-      // Process sponsor addresses in paralell
+      // Process sponsor addresses in parallel
       // **************************************************************************
       node.logger.debug('Processing sponsor addresses...', providerLogOptions);
 
