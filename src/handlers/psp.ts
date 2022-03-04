@@ -9,15 +9,10 @@ import map from 'lodash/map';
 import { callApi } from '../call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
 import { GAS_LIMIT } from '../constants';
-import { ChainConfig, Config, FullSubscription, State } from '../types';
+import { initializeProvider } from '../evm/initialize-provider';
+import { ChainConfig, Config, EVMProviderState, FullSubscription, ProviderState, State } from '../types';
 import { retryGo } from '../utils';
 import { deriveSponsorWallet } from '../wallet';
-
-//TODO: where to get abi from?
-const dapiServerAbi = [
-  'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
-  'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
-];
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -138,6 +133,7 @@ const initializeState = (config: Config, logOptions: node.LogOptions): State => 
     airnodeWallet,
     subscriptions: enabledSubscriptions,
     apiValuesBySubscriptionId: {},
+    providerStates: [],
   };
 };
 
@@ -188,6 +184,248 @@ const executeApiCalls = async (state: State): Promise<State> => {
   return { ...state, apiValuesBySubscriptionId };
 };
 
+const initializeProviders = async (state: State): Promise<State> => {
+  const { config, baseLogOptions } = state;
+
+  const evmChains = config.chains.filter((chain: ChainConfig) => chain.type === 'evm');
+  if (isEmpty(evmChains)) {
+    throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
+  }
+  const providerPromises = flatMap(
+    evmChains.map((chain: ChainConfig) =>
+      map(chain.providers, async (chainProvider, providerName) => {
+        const providerLogOptions: node.LogOptions = {
+          ...baseLogOptions,
+          meta: {
+            ...baseLogOptions.meta,
+            chainId: chain.id,
+            providerName,
+          },
+        };
+
+        // Initialize provider specific data
+        const [logs, providerState] = await initializeProvider(chain, chainProvider.url || '');
+        node.logger.logPending(logs, providerLogOptions);
+
+        return { ...providerState, chainId: chain.id, providerName } as ProviderState<EVMProviderState>;
+      })
+    )
+  );
+
+  const providerStates = await Promise.all(providerPromises);
+  const validProviderStates = providerStates.filter((ps) => !isNil(ps)) as ProviderState<EVMProviderState>[];
+
+  return { ...state, providerStates: validProviderStates };
+};
+
+const processProviders = async (state: State) => {
+  const { config, baseLogOptions, providerStates } = state;
+
+  const providerPromises = providerStates.map(
+    async ({ providerName, chainId, provider, voidSigner, contracts, currentBlock, gasTarget }) => {
+      const providerLogOptions: node.LogOptions = {
+        ...baseLogOptions,
+        meta: {
+          ...baseLogOptions.meta,
+          providerName,
+          chainId,
+        },
+      };
+
+      // **************************************************************************
+      // Process sponsor addresses in paralell
+      // **************************************************************************
+      node.logger.debug('Processing sponsor addresses...', providerLogOptions);
+
+      // Filter subscription by chainId and group them by sponsor
+      // Also make sure that subscription has an associated API value
+      const chainSubscriptions = state.subscriptions.filter(
+        (subscription) =>
+          subscription.chainId === chainId && state.apiValuesBySubscriptionId[subscription.subscriptionId]
+      );
+      const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
+      const sponsorAddresses = Object.keys(subscriptionsBySponsor);
+
+      const sponsorWalletPromises = sponsorAddresses.map(async (sponsor) => {
+        // **************************************************************************
+        // Derive sponsorWallet address
+        // **************************************************************************
+        node.logger.debug('Deriving sponsorWallet...', providerLogOptions);
+
+        // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
+        const sponsorWallet = deriveSponsorWallet(
+          config.nodeSettings.airnodeWalletMnemonic,
+          sponsor,
+          '2' // TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
+        ).connect(provider);
+
+        const sponsorWalletLogOptions = {
+          ...providerLogOptions,
+          additional: {
+            sponsorWallet: sponsorWallet.address.replace(sponsorWallet.address.substring(5, 38), '...'),
+          },
+        };
+
+        // **************************************************************************
+        // Fetch sponsorWallet transaction count
+        // **************************************************************************
+        node.logger.debug('Fetching transaction count...', sponsorWalletLogOptions);
+
+        const [errorGetTransactionCount, sponsorWalletTransactionCount] = await retryGo(() =>
+          provider.getTransactionCount(sponsorWallet.address, currentBlock)
+        );
+        if (errorGetTransactionCount || isNil(sponsorWalletTransactionCount)) {
+          node.logger.error('Failed to fetch the sponsor wallet transaction count', {
+            ...sponsorWalletLogOptions,
+            error: errorGetTransactionCount,
+          });
+          return;
+        }
+        let nextNonce = sponsorWalletTransactionCount;
+
+        // **************************************************************************
+        // Process each subscription in serial to keep nonces in order
+        // **************************************************************************
+        node.logger.debug('Processing subscriptions...', sponsorWalletLogOptions);
+
+        const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
+        for (const { subscriptionId, conditions, relayer, fulfillFunctionId } of sponsorSubscriptions || []) {
+          const subscriptionIdLogOptions = {
+            ...sponsorWalletLogOptions,
+            additional: {
+              ...sponsorWalletLogOptions.additional,
+              subscriptionId,
+            },
+          };
+
+          // **************************************************************************
+          // Check conditions
+          // **************************************************************************
+          node.logger.debug('Checking conditions...', subscriptionIdLogOptions);
+
+          const encodedFulfillmentData = ethers.utils.defaultAbiCoder.encode(
+            ['int256'],
+            [state.apiValuesBySubscriptionId[subscriptionId]]
+          );
+          let conditionFunction: ethers.utils.FunctionFragment;
+          let conditionParameters: string;
+          try {
+            const decodedConditions = abi.decode(conditions);
+            const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
+              ['bytes32'],
+              decodedConditions._conditionFunctionId
+            );
+            // TODO: is this really needed?
+            // Airnode ABI only supports bytes32 but
+            // function selector is '0x' plus 4 bytes and
+            // that is why we need to ignore the trailing zeros
+            conditionFunction = contracts['DapiServer'].interface.getFunction(
+              decodedConditionFunctionId.substring(0, 2 + 4 * 2)
+            );
+            conditionParameters = decodedConditions._conditionParameters;
+          } catch (err) {
+            node.logger.error('Failed to decode conditions', {
+              ...subscriptionIdLogOptions,
+              error: err as any,
+            });
+            continue;
+          }
+
+          // TODO: Should we also include the condition contract address to be called in subscription.conditions
+          //       and connect to that contract instead of dapiServer contract to call the conditionFunction?
+          const [errorConditionFunction, result] = await retryGo(() =>
+            contracts['DapiServer']
+              .connect(voidSigner)
+              .functions[conditionFunction.name](subscriptionId, encodedFulfillmentData, conditionParameters)
+          );
+          if (errorConditionFunction || isNil(result)) {
+            node.logger.error('Failed to check conditions', {
+              ...subscriptionIdLogOptions,
+              error: errorConditionFunction,
+            });
+            continue;
+          }
+          // The result will always be ethers.Result type even if solidity function retuns a single value
+          // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
+          if (!result[0]) {
+            node.logger.warn('Conditions not met. Skipping update...', subscriptionIdLogOptions);
+            continue;
+          }
+
+          // **************************************************************************
+          // Compute signature
+          // **************************************************************************
+          node.logger.debug('Signing fulfill message...', subscriptionIdLogOptions);
+
+          const timestamp = Math.floor(Date.now() / 1000);
+
+          const signature = await state.airnodeWallet.signMessage(
+            ethers.utils.arrayify(
+              ethers.utils.keccak256(
+                ethers.utils.solidityPack(
+                  ['bytes32', 'uint256', 'address'],
+                  [subscriptionId, timestamp, sponsorWallet.address]
+                )
+              )
+            )
+          );
+
+          // **************************************************************************
+          // Update beacon
+          // **************************************************************************
+          node.logger.debug('Fulfilling subscription...', subscriptionIdLogOptions);
+
+          let fulfillFunction: ethers.utils.FunctionFragment;
+          try {
+            fulfillFunction = contracts['DapiServer'].interface.getFunction(fulfillFunctionId);
+          } catch (error) {
+            node.logger.error('Failed to get fulfill function', {
+              ...subscriptionIdLogOptions,
+              error: error as any,
+            });
+            continue;
+          }
+          const nonce = nextNonce++;
+          const overrides = {
+            gasLimit: GAS_LIMIT,
+            ...gasTarget,
+            nonce,
+          };
+          const [errfulfillFunction, tx] = await retryGo<ethers.ContractTransaction>(() =>
+            contracts['DapiServer']
+              .connect(sponsorWallet)
+              .functions[fulfillFunction.name](
+                subscriptionId,
+                state.airnodeWallet.address,
+                relayer,
+                sponsor,
+                timestamp,
+                encodedFulfillmentData,
+                signature,
+                overrides
+              )
+          );
+          if (errfulfillFunction) {
+            node.logger.error(
+              `failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`,
+              {
+                ...subscriptionIdLogOptions,
+                error: errfulfillFunction,
+              }
+            );
+            continue;
+          }
+          node.logger.info(`Tx submitted: ${tx?.hash}`, subscriptionIdLogOptions);
+        }
+      });
+
+      await Promise.all(sponsorWalletPromises);
+    }
+  );
+
+  await Promise.all(providerPromises);
+};
+
 const updateBeacon = async (config: Config, coordinatorId: string) => {
   const baseLogOptions = node.logger.buildBaseOptions(config, {
     coordinatorId,
@@ -208,248 +446,16 @@ const updateBeacon = async (config: Config, coordinatorId: string) => {
   state = await executeApiCalls(state);
 
   // **************************************************************************
-  // STEP 3. Process chain providers in parallel
+  // STEP 3. Initialize providers
   // **************************************************************************
-  node.logger.debug('Processing chain providers...', baseLogOptions);
+  node.logger.debug('Initializing providers...', baseLogOptions);
 
-  const evmChains = config.chains.filter((chain: ChainConfig) => chain.type === 'evm');
-  if (isEmpty(evmChains)) {
-    throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
-  }
-  const providerPromises = flatMap(
-    evmChains.map((chain: ChainConfig) =>
-      map(chain.providers, async (chainProvider, providerName) => {
-        const providerLogOptions: node.LogOptions = {
-          ...baseLogOptions,
-          meta: {
-            ...baseLogOptions.meta,
-            providerName,
-            chainId: chain.id,
-          },
-        };
+  state = await initializeProviders(state);
 
-        // **************************************************************************
-        // Initialize provider specific data
-        // **************************************************************************
-        node.logger.debug('Initializing provider...', providerLogOptions);
+  // **************************************************************************
+  // STEP 4. Process chain providers
+  // **************************************************************************
+  node.logger.debug('Processing providers...', baseLogOptions);
 
-        const chainProviderUrl = chainProvider.url || '';
-        const provider = node.evm.buildEVMProvider(chainProviderUrl, chain.id);
-
-        const dapiServer = new ethers.Contract(chain.contracts.DapiServer, dapiServerAbi, provider);
-        const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
-
-        // **************************************************************************
-        // Fetch current block number
-        // **************************************************************************
-        const [errorGetBlockNumber, currentBlock] = await retryGo(() => provider.getBlockNumber());
-        if (errorGetBlockNumber || isNil(currentBlock)) {
-          node.logger.error('Failed to fetch the blockNumber', {
-            ...providerLogOptions,
-            error: errorGetBlockNumber,
-          });
-          return;
-        }
-
-        // **************************************************************************
-        // Fetch current gas fee data
-        // **************************************************************************
-        node.logger.debug('Fetching gas price...', providerLogOptions);
-
-        const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
-          provider,
-          chainOptions: chain.options,
-        });
-        if (!isEmpty(gasPriceLogs)) {
-          node.logger.logPending(gasPriceLogs, providerLogOptions);
-        }
-        if (!gasTarget) {
-          node.logger.error('Failed to fetch gas price', providerLogOptions);
-          return;
-        }
-
-        node.logger.debug('Processing sponsor addresses...', providerLogOptions);
-
-        // Filter subscription by chainId and group them by sponsor
-        // Also make sure that subscription has an associated API value
-        const chainSubscriptions = state.subscriptions.filter(
-          ({ subscriptionId, chainId }) => chainId === chain.id && state.apiValuesBySubscriptionId[subscriptionId]
-        );
-        const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
-        const sponsorAddresses = Object.keys(subscriptionsBySponsor);
-
-        // Process each sponsor address in parallel
-        const sponsorWalletPromises = sponsorAddresses.map(async (sponsor) => {
-          // **************************************************************************
-          // Derive sponsorWallet address
-          // **************************************************************************
-          node.logger.debug('Deriving sponsorWallet...', providerLogOptions);
-
-          // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
-          const sponsorWallet = deriveSponsorWallet(
-            config.nodeSettings.airnodeWalletMnemonic,
-            sponsor,
-            '2' // TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
-          ).connect(provider);
-
-          const sponsorWalletLogOptions = {
-            ...providerLogOptions,
-            additional: {
-              sponsorWallet: sponsorWallet.address.replace(sponsorWallet.address.substring(5, 38), '...'),
-            },
-          };
-
-          // **************************************************************************
-          // Fetch sponsorWallet transaction count
-          // **************************************************************************
-          node.logger.debug('Fetching transaction count...', sponsorWalletLogOptions);
-
-          const [errorGetTransactionCount, sponsorWalletTransactionCount] = await retryGo(() =>
-            provider.getTransactionCount(sponsorWallet.address, currentBlock)
-          );
-          if (errorGetTransactionCount || isNil(sponsorWalletTransactionCount)) {
-            node.logger.error('Failed to fetch the sponsor wallet transaction count', {
-              ...sponsorWalletLogOptions,
-              error: errorGetTransactionCount,
-            });
-            return;
-          }
-          let nextNonce = sponsorWalletTransactionCount;
-
-          // Process each psp subscription in serial to keep nonces in order
-          const sponsorSubscriptions = subscriptionsBySponsor[sponsor];
-          for (const { subscriptionId, conditions, relayer, fulfillFunctionId } of sponsorSubscriptions || []) {
-            const subscriptionIdLogOptions = {
-              ...sponsorWalletLogOptions,
-              additional: {
-                ...sponsorWalletLogOptions.additional,
-                subscriptionId,
-              },
-            };
-
-            // **************************************************************************
-            // Check conditions
-            // **************************************************************************
-            node.logger.debug('Checking conditions...', subscriptionIdLogOptions);
-
-            const encodedFulfillmentData = ethers.utils.defaultAbiCoder.encode(
-              ['int256'],
-              [state.apiValuesBySubscriptionId[subscriptionId]]
-            );
-            let conditionFunction: ethers.utils.FunctionFragment;
-            let conditionParameters: string;
-            try {
-              const decodedConditions = abi.decode(conditions);
-              const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
-                ['bytes32'],
-                decodedConditions._conditionFunctionId
-              );
-              // TODO: is this really needed?
-              // Airnode ABI only supports bytes32 but
-              // function selector is '0x' plus 4 bytes and
-              // that is why we need to ignore the trailing zeros
-              conditionFunction = dapiServer.interface.getFunction(decodedConditionFunctionId.substring(0, 2 + 4 * 2));
-              conditionParameters = decodedConditions._conditionParameters;
-            } catch (err) {
-              node.logger.error('Failed to decode conditions', {
-                ...subscriptionIdLogOptions,
-                error: err as any,
-              });
-              continue;
-            }
-
-            // TODO: Should we also include the condition contract address to be called in subscription.conditions
-            //       and connect to that contract instead of dapiServer contract to call the conditionFunction?
-            const [errorConditionFunction, result] = await retryGo(() =>
-              dapiServer
-                .connect(voidSigner)
-                .functions[conditionFunction.name](subscriptionId, encodedFulfillmentData, conditionParameters)
-            );
-            if (errorConditionFunction || isNil(result)) {
-              node.logger.error('Failed to check conditions', {
-                ...subscriptionIdLogOptions,
-                error: errorConditionFunction,
-              });
-              continue;
-            }
-            // The result will always be ethers.Result type even if solidity function retuns a single value
-            // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
-            if (!result[0]) {
-              node.logger.warn('Conditions not met. Skipping update...', subscriptionIdLogOptions);
-              continue;
-            }
-
-            // **************************************************************************
-            // Compute signature
-            // **************************************************************************
-            node.logger.debug('Signing fulfill message...', subscriptionIdLogOptions);
-
-            const timestamp = Math.floor(Date.now() / 1000);
-
-            const signature = await state.airnodeWallet.signMessage(
-              ethers.utils.arrayify(
-                ethers.utils.keccak256(
-                  ethers.utils.solidityPack(
-                    ['bytes32', 'uint256', 'address'],
-                    [subscriptionId, timestamp, sponsorWallet.address]
-                  )
-                )
-              )
-            );
-
-            // **************************************************************************
-            // Update beacon
-            // **************************************************************************
-            node.logger.debug('Fulfilling subscription...', subscriptionIdLogOptions);
-
-            let fulfillFunction: ethers.utils.FunctionFragment;
-            try {
-              fulfillFunction = dapiServer.interface.getFunction(fulfillFunctionId);
-            } catch (error) {
-              node.logger.error('Failed to get fulfill function', {
-                ...subscriptionIdLogOptions,
-                error: error as any,
-              });
-              continue;
-            }
-            const nonce = nextNonce++;
-            const overrides = {
-              gasLimit: GAS_LIMIT,
-              ...gasTarget,
-              nonce,
-            };
-            const [errfulfillFunction, tx] = await retryGo<ethers.ContractTransaction>(() =>
-              dapiServer
-                .connect(sponsorWallet)
-                .functions[fulfillFunction.name](
-                  subscriptionId,
-                  state.airnodeWallet.address,
-                  relayer,
-                  sponsor,
-                  timestamp,
-                  encodedFulfillmentData,
-                  signature,
-                  overrides
-                )
-            );
-            if (errfulfillFunction) {
-              node.logger.error(
-                `failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`,
-                {
-                  ...subscriptionIdLogOptions,
-                  error: errfulfillFunction,
-                }
-              );
-              continue;
-            }
-            node.logger.info(`Tx submitted: ${tx?.hash}`, subscriptionIdLogOptions);
-          }
-        });
-
-        await Promise.all(sponsorWalletPromises);
-      })
-    )
-  );
-
-  await Promise.all(providerPromises);
+  await processProviders(state);
 };

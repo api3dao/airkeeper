@@ -82,12 +82,28 @@ export interface LogsAndApiValuesByBeaconId {
   };
 }
 
-export interface State {
+interface BaseState {
   config: Config;
   baseLogOptions: node.LogOptions;
+}
+export interface State extends BaseState {
   airnodeWallet: ethers.Wallet;
   subscriptions: FullSubscription[];
   apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber };
+  providerStates: ProviderState<EVMProviderState>[];
+}
+
+export type ProviderState<T extends {}> = T &
+  BaseState & {
+    chainId: string;
+    providerName: string;
+  };
+export interface EVMProviderState {
+  provider: ethers.providers.Provider;
+  contracts: { [name: string]: ethers.Contract };
+  voidSigner: ethers.VoidSigner;
+  currentBlock: number;
+  gasTarget: node.GasTarget;
 }
 
 export interface FullSubscription extends Subscription {
