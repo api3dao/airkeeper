@@ -37,7 +37,7 @@ export const checkSubscriptionCondition = async (
   const [errorConditionFunction, result] = await retryGo(() =>
     contract
       .connect(voidSigner)
-      .functions[conditionFunction.name](subscription.subscriptionId, encodedFulfillmentData, conditionParameters)
+      .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters)
   );
   if (errorConditionFunction || isNil(result)) {
     const message = 'Failed to check conditions';

@@ -22,6 +22,7 @@ import {
   SponsorWalletTransactionCount,
   SponsorWalletWithSubscriptions,
   State,
+  GroupedSubscriptions,
 } from '../types';
 import { retryGo } from '../utils';
 
@@ -91,73 +92,81 @@ const initializeState = (config: Config): State => {
 
     // TODO: should we also check that airnodeWallet.address === subscription.airnodeAddress? 🤔
 
-    // Fetch template details
-    const template = config.templates[subscription.templateId];
-    if (isNil(template)) {
-      node.logger.warn(`TemplateId ${subscription.templateId} not found in templates`, baseLogOptions);
-      return;
-    }
-    // Verify templateId
-    const expectedTemplateId = ethers.utils.solidityKeccak256(
-      ['bytes32', 'bytes'],
-      [template.endpointId, template.templateParameters]
-    );
-    if (expectedTemplateId !== subscription.templateId) {
-      node.logger.warn(
-        `TemplateId ${subscription.templateId} does not match expected ${expectedTemplateId}`,
-        baseLogOptions
-      );
-      return;
-    }
-
-    // Fetch endpoint details
-    const endpoint = config.endpoints[template.endpointId];
-    if (isNil(endpoint)) {
-      node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
-      return;
-    }
-    // Verify endpointId
-    const expectedEndpointId = ethers.utils.keccak256(
-      ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
-    );
-    if (expectedEndpointId !== template.endpointId) {
-      node.logger.warn(
-        `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
-        baseLogOptions
-      );
-      return;
-    }
-
     enabledSubscriptions.push({
       ...subscription,
-      subscriptionId,
-      template,
-      endpoint,
+      id: subscriptionId,
     });
   });
+
+  const groupedSubscriptions: GroupedSubscriptions[] = [];
   if (isEmpty(enabledSubscriptions)) {
     node.logger.info('No proto-psp subscriptions to process', baseLogOptions);
+  } else {
+    const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
+    const templateIds = Object.keys(enabledSubscriptionsByTemplateId);
+    templateIds.forEach((templateId) => {
+      // Fetch template details
+      const template = config.templates[templateId];
+      if (isNil(template)) {
+        node.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
+        return;
+      }
+      // Verify templateId
+      const expectedTemplateId = ethers.utils.solidityKeccak256(
+        ['bytes32', 'bytes'],
+        [template.endpointId, template.templateParameters]
+      );
+      if (expectedTemplateId !== templateId) {
+        node.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
+        return;
+      }
+
+      // Fetch endpoint details
+      const endpoint = config.endpoints[template.endpointId];
+      if (isNil(endpoint)) {
+        node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
+        return;
+      }
+      // Verify endpointId
+      const expectedEndpointId = ethers.utils.keccak256(
+        ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
+      );
+      if (expectedEndpointId !== template.endpointId) {
+        node.logger.warn(
+          `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
+          baseLogOptions
+        );
+        return;
+      }
+
+      const subscriptions: FullSubscription[] = enabledSubscriptionsByTemplateId[templateId];
+      groupedSubscriptions.push({
+        subscriptions,
+        template: { ...template, id: templateId },
+        endpoint: { ...endpoint, id: template.endpointId },
+      });
+    });
   }
 
   return {
     config,
     baseLogOptions,
     airnodeWallet,
-    subscriptions: enabledSubscriptions,
+    groupedSubscriptions,
     apiValuesBySubscriptionId: {},
     providerStates: [],
   };
 };
 
 const executeApiCalls = async (state: State): Promise<State> => {
-  const { config, baseLogOptions, subscriptions } = state;
+  const { config, baseLogOptions, groupedSubscriptions } = state;
 
   let apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber } = {};
-  for (const { subscriptionId, template, endpoint } of subscriptions) {
-    const subscriptionIdLogOptions = {
+  for (const { subscriptions, template, endpoint } of groupedSubscriptions) {
+    const templateIdLogOptions = {
       ...baseLogOptions,
       additional: {
-        subscriptionId,
+        templateId: template.id,
       },
     };
     const apiCallParameters = abi.decode(template.templateParameters);
@@ -171,18 +180,21 @@ const executeApiCalls = async (state: State): Promise<State> => {
       })
     );
     if (!isNil(errorCallApi) || isNil(logsData)) {
-      node.logger.warn('Failed to fecth API value', subscriptionIdLogOptions);
+      node.logger.warn('Failed to fecth API value', templateIdLogOptions);
       continue;
     }
     const [logs, apiValue] = logsData;
-    node.logger.logPending(logs, subscriptionIdLogOptions);
+    node.logger.logPending(logs, templateIdLogOptions);
 
     if (isNil(apiValue)) {
-      node.logger.warn('Failed to fetch API value. Skipping update...', subscriptionIdLogOptions);
+      node.logger.warn('Failed to fetch API value. Skipping update...', templateIdLogOptions);
       continue;
     }
 
-    apiValuesBySubscriptionId = { ...apiValuesBySubscriptionId, [subscriptionId]: apiValue };
+    apiValuesBySubscriptionId = {
+      ...apiValuesBySubscriptionId,
+      ...subscriptions.reduce((acc, subscription) => ({ ...acc, [subscription.id]: apiValue }), {}),
+    };
   }
 
   return { ...state, apiValuesBySubscriptionId };
@@ -232,14 +244,9 @@ async function checkSubscriptionsConditions(
   const validSubscriptions: FullSubscription[] = [];
   const conditionPromises = subscriptions.map(
     (subscription) =>
-      checkSubscriptionCondition(
-        subscription,
-        apiValuesBySubscriptionId[subscription.subscriptionId],
-        contract,
-        voidSigner
-      ).then(([logs, isValid]) => [logs, { subscription, isValid }]) as Promise<
-        node.LogsData<{ subscription: FullSubscription; isValid: boolean }>
-      >
+      checkSubscriptionCondition(subscription, apiValuesBySubscriptionId[subscription.id], contract, voidSigner).then(
+        ([logs, isValid]) => [logs, { subscription, isValid }]
+      ) as Promise<node.LogsData<{ subscription: FullSubscription; isValid: boolean }>>
   );
   const result = await Promise.all(conditionPromises);
   result.forEach(([log, data]) => {
@@ -247,14 +254,14 @@ async function checkSubscriptionsConditions(
       ...logOptions,
       additional: {
         ...logOptions.additional,
-        subscriptionId: data.subscription.subscriptionId,
+        subscriptionId: data.subscription.id,
       },
     };
     node.logger.logPending(log, subscriptionLogOptions);
     if (data.isValid) {
       validSubscriptions.push({
         ...data.subscription,
-        apiValue: apiValuesBySubscriptionId[data.subscription.subscriptionId],
+        apiValue: apiValuesBySubscriptionId[data.subscription.id],
       });
     }
   });
@@ -304,7 +311,7 @@ async function groupSubscriptionsBySponsorWallet(
 }
 
 const submitTransactions = async (state: State) => {
-  const { config, baseLogOptions, providerStates, subscriptions, apiValuesBySubscriptionId } = state;
+  const { config, baseLogOptions, providerStates, groupedSubscriptions, apiValuesBySubscriptionId } = state;
 
   const providerPromises = providerStates.map(async (providerState) => {
     const { providerName, chainId, provider, contracts, voidSigner, currentBlock } = providerState;
@@ -318,8 +325,9 @@ const submitTransactions = async (state: State) => {
     };
 
     // Filter subscription by chainId and check that subscription has an associated API value
+    const subscriptions = flatMap(groupedSubscriptions.map((s) => s.subscriptions));
     const chainSubscriptions = subscriptions.filter(
-      (subscription) => subscription.chainId === chainId && apiValuesBySubscriptionId[subscription.subscriptionId]
+      (subscription) => subscription.chainId === chainId && apiValuesBySubscriptionId[subscription.id]
     );
 
     // Check conditions

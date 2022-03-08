@@ -20,7 +20,7 @@ export const processTransactions = async (state: EVMProviderSponsorState): Promi
     ];
 
     // Process each subscription in serial to keep nonces in order
-    for (const { subscriptionId, relayer, sponsor, fulfillFunctionId, nonce, apiValue } of subscriptions || []) {
+    for (const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, nonce, apiValue } of subscriptions || []) {
       // Encode API value
       const encodedFulfillmentData = ethers.utils.defaultAbiCoder.encode(['int256'], [apiValue]);
 
