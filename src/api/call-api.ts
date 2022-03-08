@@ -3,8 +3,8 @@ import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
-import { CallApiOptions } from './types';
-import { retryGo } from './utils';
+import { CallApiOptions } from '../types';
+import { retryGo } from '../utils';
 
 export const callApi = async ({
   oises,

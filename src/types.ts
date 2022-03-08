@@ -85,9 +85,9 @@ export interface LogsAndApiValuesByBeaconId {
 interface BaseState {
   config: Config;
   baseLogOptions: node.LogOptions;
+  airnodeWallet: ethers.Wallet;
 }
 export interface State extends BaseState {
-  airnodeWallet: ethers.Wallet;
   subscriptions: FullSubscription[];
   apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber };
   providerStates: ProviderState<EVMProviderState>[];
@@ -98,6 +98,7 @@ export type ProviderState<T extends {}> = T &
     chainId: string;
     providerName: string;
   };
+
 export interface EVMProviderState {
   provider: ethers.providers.Provider;
   contracts: { [name: string]: ethers.Contract };
@@ -106,8 +107,24 @@ export interface EVMProviderState {
   gasTarget: node.GasTarget;
 }
 
+export interface EVMProviderSponsorState extends ProviderState<EVMProviderState> {
+  subscriptionsBySponsorWallets: SponsorWalletWithSubscriptions[];
+}
+
 export interface FullSubscription extends Subscription {
   subscriptionId: string;
   template: Template;
   endpoint: Endpoint;
+  apiValue?: ethers.BigNumber;
+  nonce?: number;
+}
+
+export interface SponsorWalletTransactionCount {
+  sponsorWallet: ethers.Wallet;
+  transactionCount: number;
+}
+
+export interface SponsorWalletWithSubscriptions {
+  subscriptions: FullSubscription[];
+  sponsorWallet: ethers.Wallet;
 }

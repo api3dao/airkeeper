@@ -7,7 +7,7 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
-import { callApi } from '../call-api';
+import { callApi } from '../api/call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from '../constants';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from '../types';
