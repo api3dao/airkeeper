@@ -107,23 +107,22 @@ export interface EVMProviderState {
   gasTarget: node.GasTarget;
 }
 
-export interface EVMProviderSponsorState extends ProviderState<EVMProviderState> {
-  subscriptionsBySponsorWallets: SponsorWalletWithSubscriptions[];
-}
-
 export type Id<T> = T & {
   id: string;
 };
 
 export interface GroupedSubscriptions {
-  subscriptions: FullSubscription[];
+  subscriptions: Id<Subscription>[];
   template: Id<Template>;
   endpoint: Id<Endpoint>;
 }
 
-export interface FullSubscription extends Id<Subscription> {
-  apiValue?: ethers.BigNumber;
-  nonce?: number;
+export interface CheckedSubscription extends Id<Subscription> {
+  apiValue: ethers.BigNumber;
+}
+
+export interface ProcessableSubscription extends CheckedSubscription {
+  nonce: number;
 }
 
 export interface SponsorWalletTransactionCount {
@@ -132,6 +131,6 @@ export interface SponsorWalletTransactionCount {
 }
 
 export interface SponsorWalletWithSubscriptions {
-  subscriptions: FullSubscription[];
+  subscriptions: ProcessableSubscription[];
   sponsorWallet: ethers.Wallet;
 }

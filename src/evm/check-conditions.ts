@@ -2,11 +2,11 @@ import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
-import { FullSubscription } from '../types';
+import { Id, Subscription } from '../types';
 import { retryGo } from '../utils';
 
 export const checkSubscriptionCondition = async (
-  subscription: FullSubscription,
+  subscription: Id<Subscription>,
   apiValue: ethers.BigNumber,
   contract: ethers.Contract,
   voidSigner: ethers.VoidSigner

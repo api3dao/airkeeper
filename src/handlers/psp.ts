@@ -7,22 +7,24 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
-import { checkSubscriptionCondition } from '../evm/check-conditions';
 import { callApi } from '../api/call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
+import { checkSubscriptionCondition } from '../evm/check-conditions';
 import { initializeProvider } from '../evm/initialize-provider';
-import { processTransactions } from '../evm/process-transactions';
+import { processTransaction } from '../evm/process-transaction';
 import { getSponsorWalletAndTransactionCount } from '../evm/tansaction-count';
 import {
   ChainConfig,
+  CheckedSubscription,
   Config,
   EVMProviderState,
-  FullSubscription,
+  GroupedSubscriptions,
+  Id,
   ProviderState,
   SponsorWalletTransactionCount,
   SponsorWalletWithSubscriptions,
   State,
-  GroupedSubscriptions,
+  Subscription,
 } from '../types';
 import { retryGo } from '../utils';
 
@@ -57,7 +59,7 @@ const initializeState = (config: Config): State => {
     coordinatorId: node.utils.randomHexString(8),
   });
 
-  const enabledSubscriptions: FullSubscription[] = [];
+  const enabledSubscriptions: Id<Subscription>[] = [];
   triggers['proto-psp'].forEach((subscriptionId) => {
     // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
@@ -239,19 +241,19 @@ const initializeProviders = async (state: State): Promise<State> => {
   return { ...state, providerStates: validProviderStates };
 };
 
-async function checkSubscriptionsConditions(
-  subscriptions: FullSubscription[],
+const checkSubscriptionsConditions = async (
+  subscriptions: Id<Subscription>[],
   apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber },
   contract: ethers.Contract,
   voidSigner: ethers.VoidSigner,
   logOptions: node.LogOptions
-) {
-  const validSubscriptions: FullSubscription[] = [];
+) => {
+  const validSubscriptions: CheckedSubscription[] = [];
   const conditionPromises = subscriptions.map(
     (subscription) =>
       checkSubscriptionCondition(subscription, apiValuesBySubscriptionId[subscription.id], contract, voidSigner).then(
         ([logs, isValid]) => [logs, { subscription, isValid }]
-      ) as Promise<node.LogsData<{ subscription: FullSubscription; isValid: boolean }>>
+      ) as Promise<node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>>
   );
   const result = await Promise.all(conditionPromises);
   result.forEach(([log, data]) => {
@@ -272,15 +274,15 @@ async function checkSubscriptionsConditions(
   });
 
   return validSubscriptions;
-}
+};
 
-async function groupSubscriptionsBySponsorWallet(
-  subscriptionsBySponsor: Dictionary<FullSubscription[]>,
+const groupSubscriptionsBySponsorWallet = async (
+  subscriptionsBySponsor: Dictionary<CheckedSubscription[]>,
   config: Config,
   provider: ethers.providers.Provider,
   currentBlock: number,
   providerLogOptions: node.LogOptions
-): Promise<SponsorWalletWithSubscriptions[]> {
+): Promise<SponsorWalletWithSubscriptions[]> => {
   const sponsorWalletsWithSubscriptions: SponsorWalletWithSubscriptions[] = [];
   const sponsorAddresses = Object.keys(subscriptionsBySponsor);
   const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(
@@ -317,13 +319,15 @@ async function groupSubscriptionsBySponsorWallet(
   });
 
   return sponsorWalletsWithSubscriptions;
-}
+};
 
 const submitTransactions = async (state: State) => {
   const { config, baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
 
   const providerPromises = providerStates.map(async (providerState) => {
-    const { providerName, chainId, provider, contracts, voidSigner, currentBlock } = providerState;
+    const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
+      providerState;
+
     const providerLogOptions: node.LogOptions = {
       ...baseLogOptions,
       meta: {
@@ -363,9 +367,41 @@ const submitTransactions = async (state: State) => {
       providerLogOptions
     );
 
-    // Execute transactions
-    const logs = await processTransactions({ ...providerState, subscriptionsBySponsorWallets });
-    node.logger.logPending(logs as any, providerLogOptions);
+    // Process sponsor wallets in parallel
+    const sponsorWalletPromises = subscriptionsBySponsorWallets.map(async ({ subscriptions, sponsorWallet }) => {
+      const shortSponsorWalletAddress = sponsorWallet.address.replace(sponsorWallet.address.substring(5, 38), '...');
+
+      const sponsorWalletLogOptions: node.LogOptions = {
+        ...providerLogOptions,
+        additional: {
+          ...providerLogOptions.additional,
+          sponsorWallet: shortSponsorWalletAddress,
+        },
+      };
+
+      node.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
+
+      const logs = await processTransaction(
+        airnodeWallet,
+        contracts['DapiServer'],
+        gasTarget,
+        subscriptions,
+        sponsorWallet
+      );
+
+      logs.forEach(([logs, data]) => {
+        const subscriptionLogOptions: node.LogOptions = {
+          ...sponsorWalletLogOptions,
+          additional: {
+            ...sponsorWalletLogOptions.additional,
+            subscriptionId: data.id,
+          },
+        };
+        node.logger.logPending(logs, subscriptionLogOptions);
+      });
+    });
+
+    await Promise.all(sponsorWalletPromises);
   });
 
   await Promise.all(providerPromises);

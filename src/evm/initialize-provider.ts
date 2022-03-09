@@ -35,9 +35,7 @@ export const initializeProvider = async (
   }, {});
   const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
-  // **************************************************************************
   // Fetch current block number
-  // **************************************************************************
   const [errorGetBlockNumber, currentBlock] = await retryGo(() => provider.getBlockNumber());
   if (errorGetBlockNumber || isNil(currentBlock)) {
     const message = 'Failed to fetch the blockNumber';
@@ -47,9 +45,7 @@ export const initializeProvider = async (
   const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock}`;
   const currentBlockLog = node.logger.pend('DEBUG', currentBlockMessage);
 
-  // **************************************************************************
   // Fetch current gas fee data
-  // **************************************************************************
   const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
     provider,
     chainOptions: chain.options,
