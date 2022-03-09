@@ -61,7 +61,7 @@ const initializeState = (config: Config): State => {
 
   const enabledSubscriptions: FullSubscription[] = [];
   triggers['proto-psp'].forEach((subscriptionId) => {
-    // Fetch subscriptions details
+    // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
       node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
@@ -103,9 +103,8 @@ const initializeState = (config: Config): State => {
     node.logger.info('No proto-psp subscriptions to process', baseLogOptions);
   } else {
     const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
-    const templateIds = Object.keys(enabledSubscriptionsByTemplateId);
-    templateIds.forEach((templateId) => {
-      // Fetch template details
+    Object.keys(enabledSubscriptionsByTemplateId).forEach((templateId) => {
+      // Get template details
       const template = config.templates[templateId];
       if (isNil(template)) {
         node.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
@@ -121,7 +120,7 @@ const initializeState = (config: Config): State => {
         return;
       }
 
-      // Fetch endpoint details
+      // Get endpoint details
       const endpoint = config.endpoints[template.endpointId];
       if (isNil(endpoint)) {
         node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
@@ -139,9 +138,8 @@ const initializeState = (config: Config): State => {
         return;
       }
 
-      const subscriptions: FullSubscription[] = enabledSubscriptionsByTemplateId[templateId];
       groupedSubscriptions.push({
-        subscriptions,
+        subscriptions: enabledSubscriptionsByTemplateId[templateId],
         template: { ...template, id: templateId },
         endpoint: { ...endpoint, id: template.endpointId },
       });
@@ -270,7 +268,7 @@ async function checkSubscriptionsConditions(
 }
 
 async function groupSubscriptionsBySponsorWallet(
-  subscriptionsBySponsor: Dictionary<[FullSubscription, ...FullSubscription[]]>,
+  subscriptionsBySponsor: Dictionary<FullSubscription[]>,
   config: Config,
   provider: ethers.providers.Provider,
   currentBlock: number,
