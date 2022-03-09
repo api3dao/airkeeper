@@ -85,7 +85,6 @@ export interface LogsAndApiValuesByBeaconId {
 export interface BaseState {
   config: Config;
   baseLogOptions: node.LogOptions;
-  airnodeWallet: ethers.Wallet;
 }
 export interface State extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];
@@ -95,6 +94,7 @@ export interface State extends BaseState {
 
 export type ProviderState<T extends {}> = T &
   BaseState & {
+    airnodeWallet: ethers.Wallet;
     chainId: string;
     providerName: string;
   };

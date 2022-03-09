@@ -19,6 +19,8 @@ export const processTransactions = async (state: EVMProviderSponsorState): Promi
       ),
     ];
 
+    // TODO: sort subscriptions by nonce asc? 🤔
+
     // Process each subscription in serial to keep nonces in order
     for (const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, nonce, apiValue } of subscriptions || []) {
       // Encode API value

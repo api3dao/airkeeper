@@ -63,7 +63,7 @@ export const initializeProvider = async (
   const gasTargetLog = node.logger.pend('DEBUG', gasTargetMessage);
 
   return [
-    [...gasPriceLogs, currentBlockLog, gasTargetLog],
+    [currentBlockLog, ...gasPriceLogs, gasTargetLog],
     {
       provider,
       contracts,
