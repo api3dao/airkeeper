@@ -53,55 +53,64 @@ export const handler = async (_event: any = {}): Promise<any> => {
 };
 
 const initializeState = (config: Config): State => {
-  const { triggers, subscriptions } = config;
-
   const baseLogOptions = node.logger.buildBaseOptions(config, {
     coordinatorId: node.utils.randomHexString(8),
   });
 
-  const enabledSubscriptions: Id<Subscription>[] = [];
-  triggers['proto-psp'].forEach((subscriptionId) => {
-    // Get subscriptions details
-    const subscription = subscriptions[subscriptionId];
-    if (isNil(subscription)) {
-      node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
-      return;
-    }
-    // Verify subscriptionId
-    const expectedSubscriptionId = ethers.utils.solidityKeccak256(
-      ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-      [
-        subscription.chainId,
-        subscription.airnodeAddress,
-        subscription.templateId,
-        subscription.parameters,
-        subscription.conditions,
-        subscription.relayer,
-        subscription.sponsor,
-        subscription.requester,
-        subscription.fulfillFunctionId,
-      ]
-    );
-    if (subscriptionId !== expectedSubscriptionId) {
-      node.logger.warn(
-        `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
-        baseLogOptions
-      );
-      return;
-    }
-
-    enabledSubscriptions.push({
-      ...subscription,
+  const enabledSubscriptions = config.triggers['proto-psp']
+    .filter((subscriptionId) => config.subscriptions[subscriptionId])
+    .map((subscriptionId) => ({
+      ...config.subscriptions[subscriptionId],
       id: subscriptionId,
-    });
-  });
+    }))
+    .filter((subscription) => {
+      const subscriptionId = subscription.id;
+      // Get subscriptions details
+      if (isNil(subscription)) {
+        node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
+        return;
+      }
+      // Verify subscriptionId
+      const expectedSubscriptionId = ethers.utils.solidityKeccak256(
+        ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+        [
+          subscription.chainId,
+          subscription.airnodeAddress,
+          subscription.templateId,
+          subscription.parameters,
+          subscription.conditions,
+          subscription.relayer,
+          subscription.sponsor,
+          subscription.requester,
+          subscription.fulfillFunctionId,
+        ]
+      );
+      if (subscriptionId !== expectedSubscriptionId) {
+        node.logger.warn(
+          `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
+          baseLogOptions
+        );
+        return;
+      }
 
-  const groupedSubscriptions: GroupedSubscriptions[] = [];
+      return true;
+    });
+
   if (isEmpty(enabledSubscriptions)) {
     node.logger.info('No proto-psp subscriptions to process', baseLogOptions);
-  } else {
-    const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
-    Object.keys(enabledSubscriptionsByTemplateId).forEach((templateId) => {
+
+    return {
+      config,
+      baseLogOptions,
+      groupedSubscriptions: [],
+      apiValuesBySubscriptionId: {},
+      providerStates: [],
+    };
+  }
+
+  const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
+  const groupedSubscriptions = Object.keys(enabledSubscriptionsByTemplateId)
+    .map((templateId) => {
       // Get template details
       const template = config.templates[templateId];
       if (isNil(template)) {
@@ -136,13 +145,13 @@ const initializeState = (config: Config): State => {
         return;
       }
 
-      groupedSubscriptions.push({
+      return {
         subscriptions: enabledSubscriptionsByTemplateId[templateId],
         template: { ...template, id: templateId },
         endpoint: { ...endpoint, id: template.endpointId },
-      });
-    });
-  }
+      };
+    })
+    .filter((subscription) => subscription) as GroupedSubscriptions[];
 
   return {
     config,
