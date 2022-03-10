@@ -45,6 +45,7 @@ export const checkSubscriptionCondition = async (
     return [[log], false];
   }
   // The result will always be ethers.Result type even if solidity function retuns a single value
+  // because we are not calling contract.METHOD_NAME but contract.functions.METHOD_NAME instead
   // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
   if (!result[0]) {
     const message = 'Conditions not met. Skipping update...';

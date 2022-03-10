@@ -4,7 +4,7 @@ import { GAS_LIMIT } from '../constants';
 import { ProcessableSubscription } from '../types';
 import { retryGo } from '../utils';
 
-export const processTransaction = async (
+export const processSponsorWallet = async (
   airnodeWallet: ethers.Wallet,
   contract: ethers.Contract,
   gasTarget: node.GasTarget,

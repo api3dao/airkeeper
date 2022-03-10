@@ -1,12 +1,12 @@
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
-import { Config, SponsorWalletTransactionCount } from '../types';
+import { SponsorWalletTransactionCount } from '../types';
 import { retryGo } from '../utils';
 import { deriveSponsorWallet } from '../wallet';
 
 export const getSponsorWalletAndTransactionCount = async (
-  config: Config,
+  airnodeWallet: ethers.Wallet,
   provider: ethers.providers.Provider,
   currentBlock: number,
   sponsor: string
@@ -14,7 +14,7 @@ export const getSponsorWalletAndTransactionCount = async (
   // Derive sponsorWallet address
   // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
   const sponsorWallet = deriveSponsorWallet(
-    config.nodeSettings.airnodeWalletMnemonic,
+    airnodeWallet.mnemonic.phrase,
     sponsor,
     '2' // TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
   ).connect(provider);

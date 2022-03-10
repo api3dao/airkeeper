@@ -11,8 +11,8 @@ import { callApi } from '../api/call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
 import { checkSubscriptionCondition } from '../evm/check-conditions';
 import { initializeProvider } from '../evm/initialize-provider';
-import { processTransaction } from '../evm/process-transaction';
-import { getSponsorWalletAndTransactionCount } from '../evm/tansaction-count';
+import { processSponsorWallet } from '../evm/process-sponsor-wallet';
+import { getSponsorWalletAndTransactionCount } from '../evm/transaction-count';
 import {
   ChainConfig,
   CheckedSubscription,
@@ -230,7 +230,7 @@ const initializeProviders = async (state: State): Promise<State> => {
           chainId: chain.id,
           providerName,
           ...evmProviderState,
-        } as ProviderState<EVMProviderState>;
+        };
       })
     )
   );
@@ -278,7 +278,7 @@ const checkSubscriptionsConditions = async (
 
 const groupSubscriptionsBySponsorWallet = async (
   subscriptionsBySponsor: Dictionary<CheckedSubscription[]>,
-  config: Config,
+  airnodeWallet: ethers.Wallet,
   provider: ethers.providers.Provider,
   currentBlock: number,
   providerLogOptions: node.LogOptions
@@ -287,7 +287,7 @@ const groupSubscriptionsBySponsorWallet = async (
   const sponsorAddresses = Object.keys(subscriptionsBySponsor);
   const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(
     (sponsor) =>
-      getSponsorWalletAndTransactionCount(config, provider, currentBlock, sponsor).then(([logs, data]) => [
+      getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor).then(([logs, data]) => [
         logs,
         { ...data, sponsor },
       ]) as Promise<node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>>
@@ -322,7 +322,7 @@ const groupSubscriptionsBySponsorWallet = async (
 };
 
 const submitTransactions = async (state: State) => {
-  const { config, baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
+  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
 
   const providerPromises = providerStates.map(async (providerState) => {
     const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
@@ -361,7 +361,7 @@ const submitTransactions = async (state: State) => {
     // to subscriptions and group subscriptions by sponsor wallet
     const subscriptionsBySponsorWallets = await groupSubscriptionsBySponsorWallet(
       subscriptionsBySponsor,
-      config,
+      airnodeWallet,
       provider,
       currentBlock,
       providerLogOptions
@@ -381,7 +381,7 @@ const submitTransactions = async (state: State) => {
 
       node.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
 
-      const logs = await processTransaction(
+      const logs = await processSponsorWallet(
         airnodeWallet,
         contracts['DapiServer'],
         gasTarget,
