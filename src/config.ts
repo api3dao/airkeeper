@@ -4,7 +4,7 @@ import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
 import { Config } from './types';
-import { validateConfig, configSchema, Config as AirkeeperConfig } from './validator';
+import { validateConfig, configSchema, AirkeeperConfig } from './validator';
 
 const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
