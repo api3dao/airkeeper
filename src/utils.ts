@@ -3,6 +3,7 @@ import path from 'path';
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import { DEFAULT_RETRY_TIMEOUT_MS } from './constants';
+import { validateConfig, configSchema, Config } from './validator';
 
 const loadNodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
@@ -20,9 +21,16 @@ const loadNodeConfig = () => {
   return config;
 };
 
-const parseConfig = <T>(filename: string): T => {
-  const configPath = path.resolve(__dirname, '..', '..', 'config', `${filename}.json`);
-  return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+const loadAirkeeperConfig = (): Config => {
+  const configPath = path.resolve(__dirname, '..', '..', 'config', `airkeeper.json`);
+  const airkeeperConfig: Config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+  const validationOutput = validateConfig(configSchema, airkeeperConfig);
+  if (!validationOutput.success) {
+    throw new Error(`Invalid Airkeeper configuration file: ${JSON.stringify(validationOutput.error, null, 2)}`);
+  }
+
+  return validationOutput.data;
 };
 
 function deriveWalletPathFromSponsorAddress(sponsorAddress: string, protocolId: string) {
@@ -45,4 +53,4 @@ function deriveSponsorWallet(airnodeMnemonic: string, sponsorAddress: string, pr
 const retryGo = <T>(fn: () => Promise<T>, options?: node.utils.PromiseOptions) =>
   node.utils.go(() => node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, fn), options);
 
-export { loadNodeConfig, parseConfig, deriveSponsorWallet, retryGo };
+export { loadNodeConfig, loadAirkeeperConfig, deriveSponsorWallet, retryGo };

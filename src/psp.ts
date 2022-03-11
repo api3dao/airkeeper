@@ -9,8 +9,8 @@ import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { callApi } from './call-api';
 import { GAS_LIMIT } from './constants';
-import { ChainConfig, Config, Subscription } from './types';
-import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
+import { ChainConfig, Subscription } from './types';
+import { deriveSponsorWallet, loadNodeConfig, loadAirkeeperConfig, retryGo } from './utils';
 
 //TODO: where to get abi from?
 const dapiServerAbi = [
@@ -96,7 +96,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   const airnodeConfig = loadNodeConfig();
   // This file will be merged with config.json from above
-  const airkeeperConfig: Config = parseConfig('airkeeper');
+  const airkeeperConfig = loadAirkeeperConfig();
 
   const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
     coordinatorId: node.utils.randomHexString(8),

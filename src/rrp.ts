@@ -10,8 +10,8 @@ import map from 'lodash/map';
 import merge from 'lodash/merge';
 import { callApi } from './call-api';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from './constants';
-import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from './types';
-import { deriveSponsorWallet, loadNodeConfig, parseConfig, retryGo } from './utils';
+import { ChainConfig, LogsAndApiValuesByBeaconId } from './types';
+import { deriveSponsorWallet, loadNodeConfig, loadAirkeeperConfig, retryGo } from './utils';
 
 type ApiValueByBeaconId = {
   [beaconId: string]: ethers.BigNumber | null;
@@ -25,7 +25,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   const airnodeConfig = loadNodeConfig();
   // This file will be merged with config.json from above
-  const airkeeperConfig: Config = parseConfig('airkeeper');
+  const airkeeperConfig = loadAirkeeperConfig();
 
   const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
     coordinatorId: node.utils.randomHexString(8),
