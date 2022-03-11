@@ -37,7 +37,8 @@
     "@api3/airnode-protocol": "^0.4.0",
     "dotenv-safe": "^8.2.0",
     "ethers": "^5.5.2",
-    "lodash": "^4.17.21"
+    "lodash": "^4.17.21",
+    "zod": "^3.13.4"
   },
   "devDependencies": {
     "@types/dotenv-safe": "^8.1.2",
