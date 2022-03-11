@@ -7,23 +7,24 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
-import merge from 'lodash/merge';
-import { callApi } from './call-api';
-import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from './constants';
-import { ChainConfig, LogsAndApiValuesByBeaconId } from './types';
-import { deriveSponsorWallet, loadNodeConfig, loadAirkeeperConfig, retryGo } from './utils';
+import { callApi } from '../api/call-api';
+import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from '../constants';
+import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
+import { retryGo } from '../utils';
+import { deriveSponsorWallet } from '../wallet';
 
 type ApiValueByBeaconId = {
   [beaconId: string]: ethers.BigNumber | null;
 };
 
-export const beaconUpdate = async (_event: any = {}): Promise<any> => {
+export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  const airnodeConfig = loadNodeConfig();
+  const airnodeConfig = loadAirnodeConfig();
   // This file will be merged with config.json from above
   const airkeeperConfig = loadAirkeeperConfig();
 
@@ -32,21 +33,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   });
   node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const config = {
-    ...airnodeConfig,
-    chains: airkeeperConfig.chains.map((chain) => {
-      if (isNil(chain.id)) {
-        throw new Error(`Missing 'id' property in chain config: ${JSON.stringify(chain)}`);
-      }
-      const configChain = airnodeConfig.chains.find((c) => c.id === chain.id);
-      if (isNil(configChain)) {
-        throw new Error(`Chain id ${chain.id} not found in node config.json`);
-      }
-      return merge(configChain, chain);
-    }),
-    triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
-    endpoints: airkeeperConfig.endpoints,
-  };
+  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
   const { chains, triggers, ois: oises, apiCredentials, endpoints } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
@@ -132,7 +119,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
   node.logger.debug('processing chain providers...', baseLogOptions);
 
   const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
-  if (isEmpty(chains)) {
+  if (isEmpty(evmChains)) {
     throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
   }
   const providerPromises = flatMap(
@@ -158,7 +145,7 @@ export const beaconUpdate = async (_event: any = {}): Promise<any> => {
 
         const airnodeRrp = protocol.AirnodeRrpFactory.connect(chain.contracts.AirnodeRrp, provider);
 
-        const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(chain.contracts.RrpBeaconServer, provider);
+        const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(chain.contracts.RrpBeaconServer!, provider);
 
         // Fetch current block number from chain via provider
         const [err, currentBlock] = await retryGo(() => provider.getBlockNumber());

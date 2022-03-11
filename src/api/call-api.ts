@@ -3,8 +3,8 @@ import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
-import { CallApiOptions } from './types';
-import { retryGo } from './utils';
+import { CallApiOptions } from '../types';
+import { retryGo } from '../utils';
 
 export const callApi = async ({
   oises,
@@ -47,7 +47,7 @@ export const callApi = async ({
   // Call API
   const [errBuildAndExecuteRequest, apiResponse] = await retryGo(() => adapter.buildAndExecuteRequest(options));
   if (errBuildAndExecuteRequest || isNil(apiResponse) || isNil(apiResponse.data)) {
-    const message = `failed to fetch data from API for endpoint: ${endpointName}`;
+    const message = `Failed to fetch data from API for endpoint: ${endpointName}`;
     const log = node.logger.pend('ERROR', message, errBuildAndExecuteRequest);
     return [[log], null];
   }
@@ -66,7 +66,7 @@ export const callApi = async ({
 
     return [[logApiResponse, logApiValue], apiValue];
   } catch (error) {
-    const message = `failed to extract or encode value from API response: ${JSON.stringify(apiResponse.data)}`;
+    const message = `Failed to extract or encode value from API response: ${JSON.stringify(apiResponse.data)}`;
     const log = node.logger.pend('ERROR', message, error as any);
     return [[log], null];
   }
