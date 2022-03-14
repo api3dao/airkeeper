@@ -42,7 +42,7 @@ export const initializeProvider = async (
     return [[log], null];
   }
   const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock}`;
-  const currentBlockLog = node.logger.pend('DEBUG', currentBlockMessage);
+  const currentBlockLog = node.logger.pend('INFO', currentBlockMessage);
 
   // Fetch current gas fee data
   const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
@@ -55,7 +55,7 @@ export const initializeProvider = async (
     return [[log], null];
   }
   const gasTargetMessage = `Gas target for chainId ${chain.id}: ${JSON.stringify(gasTarget)}`;
-  const gasTargetLog = node.logger.pend('DEBUG', gasTargetMessage);
+  const gasTargetLog = node.logger.pend('INFO', gasTargetMessage);
 
   return [
     [currentBlockLog, ...gasPriceLogs, gasTargetLog],

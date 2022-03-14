@@ -2,11 +2,9 @@ import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import { Dictionary } from 'lodash';
-import flatMap from 'lodash/flatMap';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
-import map from 'lodash/map';
 import { callApi } from '../api/call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
 import { checkSubscriptionCondition } from '../evm/check-conditions';
@@ -14,7 +12,6 @@ import { initializeProvider } from '../evm/initialize-provider';
 import { processSponsorWallet } from '../evm/process-sponsor-wallet';
 import { getSponsorWalletAndTransactionCount } from '../evm/transaction-count';
 import {
-  ChainConfig,
   CheckedSubscription,
   Config,
   EVMProviderState,
@@ -27,6 +24,7 @@ import {
   Subscription,
 } from '../types';
 import { retryGo } from '../utils';
+import { shortenAddress } from '../wallet';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -201,38 +199,36 @@ const initializeProviders = async (state: State): Promise<State> => {
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
 
-  const evmChains = config.chains.filter((chain: ChainConfig) => chain.type === 'evm');
+  const evmChains = config.chains.filter((chain) => chain.type === 'evm');
   if (isEmpty(evmChains)) {
-    throw new Error('One or more evm compatible chain(s) must be defined in the provided config');
+    throw new Error('One or more evm compatible chains must be defined in the provided config');
   }
-  const providerPromises = flatMap(
-    evmChains.map((chain: ChainConfig) =>
-      map(chain.providers, async (chainProvider, providerName) => {
-        const providerLogOptions: node.LogOptions = {
-          ...baseLogOptions,
-          meta: {
-            ...baseLogOptions.meta,
-            chainId: chain.id,
-            providerName,
-          },
-        };
-
-        // Initialize provider specific data
-        const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
-        node.logger.logPending(logs, providerLogOptions);
-        if (isNil(evmProviderState)) {
-          node.logger.warn('Failed to initialize provider', providerLogOptions);
-          return null;
-        }
-
-        return {
-          airnodeWallet,
+  const providerPromises = evmChains.flatMap((chain) =>
+    Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
+      const providerLogOptions: node.LogOptions = {
+        ...baseLogOptions,
+        meta: {
+          ...baseLogOptions.meta,
           chainId: chain.id,
           providerName,
-          ...evmProviderState,
-        };
-      })
-    )
+        },
+      };
+
+      // Initialize provider specific data
+      const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
+      node.logger.logPending(logs, providerLogOptions);
+      if (isNil(evmProviderState)) {
+        node.logger.warn('Failed to initialize provider', providerLogOptions);
+        return null;
+      }
+
+      return {
+        airnodeWallet,
+        chainId: chain.id,
+        providerName,
+        ...evmProviderState,
+      };
+    })
   );
 
   const providerStates = await Promise.all(providerPromises);
@@ -338,7 +334,7 @@ const submitTransactions = async (state: State) => {
     };
 
     // Get subscriptions from template/endnpoint groups
-    const subscriptions = flatMap(groupedSubscriptions.map((s) => s.subscriptions));
+    const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
     // Filter subscription by chainId and doblue-check that subscription has an associated API value
     const chainSubscriptions = subscriptions.filter(
@@ -369,13 +365,11 @@ const submitTransactions = async (state: State) => {
 
     // Process sponsor wallets in parallel
     const sponsorWalletPromises = subscriptionsBySponsorWallets.map(async ({ subscriptions, sponsorWallet }) => {
-      const shortSponsorWalletAddress = sponsorWallet.address.replace(sponsorWallet.address.substring(5, 38), '...');
-
       const sponsorWalletLogOptions: node.LogOptions = {
         ...providerLogOptions,
         additional: {
           ...providerLogOptions.additional,
-          sponsorWallet: shortSponsorWalletAddress,
+          sponsorWallet: shortenAddress(sponsorWallet.address),
         },
       };
 
