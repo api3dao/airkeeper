@@ -24,8 +24,8 @@ import {
   SponsorWalletTransactionCount,
   SponsorWalletWithSubscriptions,
   State,
-  Subscription,
 } from '../types';
+import { Subscription } from '../validator';
 import { retryGo } from '../utils';
 
 export const handler = async (_event: any = {}): Promise<any> => {

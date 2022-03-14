@@ -46,16 +46,16 @@ describe('validator', () => {
 
   describe('validateConfig', () => {
     it('validates successfully', () => {
-      expect(() => validateConfig(configSchema, airkeeperConfig)).not.toThrow();
-      expect(validateConfig(configSchema, airkeeperConfig)).toEqual({ success: true, data: airkeeperConfig });
+      expect(() => validateConfig(airkeeperConfig)).not.toThrow();
+      expect(validateConfig(airkeeperConfig)).toEqual({ success: true, data: airkeeperConfig });
     });
 
     it('does not throw on missing field', () => {
       const { airnodeAddress, ...rest } = airkeeperConfig;
       expect(typeof airnodeAddress).toEqual('string');
 
-      expect(() => validateConfig(configSchema, rest)).not.toThrow();
-      expect(validateConfig(configSchema, rest)).toEqual({
+      expect(() => validateConfig(rest)).not.toThrow();
+      expect(validateConfig(rest)).toEqual({
         success: false,
         error: new ZodError([
           {
@@ -73,8 +73,8 @@ describe('validator', () => {
       const { airnodeAddress, ...rest } = airkeeperConfig;
       expect(typeof airnodeAddress).toEqual('string');
 
-      expect(() => validateConfig(configSchema, { airnodeAddress: 100 as any, ...rest })).not.toThrow();
-      expect(validateConfig(configSchema, { airnodeAddress: 100, ...rest })).toEqual({
+      expect(() => validateConfig({ airnodeAddress: 100 as any, ...rest })).not.toThrow();
+      expect(validateConfig({ airnodeAddress: 100, ...rest })).toEqual({
         success: false,
         error: new ZodError([
           {

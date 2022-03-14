@@ -50,15 +50,17 @@ export const chainContractsSchema = z.object({
   DapiServer: z.string(),
 });
 
-export const chainConfigSchema = z.object({
+export const chainSchema = z.object({
   id: z.string(),
   contracts: chainContractsSchema,
 });
 
+export const chainsSchema = z.array(chainSchema);
+
 export const configSchema = z.object({
   airnodeAddress: z.string(),
   airnodeXpub: z.string(),
-  chains: z.array(chainConfigSchema),
+  chains: chainsSchema,
   triggers: triggersSchema,
   subscriptions: subscriptionsSchema,
   templates: templatesSchema,
@@ -67,5 +69,15 @@ export const configSchema = z.object({
 
 export type SchemaType<Schema extends ZodFirstPartySchemaTypes> = z.infer<Schema>;
 export type AirkeeperConfig = SchemaType<typeof configSchema>;
+export type AirkeeperChainContracts = z.infer<typeof chainContractsSchema>;
+export type AirkeeperChainConfig = z.infer<typeof chainSchema>;
+export type Trigger = z.infer<typeof triggerSchema>;
+export type Triggers = z.infer<typeof triggersSchema>;
+export type Subscription = z.infer<typeof subscriptionSchema>;
+export type Subscriptions = z.infer<typeof subscriptionsSchema>;
+export type Template = z.infer<typeof templateSchema>;
+export type Templates = z.infer<typeof templatesSchema>;
+export type Endpoint = z.infer<typeof endpointSchema>;
+export type Endpoints = z.infer<typeof endpointsSchema>;
 
-export const validateConfig = (schema: ZodFirstPartySchemaTypes, config: AirkeeperConfig) => schema.safeParse(config);
+export const validateConfig = (config: AirkeeperConfig) => configSchema.safeParse(config);

@@ -4,7 +4,7 @@ import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
 import { Config } from './types';
-import { validateConfig, configSchema, AirkeeperConfig } from './validator';
+import { validateConfig, AirkeeperConfig } from './validator';
 
 const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
@@ -25,7 +25,7 @@ const loadAirkeeperConfig = (): AirkeeperConfig => {
   const configPath = path.resolve(__dirname, '..', '..', 'config', `airkeeper.json`);
   const airkeeperConfig: AirkeeperConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-  const validationOutput = validateConfig(configSchema, airkeeperConfig);
+  const validationOutput = validateConfig(airkeeperConfig);
   if (!validationOutput.success) {
     throw new Error(`Invalid Airkeeper configuration file: ${JSON.stringify(validationOutput.error, null, 2)}`);
   }
