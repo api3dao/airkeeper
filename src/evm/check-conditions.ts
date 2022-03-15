@@ -2,8 +2,9 @@ import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { Id, Subscription } from '../types';
 import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { Id } from '../types';
+import { Subscription } from '../validator';
 
 const decodeConditions = (conditions: string, contract: ethers.Contract) => {
   const decodedConditions = abi.decode(conditions);

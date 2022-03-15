@@ -3,7 +3,7 @@ import path from 'path';
 import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
-import { Config } from './types';
+import { validateConfig, AirkeeperConfig } from './validator';
 
 export const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
@@ -20,12 +20,19 @@ export const loadAirnodeConfig = () => {
   return config;
 };
 
-export const parseConfig = <T>(filename: string): T => {
-  const configPath = path.resolve(__dirname, '..', '..', 'config', `${filename}.json`);
-  return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+export const loadAirkeeperConfig = () => {
+  const configPath = path.resolve(__dirname, '..', '..', 'config', `airkeeper.json`);
+  const airkeeperConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+  const validationOutput = validateConfig(airkeeperConfig);
+  if (!validationOutput.success) {
+    throw new Error(`Invalid Airkeeper configuration file: ${JSON.stringify(validationOutput.error, null, 2)}`);
+  }
+
+  return validationOutput.data;
 };
 
-export const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Config): Config => {
+export const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: AirkeeperConfig) => {
   return {
     ...airnodeConfig,
     chains: airkeeperConfig.chains.map((chain) => {

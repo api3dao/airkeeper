@@ -7,7 +7,7 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import { callApi } from '../api/call-api';
-import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
+import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
 import { checkSubscriptionCondition } from '../evm/check-conditions';
 import { initializeProvider } from '../evm/initialize-provider';
 import { processSponsorWallet } from '../evm/process-sponsor-wallet';
@@ -22,9 +22,9 @@ import {
   SponsorWalletTransactionCount,
   SponsorWalletWithSubscriptions,
   State,
-  Subscription,
 } from '../types';
 import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
 
 export const handler = async (_event: any = {}): Promise<any> => {
@@ -32,7 +32,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const airnodeConfig = loadAirnodeConfig();
   // This file will be merged with config.json from above
-  const airkeeperConfig: Config = parseConfig('airkeeper');
+  const airkeeperConfig = loadAirkeeperConfig();
   const config = mergeConfigs(airnodeConfig, airkeeperConfig);
 
   const state = await updateBeacon(config);
@@ -59,7 +59,7 @@ const initializeState = (config: Config): State => {
   });
 
   const enabledSubscriptions: Id<Subscription>[] = [];
-  triggers['proto-psp'].forEach((subscriptionId) => {
+  triggers.protoPsp.forEach((subscriptionId) => {
     // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
@@ -97,7 +97,7 @@ const initializeState = (config: Config): State => {
 
   const groupedSubscriptions: GroupedSubscriptions[] = [];
   if (isEmpty(enabledSubscriptions)) {
-    node.logger.info('No proto-psp subscriptions to process', baseLogOptions);
+    node.logger.info('No proto-PSP subscriptions to process', baseLogOptions);
   } else {
     const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
     Object.keys(enabledSubscriptionsByTemplateId).forEach((templateId) => {
