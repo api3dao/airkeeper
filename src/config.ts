@@ -3,7 +3,6 @@ import path from 'path';
 import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
-import { Config } from './types';
 import { validateConfig, AirkeeperConfig } from './validator';
 
 export const loadAirnodeConfig = () => {
@@ -21,9 +20,9 @@ export const loadAirnodeConfig = () => {
   return config;
 };
 
-export const loadAirkeeperConfig = (): AirkeeperConfig => {
+export const loadAirkeeperConfig = () => {
   const configPath = path.resolve(__dirname, '..', '..', 'config', `airkeeper.json`);
-  const airkeeperConfig: AirkeeperConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const airkeeperConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
   const validationOutput = validateConfig(airkeeperConfig);
   if (!validationOutput.success) {
@@ -33,7 +32,7 @@ export const loadAirkeeperConfig = (): AirkeeperConfig => {
   return validationOutput.data;
 };
 
-export const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: AirkeeperConfig): Config => {
+export const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: AirkeeperConfig) => {
   return {
     ...airnodeConfig,
     chains: airkeeperConfig.chains.map((chain) => {

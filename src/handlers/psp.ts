@@ -96,7 +96,7 @@ const initializeState = (config: Config): State => {
 
   const groupedSubscriptions: GroupedSubscriptions[] = [];
   if (isEmpty(enabledSubscriptions)) {
-    node.logger.info('No protoPsp subscriptions to process', baseLogOptions);
+    node.logger.info('No proto-PSP subscriptions to process', baseLogOptions);
   } else {
     const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
     Object.keys(enabledSubscriptionsByTemplateId).forEach((templateId) => {
