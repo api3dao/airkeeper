@@ -12,7 +12,7 @@ import { callApi } from '../api/call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from '../types';
-import { deriveSponsorWallet } from '../wallet';
+import { deriveSponsorWallet, shortenAddress } from '../wallet';
 
 type ApiValueByBeaconId = {
   [beaconId: string]: ethers.BigNumber | null;
@@ -186,10 +186,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
           const keeperSponsorWalletLogOptions = {
             ...providerLogOptions,
             additional: {
-              keeperSponsorWallet: keeperSponsorWallet.address.replace(
-                keeperSponsorWallet.address.substring(5, 38),
-                '...'
-              ),
+              keeperSponsorWallet: shortenAddress(keeperSponsorWallet.address),
             },
           };
 

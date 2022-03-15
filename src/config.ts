@@ -5,7 +5,7 @@ import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
 import { Config } from './types';
 
-const loadAirnodeConfig = () => {
+export const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
   const nodeConfigPath = path.resolve(__dirname, '..', '..', 'config', `config.json`);
 
@@ -20,12 +20,12 @@ const loadAirnodeConfig = () => {
   return config;
 };
 
-const parseConfig = <T>(filename: string): T => {
+export const parseConfig = <T>(filename: string): T => {
   const configPath = path.resolve(__dirname, '..', '..', 'config', `${filename}.json`);
   return JSON.parse(fs.readFileSync(configPath, 'utf8'));
 };
 
-const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Config): Config => {
+export const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Config): Config => {
   return {
     ...airnodeConfig,
     chains: airkeeperConfig.chains.map((chain) => {
@@ -44,5 +44,3 @@ const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Config): Conf
     endpoints: airkeeperConfig.endpoints,
   };
 };
-
-export { loadAirnodeConfig, parseConfig, mergeConfigs };

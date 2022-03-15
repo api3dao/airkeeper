@@ -56,7 +56,7 @@ export const initializeProvider = async (
     return [[log], null];
   }
   const gasTargetMessage = `Gas target for chainId ${chain.id}: ${JSON.stringify(gasTarget)}`;
-  const gasTargetLog = node.logger.pend('DEBUG', gasTargetMessage);
+  const gasTargetLog = node.logger.pend('INFO', gasTargetMessage);
 
   return [
     [currentBlockLog, ...gasPriceLogs, gasTargetLog],

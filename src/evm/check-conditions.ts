@@ -5,6 +5,22 @@ import { ethers } from 'ethers';
 import { Id, Subscription } from '../types';
 import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 
+const decodeConditions = (conditions: string, contract: ethers.Contract) => {
+  const decodedConditions = abi.decode(conditions);
+  const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
+    ['bytes32'],
+    decodedConditions._conditionFunctionId
+  );
+  // TODO: is this really needed?
+  // Airnode ABI only supports bytes32 but
+  // function selector is '0x' plus 4 bytes and
+  // that is why we need to ignore the trailing zeros
+  return {
+    conditionFunction: contract.interface.getFunction(decodedConditionFunctionId.substring(0, 2 + 4 * 2)),
+    conditionParameters: decodedConditions._conditionParameters,
+  };
+};
+
 export const checkSubscriptionCondition = async (
   subscription: Id<Subscription>,
   apiValue: ethers.BigNumber,
@@ -15,17 +31,7 @@ export const checkSubscriptionCondition = async (
   let conditionFunction: ethers.utils.FunctionFragment;
   let conditionParameters: string;
   try {
-    const decodedConditions = abi.decode(subscription.conditions);
-    const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
-      ['bytes32'],
-      decodedConditions._conditionFunctionId
-    );
-    // TODO: is this really needed?
-    // Airnode ABI only supports bytes32 but
-    // function selector is '0x' plus 4 bytes and
-    // that is why we need to ignore the trailing zeros
-    conditionFunction = contract.interface.getFunction(decodedConditionFunctionId.substring(0, 2 + 4 * 2));
-    conditionParameters = decodedConditions._conditionParameters;
+    ({ conditionFunction, conditionParameters } = decodeConditions(subscription.conditions, contract));
   } catch (err) {
     const message = 'Failed to decode conditions';
     const log = node.logger.pend('ERROR', message, err as any);

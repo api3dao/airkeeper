@@ -3,8 +3,10 @@ import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { SponsorWalletTransactionCount } from '../types';
 import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { deriveSponsorWallet, shortenAddress } from '../wallet';
 
-import { deriveSponsorWallet } from '../wallet';
+// TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
+const pspProtocolId = '2';
 
 export const getSponsorWalletAndTransactionCount = async (
   airnodeWallet: ethers.Wallet,
@@ -14,11 +16,7 @@ export const getSponsorWalletAndTransactionCount = async (
 ): Promise<node.LogsData<SponsorWalletTransactionCount | null>> => {
   // Derive sponsorWallet address
   // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
-  const sponsorWallet = deriveSponsorWallet(
-    airnodeWallet.mnemonic.phrase,
-    sponsor,
-    '2' // TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
-  ).connect(provider);
+  const sponsorWallet = deriveSponsorWallet(airnodeWallet.mnemonic.phrase, sponsor, pspProtocolId).connect(provider);
 
   // Fetch sponsorWallet transaction count
   const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlock), {
@@ -30,10 +28,7 @@ export const getSponsorWalletAndTransactionCount = async (
     return [[log], null];
   }
 
-  const message = `Sponsor wallet ${sponsorWallet.address.replace(
-    sponsorWallet.address.substring(5, 38),
-    '...'
-  )} transaction count: ${transactionCount}`;
+  const message = `Sponsor wallet ${shortenAddress(sponsorWallet.address)} transaction count: ${transactionCount.data}`;
   const log = node.logger.pend('INFO', message);
   return [[log], { sponsorWallet, transactionCount: transactionCount.data }];
 };
