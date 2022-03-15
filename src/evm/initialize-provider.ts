@@ -1,6 +1,5 @@
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
-import { LogsData } from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
 import { ChainConfig, EVMProviderState } from '../types';
@@ -11,7 +10,7 @@ const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFa
 );
 
 //TODO: where to get abi from?
-const dapiServerAbi = [
+export const dapiServerAbi = [
   'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
   'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
 ];
@@ -24,7 +23,7 @@ const abis: { [contractName: string]: string | string[] } = {
 export const initializeProvider = async (
   chain: ChainConfig,
   providerUrl: string
-): Promise<LogsData<EVMProviderState | null>> => {
+): Promise<node.LogsData<EVMProviderState | null>> => {
   const provider = node.evm.buildEVMProvider(providerUrl, chain.id);
 
   const contracts = Object.entries(chain.contracts).reduce((acc, [contractName, contractAddress]) => {
@@ -43,7 +42,7 @@ export const initializeProvider = async (
     return [[log], null];
   }
   const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock}`;
-  const currentBlockLog = node.logger.pend('DEBUG', currentBlockMessage);
+  const currentBlockLog = node.logger.pend('INFO', currentBlockMessage);
 
   // Fetch current gas fee data
   const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
@@ -56,7 +55,7 @@ export const initializeProvider = async (
     return [[log], null];
   }
   const gasTargetMessage = `Gas target for chainId ${chain.id}: ${JSON.stringify(gasTarget)}`;
-  const gasTargetLog = node.logger.pend('DEBUG', gasTargetMessage);
+  const gasTargetLog = node.logger.pend('INFO', gasTargetMessage);
 
   return [
     [currentBlockLog, ...gasPriceLogs, gasTargetLog],

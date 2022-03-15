@@ -6,6 +6,22 @@ import { Id } from '../types';
 import { Subscription } from '../validator';
 import { retryGo } from '../utils';
 
+const decodeConditions = (conditions: string, contract: ethers.Contract) => {
+  const decodedConditions = abi.decode(conditions);
+  const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
+    ['bytes32'],
+    decodedConditions._conditionFunctionId
+  );
+  // TODO: is this really needed?
+  // Airnode ABI only supports bytes32 but
+  // function selector is '0x' plus 4 bytes and
+  // that is why we need to ignore the trailing zeros
+  return {
+    conditionFunction: contract.interface.getFunction(decodedConditionFunctionId.substring(0, 2 + 4 * 2)),
+    conditionParameters: decodedConditions._conditionParameters,
+  };
+};
+
 export const checkSubscriptionCondition = async (
   subscription: Id<Subscription>,
   apiValue: ethers.BigNumber,
@@ -16,17 +32,7 @@ export const checkSubscriptionCondition = async (
   let conditionFunction: ethers.utils.FunctionFragment;
   let conditionParameters: string;
   try {
-    const decodedConditions = abi.decode(subscription.conditions);
-    const [decodedConditionFunctionId] = ethers.utils.defaultAbiCoder.decode(
-      ['bytes32'],
-      decodedConditions._conditionFunctionId
-    );
-    // TODO: is this really needed?
-    // Airnode ABI only supports bytes32 but
-    // function selector is '0x' plus 4 bytes and
-    // that is why we need to ignore the trailing zeros
-    conditionFunction = contract.interface.getFunction(decodedConditionFunctionId.substring(0, 2 + 4 * 2));
-    conditionParameters = decodedConditions._conditionParameters;
+    ({ conditionFunction, conditionParameters } = decodeConditions(subscription.conditions, contract));
   } catch (err) {
     const message = 'Failed to decode conditions';
     const log = node.logger.pend('ERROR', message, err as any);
@@ -46,6 +52,7 @@ export const checkSubscriptionCondition = async (
     return [[log], false];
   }
   // The result will always be ethers.Result type even if solidity function retuns a single value
+  // because we are not calling contract.METHOD_NAME but contract.functions.METHOD_NAME instead
   // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
   if (!result[0]) {
     const message = 'Conditions not met. Skipping update...';

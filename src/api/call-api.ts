@@ -15,10 +15,7 @@ export const callApi = async ({
 }: CallApiOptions): Promise<node.LogsData<ethers.BigNumber | null>> => {
   const configOis = oises.find((o) => o.title === oisTitle)!;
   const configEndpoint = configOis.endpoints.find((e) => e.name === endpointName)!;
-  const reservedParameters = node.adapters.http.parameters.getReservedParameters(
-    configEndpoint,
-    apiCallParameters || {}
-  );
+  const reservedParameters = node.adapters.http.parameters.getReservedParameters(configEndpoint, apiCallParameters);
   if (!reservedParameters._type) {
     const message = `reserved parameter '_type' is missing for endpoint: ${endpointName}`;
     const log = node.logger.pend('ERROR', message);
@@ -26,10 +23,7 @@ export const callApi = async ({
   }
 
   // Remove reserved parameters
-  const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(
-    apiCallParameters || {},
-    ois.RESERVED_PARAMETERS
-  );
+  const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(apiCallParameters, ois.RESERVED_PARAMETERS);
 
   // Remove oisTitle from credentials
   const adapterApiCredentials = apiCredentials

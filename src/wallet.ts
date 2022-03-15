@@ -10,11 +10,10 @@ const deriveWalletPathFromSponsorAddress = (sponsorAddress: string, protocolId: 
   return `${protocolId}/${paths.join('/')}`;
 };
 
-const deriveSponsorWallet = (airnodeMnemonic: string, sponsorAddress: string, protocolId: string) => {
-  return ethers.Wallet.fromMnemonic(
+export const deriveSponsorWallet = (airnodeMnemonic: string, sponsorAddress: string, protocolId: string) =>
+  ethers.Wallet.fromMnemonic(
     airnodeMnemonic,
     `m/44'/60'/0'/${deriveWalletPathFromSponsorAddress(sponsorAddress, protocolId)}`
   );
-};
 
-export { deriveSponsorWallet };
+export const shortenAddress = (address: string) => address.replace(address.substring(5, 38), '...');
