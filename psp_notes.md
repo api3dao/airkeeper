@@ -55,7 +55,7 @@ https://github.com/api3dao/airnode/blob/v1-protocol/packages/airnode-node/src/ev
 
 5. The Airnode makes the API call specified by the template and the additional parameters
 
-Probably current [call-api-ts](https://github.com/api3dao/airkeeper/blob/main/src/call-api.ts) in Airkeeper can be
+Probably current [call-api.ts](https://github.com/api3dao/airkeeper/blob/main/src/api/call-api.ts) in Airkeeper can be
 re-used for this step.
 
 6. Using the response from the API, the Airnode checks if the condition specified in the `conditions` field of the
