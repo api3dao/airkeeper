@@ -137,7 +137,7 @@ describe('callApi', () => {
 
     const apiResponse = { success: true, result: '723.392028' };
     spy.mockResolvedValueOnce({
-      data: apiResponse,
+      ...apiResponse,
     });
 
     const [logs, res] = await callApi(callApiOptions);
@@ -246,7 +246,7 @@ describe('callApi', () => {
     const buildAndExecuteRequestSpy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
     const apiResponse = { success: true, result: '723.392028' };
     buildAndExecuteRequestSpy.mockResolvedValueOnce({
-      data: apiResponse,
+      ...apiResponse,
     });
 
     const extractAndEncodeResponseSpy = jest.spyOn(adapter, 'extractAndEncodeResponse');
