@@ -218,7 +218,7 @@ describe('callApi', () => {
         {
           error,
           level: 'ERROR',
-          message: expect.stringMatching('failed to fetch data from API for endpoint: convertToUSD'),
+          message: expect.stringMatching('Failed to fetch data from API for endpoint: convertToUSD'),
         },
       ])
     );
@@ -263,7 +263,7 @@ describe('callApi', () => {
         {
           error,
           level: 'ERROR',
-          message: `failed to extract or encode value from API response: ${JSON.stringify(apiResponse)}`,
+          message: `Failed to extract or encode value from API response: ${JSON.stringify(apiResponse)}`,
         },
       ])
     );

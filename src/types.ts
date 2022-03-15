@@ -16,8 +16,8 @@ export interface ChainOptions {
 
 export interface ChainConfig extends node.ChainConfig {
   readonly contracts: node.ChainContracts & {
-    readonly RrpBeaconServer: string;
-    readonly DapiServer: string;
+    readonly RrpBeaconServer?: string;
+    readonly DapiServer?: string;
   };
   readonly options: ChainOptions;
 }
@@ -80,4 +80,57 @@ export interface LogsAndApiValuesByBeaconId {
     logs: node.PendingLog[];
     apiValue: ethers.BigNumber | null;
   };
+}
+
+export interface BaseState {
+  config: Config;
+  baseLogOptions: node.LogOptions;
+}
+export interface State extends BaseState {
+  groupedSubscriptions: GroupedSubscriptions[];
+  apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber };
+  providerStates: ProviderState<EVMProviderState>[];
+}
+
+export type ProviderState<T extends {}> = T &
+  BaseState & {
+    airnodeWallet: ethers.Wallet;
+    chainId: string;
+    providerName: string;
+  };
+
+export interface EVMProviderState {
+  provider: ethers.providers.Provider;
+  contracts: { [name: string]: ethers.Contract };
+  voidSigner: ethers.VoidSigner;
+  currentBlock: number;
+  gasTarget: node.GasTarget;
+}
+
+export type Id<T> = T & {
+  id: string;
+};
+
+export interface GroupedSubscriptions {
+  subscriptions: Id<Subscription>[];
+  template: Id<Template>;
+  endpoint: Id<Endpoint>;
+}
+
+export interface CheckedSubscription extends Id<Subscription> {
+  apiValue: ethers.BigNumber;
+}
+
+export interface ProcessableSubscription extends CheckedSubscription {
+  nonce: number;
+}
+
+export interface SponsorWalletTransactionCount {
+  sponsorWallet: ethers.Wallet;
+  transactionCount: number;
+}
+
+export interface SponsorWalletWithSubscriptions {
+  subscriptions: ProcessableSubscription[];
+  sponsorWallet: ethers.Wallet;
 }

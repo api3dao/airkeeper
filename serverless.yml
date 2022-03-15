@@ -1,14 +1,11 @@
 service: airkeeper
 
-variablesResolutionMode: 20210326
-
 provider:
   name: aws
   # region: ${opt:region}
   # stage: ${opt:stage}
   runtime: nodejs14.x
   memorySize: 512
-  lambdaHashingVersion: 20201221
   logRetentionInDays: 14
   environment: ${file(load-secrets-env.js)}
 
@@ -18,12 +15,12 @@ package:
 
 functions:
   rrp-beacon-update:
-    handler: dist/src/rrp.beaconUpdate
+    handler: dist/src/handlers/rrp.handler
     timeout: 60
     events:
       - schedule: rate(1 minute)
   psp-beacon-update:
-    handler: dist/src/psp.beaconUpdate
+    handler: dist/src/handlers/psp.handler
     timeout: 60
     events:
       - schedule: rate(1 minute)
