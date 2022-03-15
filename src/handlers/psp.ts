@@ -58,7 +58,7 @@ const initializeState = (config: Config): State => {
   });
 
   const enabledSubscriptions: Id<Subscription>[] = [];
-  triggers['proto-psp'].forEach((subscriptionId) => {
+  triggers.protoPsp.forEach((subscriptionId) => {
     // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
@@ -96,7 +96,7 @@ const initializeState = (config: Config): State => {
 
   const groupedSubscriptions: GroupedSubscriptions[] = [];
   if (isEmpty(enabledSubscriptions)) {
-    node.logger.info('No proto-psp subscriptions to process', baseLogOptions);
+    node.logger.info('No protoPsp subscriptions to process', baseLogOptions);
   } else {
     const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
     Object.keys(enabledSubscriptionsByTemplateId).forEach((templateId) => {

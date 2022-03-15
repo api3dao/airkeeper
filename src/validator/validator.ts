@@ -14,7 +14,7 @@ export const triggerSchema = z.object({
 
 export const triggersSchema = z.object({
   rrpBeaconServerKeeperJobs: z.array(triggerSchema),
-  'proto-psp': z.array(z.string()),
+  protoPsp: z.array(z.string()),
 });
 
 export const subscriptionSchema = z.object({
