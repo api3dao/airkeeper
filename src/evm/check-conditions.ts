@@ -2,7 +2,8 @@ import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
-import { Id, Subscription } from '../types';
+import { Id } from '../types';
+import { Subscription } from '../validator';
 import { retryGo } from '../utils';
 
 const decodeConditions = (conditions: string, contract: ethers.Contract) => {

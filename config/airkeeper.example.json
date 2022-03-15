@@ -28,7 +28,7 @@
         "requestSponsor": "0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec"
       }
     ],
-    "proto-psp": ["0x168194af62ab1b621eff3be1df9646f198dcef36f9eace0474fd19d47b2e0039"]
+    "protoPsp": ["0x168194af62ab1b621eff3be1df9646f198dcef36f9eace0474fd19d47b2e0039"]
   },
   "subscriptions": {
     "0x168194af62ab1b621eff3be1df9646f198dcef36f9eace0474fd19d47b2e0039": {

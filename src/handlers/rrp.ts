@@ -8,9 +8,9 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
-import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
+import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from '../constants';
-import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from '../types';
+import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
 import { retryGo } from '../utils';
 import { deriveSponsorWallet, shortenAddress } from '../wallet';
 
@@ -26,7 +26,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   const airnodeConfig = loadAirnodeConfig();
   // This file will be merged with config.json from above
-  const airkeeperConfig: Config = parseConfig('airkeeper');
+  const airkeeperConfig = loadAirkeeperConfig();
 
   const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
     coordinatorId: node.utils.randomHexString(8),
