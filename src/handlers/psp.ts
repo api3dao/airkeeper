@@ -1,5 +1,6 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { Dictionary } from 'lodash';
 import flatMap from 'lodash/flatMap';
@@ -26,7 +27,7 @@ import {
   State,
   Subscription,
 } from '../types';
-import { retryGo } from '../utils';
+import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -166,20 +167,22 @@ const executeApiCalls = async (state: State): Promise<State> => {
       },
     };
     const apiCallParameters = abi.decode(template.templateParameters);
-    const [errorCallApi, logsData] = await retryGo(() =>
-      callApi({
-        oises: config.ois,
-        apiCredentials: config.apiCredentials,
-        apiCallParameters,
-        oisTitle: endpoint.oisTitle,
-        endpointName: endpoint.endpointName,
-      })
+    const logsData = await go(
+      () =>
+        callApi({
+          oises: config.ois,
+          apiCredentials: config.apiCredentials,
+          apiCallParameters,
+          oisTitle: endpoint.oisTitle,
+          endpointName: endpoint.endpointName,
+        }),
+      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
     );
-    if (!isNil(errorCallApi) || isNil(logsData)) {
+    if (!logsData.success) {
       node.logger.warn('Failed to fecth API value', templateLogOptions);
       continue;
     }
-    const [logs, apiValue] = logsData;
+    const [logs, apiValue] = logsData.data;
     node.logger.logPending(logs, templateLogOptions);
 
     if (isNil(apiValue)) {

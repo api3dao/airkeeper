@@ -1,8 +1,9 @@
 import * as node from '@api3/airnode-node';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import isNil from 'lodash/isNil';
 import { SponsorWalletTransactionCount } from '../types';
-import { retryGo } from '../utils';
+import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+
 import { deriveSponsorWallet } from '../wallet';
 
 export const getSponsorWalletAndTransactionCount = async (
@@ -20,12 +21,12 @@ export const getSponsorWalletAndTransactionCount = async (
   ).connect(provider);
 
   // Fetch sponsorWallet transaction count
-  const [errorGetTransactionCount, transactionCount] = await retryGo(() =>
-    provider.getTransactionCount(sponsorWallet.address, currentBlock)
-  );
-  if (errorGetTransactionCount || isNil(transactionCount)) {
+  const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlock), {
+    timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+  });
+  if (!transactionCount.success) {
     const message = 'Failed to fetch the sponsor wallet transaction count';
-    const log = node.logger.pend('ERROR', message, errorGetTransactionCount);
+    const log = node.logger.pend('ERROR', message, transactionCount.error);
     return [[log], null];
   }
 
@@ -33,6 +34,6 @@ export const getSponsorWalletAndTransactionCount = async (
     sponsorWallet.address.substring(5, 38),
     '...'
   )} transaction count: ${transactionCount}`;
-  const log = node.logger.pend('INFO', message, errorGetTransactionCount);
-  return [[log], { sponsorWallet, transactionCount }];
+  const log = node.logger.pend('INFO', message);
+  return [[log], { sponsorWallet, transactionCount: transactionCount.data }];
 };

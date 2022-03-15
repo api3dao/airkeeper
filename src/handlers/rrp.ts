@@ -1,6 +1,7 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import flatMap from 'lodash/flatMap';
 import groupBy from 'lodash/groupBy';
@@ -9,9 +10,8 @@ import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
 import { loadAirnodeConfig, mergeConfigs, parseConfig } from '../config';
-import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from '../constants';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 import { ChainConfig, Config, LogsAndApiValuesByBeaconId } from '../types';
-import { retryGo } from '../utils';
 import { deriveSponsorWallet } from '../wallet';
 
 type ApiValueByBeaconId = {
@@ -53,54 +53,57 @@ export const handler = async (_event: any = {}): Promise<any> => {
   node.logger.debug('making API requests...', baseLogOptions);
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
-    retryGo(() => {
-      const { oisTitle, endpointName } = endpoints[endpointId];
+    go(
+      () => {
+        const { oisTitle, endpointName } = endpoints[endpointId];
 
-      const encodedParameters = abi.encode(templateParameters);
-      const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
+        const encodedParameters = abi.encode(templateParameters);
+        const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
 
-      // Verify endpointId
-      const expectedEndpointId = ethers.utils.keccak256(
-        ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
-      );
-      if (expectedEndpointId !== endpointId) {
-        const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
-        const log = node.logger.pend('ERROR', message);
-        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
-      }
+        // Verify endpointId
+        const expectedEndpointId = ethers.utils.keccak256(
+          ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
+        );
+        if (expectedEndpointId !== endpointId) {
+          const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
+          const log = node.logger.pend('ERROR', message);
+          return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
+        }
 
-      // Verify templateId
-      const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
-        airnodeAddress,
-        endpointId: expectedEndpointId,
-        encodedParameters,
-        id: templateId,
-      });
-      if (expectedTemplateId !== templateId) {
-        const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
-        const log = node.logger.pend('ERROR', message);
-        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
-      }
+        // Verify templateId
+        const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
+          airnodeAddress,
+          endpointId: expectedEndpointId,
+          encodedParameters,
+          id: templateId,
+        });
+        if (expectedTemplateId !== templateId) {
+          const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
+          const log = node.logger.pend('ERROR', message);
+          return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
+        }
 
-      const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+        const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
 
-      return callApi({
-        oises,
-        apiCredentials,
-        apiCallParameters,
-        oisTitle,
-        endpointName,
-      }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
-    })
+        return callApi({
+          oises,
+          apiCredentials,
+          apiCallParameters,
+          oisTitle,
+          endpointName,
+        }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
+      },
+      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+    )
   );
   const responses = await Promise.all(apiValuePromises);
 
   // Group logs and API values by beaconId
-  const logsAndApiValuesByBeaconId: LogsAndApiValuesByBeaconId = responses.reduce((acc, [, logsData]) => {
-    if (isNil(logsData)) {
+  const logsAndApiValuesByBeaconId: LogsAndApiValuesByBeaconId = responses.reduce((acc, logsData) => {
+    if (!logsData.success || !logsData.data) {
       return acc;
     }
-    const [logs, data] = logsData;
+    const [logs, data] = logsData.data;
     const [beaconId] = Object.keys(data);
     return { ...acc, ...{ [beaconId]: { logs, apiValue: data[beaconId] } } };
   }, {});
@@ -148,11 +151,13 @@ export const handler = async (_event: any = {}): Promise<any> => {
         const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(chain.contracts.RrpBeaconServer!, provider);
 
         // Fetch current block number from chain via provider
-        const [err, currentBlock] = await retryGo(() => provider.getBlockNumber());
-        if (err || isNil(currentBlock)) {
+        const currentBlock = await go(() => provider.getBlockNumber(), {
+          timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+        });
+        if (!currentBlock.success) {
           node.logger.error('failed to fetch the blockNumber', {
             ...providerLogOptions,
-            error: err,
+            error: currentBlock.error,
           });
           return;
         }
@@ -193,17 +198,18 @@ export const handler = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           node.logger.debug('fetching transaction count...', keeperSponsorWalletLogOptions);
 
-          const [err, keeperSponsorWalletTransactionCount] = await retryGo(() =>
-            provider.getTransactionCount(keeperSponsorWallet.address, currentBlock)
+          const keeperSponsorWalletTransactionCount = await go(
+            () => provider.getTransactionCount(keeperSponsorWallet.address, currentBlock.data),
+            { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
           );
-          if (err || isNil(keeperSponsorWalletTransactionCount)) {
+          if (!keeperSponsorWalletTransactionCount.success) {
             node.logger.error('failed to fetch the keeperSponsorWallet transaction count', {
               ...keeperSponsorWalletLogOptions,
-              error: err,
+              error: keeperSponsorWalletTransactionCount.error,
             });
             return;
           }
-          let nextNonce = keeperSponsorWalletTransactionCount;
+          let nextNonce = keeperSponsorWalletTransactionCount.data;
 
           // **************************************************************************
           // 3.2.3 Process each rrpBeaconServerKeeperJob in serial to keep nonces in order
@@ -281,30 +287,30 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
             // address(0) is considered whitelisted
             const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
-            const [errReadBeacon, beaconResponse] = await retryGo(() =>
-              rrpBeaconServer.connect(voidSigner).readBeacon(beaconId)
-            );
-            if (errReadBeacon || isNil(beaconResponse) || isNil(beaconResponse.value)) {
+            const beaconResponse = await go(() => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId), {
+              timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+            });
+            if (!beaconResponse.success) {
               node.logger.error(`failed to read value for beaconId: ${beaconId}`, {
                 ...beaconIdLogOptions,
-                error: errReadBeacon,
+                error: beaconResponse.error,
               });
               continue;
             }
-            node.logger.info(`beacon server value: ${beaconResponse.value.toString()}`, beaconIdLogOptions);
+            node.logger.info(`beacon server value: ${beaconResponse.data.value.toString()}`, beaconIdLogOptions);
 
             // **************************************************************************
             // 3.2.3.6 Calculate deviation
             // **************************************************************************
             node.logger.debug('calculating deviation...', beaconIdLogOptions);
 
-            let beaconValue = beaconResponse.value;
+            let beaconValue = beaconResponse.data.value;
             const delta = beaconValue.sub(apiValue!).abs();
             if (delta.eq(0)) {
               node.logger.warn('beacon is up-to-date. skipping update', beaconIdLogOptions);
               continue;
             }
-            beaconValue = beaconResponse.value.isZero() ? ethers.constants.One : beaconResponse.value;
+            beaconValue = beaconResponse.data.value.isZero() ? ethers.constants.One : beaconResponse.data.value;
             const basisPoints = ethers.utils.parseUnits('1', 16);
             const deviation = delta.mul(basisPoints).mul(100).div(beaconValue);
             node.logger.info(`deviation (%): ${ethers.utils.formatUnits(deviation, 16)}`, beaconIdLogOptions);
@@ -340,47 +346,50 @@ export const handler = async (_event: any = {}): Promise<any> => {
               requestSponsor,
               keeperSponsorWallet.address
             );
-            const [errRequestedBeaconUpdateFilter, requestedBeaconUpdateEvents] = await retryGo(() =>
-              rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter, blockHistoryLimit * -1, currentBlock)
+            const requestedBeaconUpdateEvents = await go(
+              () => rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter, blockHistoryLimit * -1, currentBlock.data),
+              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
             );
-            if (errRequestedBeaconUpdateFilter || isNil(requestedBeaconUpdateEvents)) {
+            if (!requestedBeaconUpdateEvents.success) {
               node.logger.error('failed to fetch RequestedBeaconUpdate events', {
                 ...beaconIdLogOptions,
-                error: errRequestedBeaconUpdateFilter,
+                error: requestedBeaconUpdateEvents.error,
               });
               continue;
             }
 
             // Fetch UpdatedBeacon events by beaconId
             const updatedBeaconFilter = rrpBeaconServer.filters.UpdatedBeacon(beaconId);
-            const [errUpdatedBeaconFilter, updatedBeaconEvents] = await retryGo(() =>
-              rrpBeaconServer.queryFilter(updatedBeaconFilter, blockHistoryLimit * -1, currentBlock)
+            const updatedBeaconEvents = await go(
+              () => rrpBeaconServer.queryFilter(updatedBeaconFilter, blockHistoryLimit * -1, currentBlock.data),
+              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
             );
-            if (errUpdatedBeaconFilter || isNil(updatedBeaconEvents)) {
+            if (!updatedBeaconEvents.success) {
               node.logger.error('failed to fetch UpdatedBeacon events', {
                 ...beaconIdLogOptions,
-                error: errUpdatedBeaconFilter,
+                error: updatedBeaconEvents.error,
               });
               continue;
             }
 
             // Match these events by requestId and unmatched events are the ones that are still waiting to be fulfilled
-            const [pendingRequestedBeaconUpdateEvent] = requestedBeaconUpdateEvents.filter(
-              (rbue) => !updatedBeaconEvents.some((ub) => rbue.args!['requestId'] === ub.args!['requestId'])
+            const [pendingRequestedBeaconUpdateEvent] = requestedBeaconUpdateEvents.data.filter(
+              (rbue) => !updatedBeaconEvents.data.some((ub) => rbue.args!['requestId'] === ub.args!['requestId'])
             );
             if (!isNil(pendingRequestedBeaconUpdateEvent)) {
               // Check if RequestedBeaconUpdate event is awaiting fulfillment by calling AirnodeRrp.requestIsAwaitingFulfillment with requestId and check if beacon value is fresh enough and skip if it is
-              const [errRequestIsAwaitingFulfillment, requestIsAwaitingFulfillment] = await retryGo(() =>
-                airnodeRrp.requestIsAwaitingFulfillment(pendingRequestedBeaconUpdateEvent.args!['requestId'])
+              const requestIsAwaitingFulfillment = await go(
+                () => airnodeRrp.requestIsAwaitingFulfillment(pendingRequestedBeaconUpdateEvent.args!['requestId']),
+                { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
               );
-              if (errRequestIsAwaitingFulfillment) {
+              if (!requestIsAwaitingFulfillment.success) {
                 node.logger.error('failed to check if request is awaiting fulfillment', {
                   ...beaconIdLogOptions,
-                  error: errRequestIsAwaitingFulfillment,
+                  error: requestIsAwaitingFulfillment.error,
                 });
                 continue;
               }
-              if (requestIsAwaitingFulfillment) {
+              if (requestIsAwaitingFulfillment.data) {
                 node.logger.warn('request is awaiting fulfillment. skipping update', beaconIdLogOptions);
                 continue;
               }
@@ -420,28 +429,30 @@ export const handler = async (_event: any = {}): Promise<any> => {
               ...gasTarget,
               nonce,
             };
-            const [errRequestBeaconUpdate, tx] = await retryGo(() =>
-              rrpBeaconServer
-                .connect(keeperSponsorWallet)
-                .requestBeaconUpdate(
-                  templateId,
-                  requestSponsor,
-                  requestSponsorWallet.address,
-                  encodedParameters,
-                  overrides
-                )
+            const tx = await go(
+              () =>
+                rrpBeaconServer
+                  .connect(keeperSponsorWallet)
+                  .requestBeaconUpdate(
+                    templateId,
+                    requestSponsor,
+                    requestSponsorWallet.address,
+                    encodedParameters,
+                    overrides
+                  ),
+              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
             );
-            if (errRequestBeaconUpdate) {
+            if (!tx.success) {
               node.logger.error(
                 `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${nonce}. skipping update`,
                 {
                   ...beaconIdLogOptions,
-                  error: errRequestBeaconUpdate,
+                  error: tx.error,
                 }
               );
               continue;
             }
-            node.logger.info(`beacon update tx submitted: ${tx?.hash}`, beaconIdLogOptions);
+            node.logger.info(`beacon update tx submitted: ${tx.data.hash}`, beaconIdLogOptions);
           }
         });
 

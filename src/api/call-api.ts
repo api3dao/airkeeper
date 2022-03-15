@@ -1,10 +1,10 @@
 import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import isNil from 'lodash/isNil';
 import { CallApiOptions } from '../types';
-import { retryGo } from '../utils';
+import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 
 export const callApi = async ({
   oises,
@@ -39,10 +39,12 @@ export const callApi = async ({
   };
 
   // Call API
-  const [errBuildAndExecuteRequest, apiResponse] = await retryGo(() => adapter.buildAndExecuteRequest(options));
-  if (errBuildAndExecuteRequest || isNil(apiResponse) || isNil(apiResponse.data)) {
+  const apiResponse = await go(() => adapter.buildAndExecuteRequest(options), {
+    timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+  });
+  if (!apiResponse.success) {
     const message = `Failed to fetch data from API for endpoint: ${endpointName}`;
-    const log = node.logger.pend('ERROR', message, errBuildAndExecuteRequest);
+    const log = node.logger.pend('ERROR', message, apiResponse.error);
     return [[log], null];
   }
   const messageApiResponse = `API server response data: ${JSON.stringify(apiResponse.data)}`;

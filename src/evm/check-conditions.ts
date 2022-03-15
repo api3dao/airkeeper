@@ -1,9 +1,9 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import isNil from 'lodash/isNil';
 import { Id, Subscription } from '../types';
-import { retryGo } from '../utils';
+import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 
 export const checkSubscriptionCondition = async (
   subscription: Id<Subscription>,
@@ -34,20 +34,24 @@ export const checkSubscriptionCondition = async (
 
   // TODO: Should we also include the condition contract address to be called in subscription.conditions
   //       and connect to that contract instead of dapiServer contract to call the conditionFunction?
-  const [errorConditionFunction, result] = await retryGo(() =>
-    contract
-      .connect(voidSigner)
-      .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters)
+  const result = await go(
+    () =>
+      contract
+        .connect(voidSigner)
+        .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters),
+    {
+      timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+    }
   );
-  if (errorConditionFunction || isNil(result)) {
+  if (!result.success) {
     const message = 'Failed to check conditions';
-    const log = node.logger.pend('ERROR', message, errorConditionFunction);
+    const log = node.logger.pend('ERROR', message, result.error);
     return [[log], false];
   }
   // The result will always be ethers.Result type even if solidity function retuns a single value
   // because we are not calling contract.METHOD_NAME but contract.functions.METHOD_NAME instead
   // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
-  if (!result[0]) {
+  if (!result.data[0]) {
     const message = 'Conditions not met. Skipping update...';
     const log = node.logger.pend('WARN', message);
     return [[log], false];
