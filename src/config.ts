@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
-import merge from 'lodash/merge';
 import { Config } from './types';
 
 const loadAirnodeConfig = () => {
@@ -36,7 +35,7 @@ const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Config): Conf
       if (isNil(configChain)) {
         throw new Error(`Chain id ${chain.id} not found in node config.json`);
       }
-      return merge(configChain, chain);
+      return {...configChain, ...chain, contracts: {...configChain.contracts, ...chain.contracts}};
     }),
     triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
     subscriptions: airkeeperConfig.subscriptions,

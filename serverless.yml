@@ -2,28 +2,47 @@ service: airkeeper
 
 variablesResolutionMode: 20210326
 
+plugins:
+  - serverless-plugin-typescript
+
 provider:
   name: aws
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+        - lambda:InvokeAsync
+      Resource: "*"
   # region: ${opt:region}
   # stage: ${opt:stage}
+  region: us-east-1
+  stage: benchmark
   runtime: nodejs14.x
   memorySize: 512
   lambdaHashingVersion: 20201221
   logRetentionInDays: 14
-  environment: ${file(load-secrets-env.js)}
+#  environment: ${file(load-secrets-env.js)}
 
 package:
   patterns:
     - 'config/*.json'
 
 functions:
-  rrp-beacon-update:
-    handler: dist/src/handlers/rrp.handler
-    timeout: 60
-    events:
-      - schedule: rate(1 minute)
-  psp-beacon-update:
-    handler: dist/src/handlers/psp.handler
-    timeout: 60
-    events:
-      - schedule: rate(1 minute)
+#  rrp-beacon-update:
+#    handler: dist/src/handlers/rrp.handler
+#    timeout: 60
+#    events:
+#      - schedule: rate(1 minute)
+#  psp-beacon-update:
+#    handler: dist/src/handlers/psp.handler
+#    timeout: 60
+#    events:
+#      - schedule: rate(1 minute)
+  compute:
+    handler: src/handlers/compute.handler
+    timeout: 120
+    memorySize: 768
+  roundtrip:
+    handler: src/handlers/echo_lambda.handler
+    timeout: 120
+    memorySize: 768
