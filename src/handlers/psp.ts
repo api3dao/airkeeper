@@ -57,13 +57,12 @@ const initializeState = (config: Config): State => {
     coordinatorId: node.utils.randomHexString(8),
   });
 
-  const enabledSubscriptions: Id<Subscription>[] = [];
-  triggers.protoPsp.forEach((subscriptionId) => {
+  const enabledSubscriptions = triggers.protoPsp.reduce((acc: Id<Subscription>[], subscriptionId) => {
     // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
       node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
-      return;
+      return acc;
     }
     // Verify subscriptionId
     const expectedSubscriptionId = ethers.utils.solidityKeccak256(
@@ -85,26 +84,30 @@ const initializeState = (config: Config): State => {
         `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
         baseLogOptions
       );
-      return;
+      return acc;
     }
 
-    enabledSubscriptions.push({
-      ...subscription,
-      id: subscriptionId,
-    });
-  });
+    return [
+      ...acc,
+      {
+        ...subscription,
+        id: subscriptionId,
+      },
+    ];
+  }, []);
 
-  const groupedSubscriptions: GroupedSubscriptions[] = [];
   if (isEmpty(enabledSubscriptions)) {
     node.logger.info('No proto-PSP subscriptions to process', baseLogOptions);
-  } else {
-    const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
-    Object.keys(enabledSubscriptionsByTemplateId).forEach((templateId) => {
+  }
+
+  const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
+  const groupedSubscriptions = Object.keys(enabledSubscriptionsByTemplateId).reduce(
+    (acc: GroupedSubscriptions[], templateId) => {
       // Get template details
       const template = config.templates[templateId];
       if (isNil(template)) {
         node.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
-        return;
+        return acc;
       }
       // Verify templateId
       const expectedTemplateId = ethers.utils.solidityKeccak256(
@@ -113,14 +116,14 @@ const initializeState = (config: Config): State => {
       );
       if (expectedTemplateId !== templateId) {
         node.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
-        return;
+        return acc;
       }
 
       // Get endpoint details
       const endpoint = config.endpoints[template.endpointId];
       if (isNil(endpoint)) {
         node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
-        return;
+        return acc;
       }
       // Verify endpointId
       const expectedEndpointId = ethers.utils.keccak256(
@@ -131,16 +134,20 @@ const initializeState = (config: Config): State => {
           `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
           baseLogOptions
         );
-        return;
+        return acc;
       }
 
-      groupedSubscriptions.push({
-        subscriptions: enabledSubscriptionsByTemplateId[templateId],
-        template: { ...template, id: templateId },
-        endpoint: { ...endpoint, id: template.endpointId },
-      });
-    });
-  }
+      return [
+        ...acc,
+        {
+          subscriptions: enabledSubscriptionsByTemplateId[templateId],
+          template: { ...template, id: templateId },
+          endpoint: { ...endpoint, id: template.endpointId },
+        },
+      ];
+    },
+    []
+  );
 
   return {
     config,
