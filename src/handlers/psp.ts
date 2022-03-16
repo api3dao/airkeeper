@@ -244,7 +244,6 @@ const checkSubscriptionsConditions = async (
   voidSigner: ethers.VoidSigner,
   logOptions: node.LogOptions
 ) => {
-  const validSubscriptions: CheckedSubscription[] = [];
   const conditionPromises = subscriptions.map(
     (subscription) =>
       checkSubscriptionCondition(subscription, apiValuesBySubscriptionId[subscription.id], contract, voidSigner).then(
@@ -252,7 +251,7 @@ const checkSubscriptionsConditions = async (
       ) as Promise<node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>>
   );
   const result = await Promise.all(conditionPromises);
-  result.forEach(([log, data]) => {
+  const validSubscriptions = result.reduce((acc: CheckedSubscription[], [log, data]) => {
     const subscriptionLogOptions: node.LogOptions = {
       ...logOptions,
       additional: {
@@ -262,12 +261,16 @@ const checkSubscriptionsConditions = async (
     };
     node.logger.logPending(log, subscriptionLogOptions);
     if (data.isValid) {
-      validSubscriptions.push({
-        ...data.subscription,
-        apiValue: apiValuesBySubscriptionId[data.subscription.id],
-      });
+      return [
+        ...acc,
+        {
+          ...data.subscription,
+          apiValue: apiValuesBySubscriptionId[data.subscription.id],
+        },
+      ];
     }
-  });
+    return acc;
+  }, []);
 
   return validSubscriptions;
 };
@@ -279,7 +282,6 @@ const groupSubscriptionsBySponsorWallet = async (
   currentBlock: number,
   providerLogOptions: node.LogOptions
 ): Promise<SponsorWalletWithSubscriptions[]> => {
-  const sponsorWalletsWithSubscriptions: SponsorWalletWithSubscriptions[] = [];
   const sponsorAddresses = Object.keys(subscriptionsBySponsor);
   const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(
     (sponsor) =>
@@ -289,30 +291,36 @@ const groupSubscriptionsBySponsorWallet = async (
       ]) as Promise<node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>>
   );
   const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
-  sponsorWalletsAndTransactionCounts.forEach(([logs, data]) => {
-    const sponsorLogOptions: node.LogOptions = {
-      ...providerLogOptions,
-      additional: {
-        ...providerLogOptions.additional,
-        sponsor: data.sponsor,
-      },
-    };
-    node.logger.logPending(logs, sponsorLogOptions);
+  const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
+    (acc: SponsorWalletWithSubscriptions[], [logs, data]) => {
+      const sponsorLogOptions: node.LogOptions = {
+        ...providerLogOptions,
+        additional: {
+          ...providerLogOptions.additional,
+          sponsor: data.sponsor,
+        },
+      };
+      node.logger.logPending(logs, sponsorLogOptions);
 
-    if (isNil(data.sponsorWallet) || isNil(data.transactionCount)) {
-      node.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
-      return;
-    }
+      if (isNil(data.sponsorWallet) || isNil(data.transactionCount)) {
+        node.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
+        return acc;
+      }
 
-    let nextNonce = data.transactionCount;
-    sponsorWalletsWithSubscriptions.push({
-      subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription) => ({
-        ...subscription,
-        nonce: nextNonce++,
-      })),
-      sponsorWallet: data.sponsorWallet,
-    });
-  });
+      let nextNonce = data.transactionCount;
+      return [
+        ...acc,
+        {
+          subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription) => ({
+            ...subscription,
+            nonce: nextNonce++,
+          })),
+          sponsorWallet: data.sponsorWallet,
+        },
+      ];
+    },
+    []
+  );
 
   return sponsorWalletsWithSubscriptions;
 };
