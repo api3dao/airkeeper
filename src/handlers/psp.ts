@@ -6,7 +6,7 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import { callApi } from '../api/call-api';
-import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
+import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { checkSubscriptionCondition } from '../evm/check-conditions';
 import { initializeProvider } from '../evm/initialize-provider';
 import { processSponsorWallet } from '../evm/process-sponsor-wallet';
@@ -22,8 +22,8 @@ import {
   SponsorWalletWithSubscriptions,
   State,
 } from '../types';
-import { Subscription } from '../validator';
 import { retryGo } from '../utils';
+import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
 
 export const handler = async (_event: any = {}): Promise<any> => {
@@ -299,7 +299,7 @@ const groupSubscriptionsBySponsorWallet = async (
   );
   const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
   const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
-    (acc: SponsorWalletWithSubscriptions[], [logs, data], idx) => {
+    (acc: SponsorWalletWithSubscriptions[], [logs, data]) => {
       const sponsorLogOptions: node.LogOptions = {
         ...providerLogOptions,
         additional: {
@@ -317,9 +317,9 @@ const groupSubscriptionsBySponsorWallet = async (
       return [
         ...acc,
         {
-          subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription) => ({
+          subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription, idx) => ({
             ...subscription,
-            nonce: data.transactionCount + idx + 1,
+            nonce: data.transactionCount + idx,
           })),
           sponsorWallet: data.sponsorWallet,
         },
