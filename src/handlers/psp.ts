@@ -57,13 +57,12 @@ const initializeState = (config: Config): State => {
     coordinatorId: node.utils.randomHexString(8),
   });
 
-  const enabledSubscriptions: Id<Subscription>[] = [];
-  triggers.protoPsp.forEach((subscriptionId) => {
+  const enabledSubscriptions = triggers.protoPsp.reduce((acc: Id<Subscription>[], subscriptionId) => {
     // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
       node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
-      return;
+      return acc;
     }
     // Verify subscriptionId
     const expectedSubscriptionId = ethers.utils.solidityKeccak256(
@@ -85,26 +84,30 @@ const initializeState = (config: Config): State => {
         `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
         baseLogOptions
       );
-      return;
+      return acc;
     }
 
-    enabledSubscriptions.push({
-      ...subscription,
-      id: subscriptionId,
-    });
-  });
+    return [
+      ...acc,
+      {
+        ...subscription,
+        id: subscriptionId,
+      },
+    ];
+  }, []);
 
-  const groupedSubscriptions: GroupedSubscriptions[] = [];
   if (isEmpty(enabledSubscriptions)) {
     node.logger.info('No proto-PSP subscriptions to process', baseLogOptions);
-  } else {
-    const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
-    Object.keys(enabledSubscriptionsByTemplateId).forEach((templateId) => {
+  }
+
+  const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
+  const groupedSubscriptions = Object.keys(enabledSubscriptionsByTemplateId).reduce(
+    (acc: GroupedSubscriptions[], templateId) => {
       // Get template details
       const template = config.templates[templateId];
       if (isNil(template)) {
         node.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
-        return;
+        return acc;
       }
       // Verify templateId
       const expectedTemplateId = ethers.utils.solidityKeccak256(
@@ -113,14 +116,14 @@ const initializeState = (config: Config): State => {
       );
       if (expectedTemplateId !== templateId) {
         node.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
-        return;
+        return acc;
       }
 
       // Get endpoint details
       const endpoint = config.endpoints[template.endpointId];
       if (isNil(endpoint)) {
         node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
-        return;
+        return acc;
       }
       // Verify endpointId
       const expectedEndpointId = ethers.utils.keccak256(
@@ -131,16 +134,20 @@ const initializeState = (config: Config): State => {
           `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
           baseLogOptions
         );
-        return;
+        return acc;
       }
 
-      groupedSubscriptions.push({
-        subscriptions: enabledSubscriptionsByTemplateId[templateId],
-        template: { ...template, id: templateId },
-        endpoint: { ...endpoint, id: template.endpointId },
-      });
-    });
-  }
+      return [
+        ...acc,
+        {
+          subscriptions: enabledSubscriptionsByTemplateId[templateId],
+          template: { ...template, id: templateId },
+          endpoint: { ...endpoint, id: template.endpointId },
+        },
+      ];
+    },
+    []
+  );
 
   return {
     config,
@@ -244,7 +251,6 @@ const checkSubscriptionsConditions = async (
   voidSigner: ethers.VoidSigner,
   logOptions: node.LogOptions
 ) => {
-  const validSubscriptions: CheckedSubscription[] = [];
   const conditionPromises = subscriptions.map(
     (subscription) =>
       checkSubscriptionCondition(subscription, apiValuesBySubscriptionId[subscription.id], contract, voidSigner).then(
@@ -252,7 +258,7 @@ const checkSubscriptionsConditions = async (
       ) as Promise<node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>>
   );
   const result = await Promise.all(conditionPromises);
-  result.forEach(([log, data]) => {
+  const validSubscriptions = result.reduce((acc: CheckedSubscription[], [log, data]) => {
     const subscriptionLogOptions: node.LogOptions = {
       ...logOptions,
       additional: {
@@ -262,12 +268,16 @@ const checkSubscriptionsConditions = async (
     };
     node.logger.logPending(log, subscriptionLogOptions);
     if (data.isValid) {
-      validSubscriptions.push({
-        ...data.subscription,
-        apiValue: apiValuesBySubscriptionId[data.subscription.id],
-      });
+      return [
+        ...acc,
+        {
+          ...data.subscription,
+          apiValue: apiValuesBySubscriptionId[data.subscription.id],
+        },
+      ];
     }
-  });
+    return acc;
+  }, []);
 
   return validSubscriptions;
 };
@@ -279,7 +289,6 @@ const groupSubscriptionsBySponsorWallet = async (
   currentBlock: number,
   providerLogOptions: node.LogOptions
 ): Promise<SponsorWalletWithSubscriptions[]> => {
-  const sponsorWalletsWithSubscriptions: SponsorWalletWithSubscriptions[] = [];
   const sponsorAddresses = Object.keys(subscriptionsBySponsor);
   const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(
     (sponsor) =>
@@ -289,30 +298,35 @@ const groupSubscriptionsBySponsorWallet = async (
       ]) as Promise<node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>>
   );
   const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
-  sponsorWalletsAndTransactionCounts.forEach(([logs, data]) => {
-    const sponsorLogOptions: node.LogOptions = {
-      ...providerLogOptions,
-      additional: {
-        ...providerLogOptions.additional,
-        sponsor: data.sponsor,
-      },
-    };
-    node.logger.logPending(logs, sponsorLogOptions);
+  const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
+    (acc: SponsorWalletWithSubscriptions[], [logs, data], idx) => {
+      const sponsorLogOptions: node.LogOptions = {
+        ...providerLogOptions,
+        additional: {
+          ...providerLogOptions.additional,
+          sponsor: data.sponsor,
+        },
+      };
+      node.logger.logPending(logs, sponsorLogOptions);
 
-    if (isNil(data.sponsorWallet) || isNil(data.transactionCount)) {
-      node.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
-      return;
-    }
+      if (isNil(data.sponsorWallet) || isNil(data.transactionCount)) {
+        node.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
+        return acc;
+      }
 
-    let nextNonce = data.transactionCount;
-    sponsorWalletsWithSubscriptions.push({
-      subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription) => ({
-        ...subscription,
-        nonce: nextNonce++,
-      })),
-      sponsorWallet: data.sponsorWallet,
-    });
-  });
+      return [
+        ...acc,
+        {
+          subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription) => ({
+            ...subscription,
+            nonce: data.transactionCount + idx + 1,
+          })),
+          sponsorWallet: data.sponsorWallet,
+        },
+      ];
+    },
+    []
+  );
 
   return sponsorWalletsWithSubscriptions;
 };
