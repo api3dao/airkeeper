@@ -2,15 +2,16 @@ import * as node from '@api3/airnode-node';
 import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 import {
-  Triggers,
+  AirkeeperChainConfig,
+  AirkeeperChainContracts,
+  Endpoint,
+  Endpoints,
   Subscription,
   Subscriptions,
   Template,
   Templates,
-  Endpoint,
-  Endpoints,
-  AirkeeperChainContracts,
-  AirkeeperChainConfig,
+  Trigger,
+  Triggers,
 } from './validator';
 
 export interface PriorityFee {
@@ -58,10 +59,17 @@ export interface BaseState {
   config: Config;
   baseLogOptions: node.LogOptions;
 }
-export interface State extends BaseState {
+
+export type State<T extends PspState | RrpState> = T & {
+  providerStates: ProviderState<EVMProviderState>[];
+};
+
+export interface PspState extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];
   apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber };
-  providerStates: ProviderState<EVMProviderState>[];
+}
+export interface RrpState extends BaseState {
+  verifiedRrpBeaconServerKeeperJobs: Id<RrpTrigger>[];
 }
 
 export type ProviderState<T extends {}> = T &
@@ -105,4 +113,9 @@ export interface SponsorWalletTransactionCount {
 export interface SponsorWalletWithSubscriptions {
   subscriptions: ProcessableSubscription[];
   sponsorWallet: ethers.Wallet;
+}
+
+export interface RrpTrigger {
+  rrpBeaconServerKeeperJob: Trigger;
+  endpoint: Id<Endpoint>;
 }

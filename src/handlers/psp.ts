@@ -6,7 +6,7 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import { callApi } from '../api/call-api';
-import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
+import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { checkSubscriptionCondition } from '../evm/check-conditions';
 import { initializeProvider } from '../evm/initialize-provider';
 import { processSponsorWallet } from '../evm/process-sponsor-wallet';
@@ -18,12 +18,13 @@ import {
   GroupedSubscriptions,
   Id,
   ProviderState,
+  PspState,
   SponsorWalletTransactionCount,
   SponsorWalletWithSubscriptions,
   State,
 } from '../types';
-import { Subscription } from '../validator';
 import { retryGo } from '../utils';
+import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
 
 export const handler = async (_event: any = {}): Promise<any> => {
@@ -50,7 +51,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   return { statusCode: 200, body: JSON.stringify(response) };
 };
 
-const initializeState = (config: Config): State => {
+const initializeState = (config: Config): State<PspState> => {
   const { triggers, subscriptions } = config;
 
   const baseLogOptions = node.logger.buildBaseOptions(config, {
@@ -158,7 +159,7 @@ const initializeState = (config: Config): State => {
   };
 };
 
-const executeApiCalls = async (state: State): Promise<State> => {
+const executeApiCalls = async (state: State<PspState>): Promise<State<PspState>> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
   // TODO: promise.all? 🤔
@@ -201,7 +202,7 @@ const executeApiCalls = async (state: State): Promise<State> => {
   return { ...state, apiValuesBySubscriptionId };
 };
 
-const initializeProviders = async (state: State): Promise<State> => {
+const initializeProviders = async (state: State<PspState>): Promise<State<PspState>> => {
   const { config, baseLogOptions } = state;
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
@@ -331,7 +332,7 @@ const groupSubscriptionsBySponsorWallet = async (
   return sponsorWalletsWithSubscriptions;
 };
 
-const submitTransactions = async (state: State) => {
+const submitTransactions = async (state: State<PspState>) => {
   const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
 
   const providerPromises = providerStates.map(async (providerState) => {
@@ -419,7 +420,7 @@ const updateBeacon = async (config: Config) => {
   // =================================================================
   // STEP 1: Initialize state
   // =================================================================
-  let state: State = initializeState(config);
+  let state = initializeState(config);
   node.logger.debug('Initial state created...', state.baseLogOptions);
 
   // **************************************************************************

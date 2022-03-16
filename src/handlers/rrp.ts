@@ -8,10 +8,11 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
-import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
+import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT } from '../constants';
-import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
+import { ChainConfig, Config, Id, LogsAndApiValuesByBeaconId, RrpState, RrpTrigger, State } from '../types';
 import { retryGo } from '../utils';
+import { Endpoint, Trigger } from '../validator';
 import { deriveSponsorWallet, shortenAddress } from '../wallet';
 
 type ApiValueByBeaconId = {
@@ -21,42 +22,51 @@ type ApiValueByBeaconId = {
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
-  // **************************************************************************
-  // 1. Load config
-  // **************************************************************************
   const airnodeConfig = loadAirnodeConfig();
   // This file will be merged with config.json from above
   const airkeeperConfig = loadAirkeeperConfig();
-
-  const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
-    coordinatorId: node.utils.randomHexString(8),
-  });
-  node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
-
   const config = mergeConfigs(airnodeConfig, airkeeperConfig);
-  const { chains, triggers, ois: oises, apiCredentials, endpoints } = config;
+
+  const state = await updateBeacon(config);
+
+  const completedAt = new Date();
+  const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
+  node.logger.info(
+    `RRP beacon update finished at ${node.utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
+    state.baseLogOptions
+  );
+
+  const response = {
+    ok: true,
+    data: { message: 'RRP beacon update execution has finished' },
+  };
+  return { statusCode: 200, body: JSON.stringify(response) };
+};
+
+const initializeState = (config: Config): State<RrpState> => {
+  const { triggers, endpoints } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
   const airnodeAddress = (
-    airkeeperConfig.airnodeXpub
-      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.airnodeXpub).derivePath('0/0')
+    config.airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(config.airnodeXpub).derivePath('0/0')
       : airnodeHDNode.derivePath(ethers.utils.defaultPath)
   ).address;
-
-  if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
+  if (config.airnodeAddress && config.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
 
-  // **************************************************************************
-  // 2. Read and cache API values
-  // **************************************************************************
-  node.logger.debug('making API requests...', baseLogOptions);
+  const baseLogOptions = node.logger.buildBaseOptions(config, {
+    coordinatorId: node.utils.randomHexString(8),
+  });
 
-  const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
-    retryGo(() => {
+  const verifiedRrpBeaconServerKeeperJobs = triggers.rrpBeaconServerKeeperJobs.reduce(
+    (acc: Id<RrpTrigger>[], rrpBeaconServerKeeperJob: Trigger) => {
+      const { templateId, templateParameters, endpointId } = rrpBeaconServerKeeperJob;
       const { oisTitle, endpointName } = endpoints[endpointId];
 
       const encodedParameters = abi.encode(templateParameters);
+
       const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
 
       // Verify endpointId
@@ -64,9 +74,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
         ethers.utils.defaultAbiCoder.encode(['string', 'string'], [oisTitle, endpointName])
       );
       if (expectedEndpointId !== endpointId) {
-        const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
-        const log = node.logger.pend('ERROR', message);
-        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
+        node.logger.warn(`EndpointId ${endpointId} does not match expected ${expectedEndpointId}`, baseLogOptions);
+        return acc;
       }
 
       // Verify templateId
@@ -77,21 +86,60 @@ export const handler = async (_event: any = {}): Promise<any> => {
         id: templateId,
       });
       if (expectedTemplateId !== templateId) {
-        const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
-        const log = node.logger.pend('ERROR', message);
-        return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
+        node.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
+        return acc;
       }
 
-      const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+      const endpoint: Id<Endpoint> = { id: endpointId, oisTitle, endpointName };
 
-      return callApi({
-        oises,
-        apiCredentials,
-        apiCallParameters,
-        oisTitle,
-        endpointName,
-      }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
-    })
+      const rrpTrigger: Id<RrpTrigger> = {
+        id: beaconId,
+        rrpBeaconServerKeeperJob,
+        endpoint,
+      };
+
+      return [...acc, rrpTrigger];
+    },
+    []
+  );
+
+  return {
+    config,
+    baseLogOptions,
+    verifiedRrpBeaconServerKeeperJobs,
+    providerStates: [],
+  };
+};
+
+const updateBeacon = async (config: Config): Promise<State<RrpState>> => {
+  // =================================================================
+  // STEP 1: Initialize state
+  // =================================================================
+  const state = initializeState(config);
+  node.logger.debug('Initial state created...', state.baseLogOptions);
+
+  const { /*config,*/ baseLogOptions, verifiedRrpBeaconServerKeeperJobs } = state;
+  const { chains, triggers, ois: oises, apiCredentials } = config;
+  // **************************************************************************
+  // 2. Read and cache API values
+  // **************************************************************************
+  node.logger.debug('making API requests...', baseLogOptions);
+
+  const apiValuePromises = verifiedRrpBeaconServerKeeperJobs.map(
+    ({ id: beaconId, rrpBeaconServerKeeperJob: { templateParameters }, endpoint: { oisTitle, endpointName } }) => {
+      return retryGo(async () => {
+        const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
+
+        const [logs, data] = await callApi({
+          oises,
+          apiCredentials,
+          apiCallParameters,
+          oisTitle,
+          endpointName,
+        });
+        return [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>;
+      });
+    }
   );
   const responses = await Promise.all(apiValuePromises);
 
@@ -410,6 +458,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
              * 2. Request sponsor should then call setUpdatePermissionStatus(keeperSponsorWallet.address, true) to allow requester to update beacon
              */
 
+            // TODO: revist this to see if we can just derive sponsor wallet address instead of wallet
+            const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
             const requestSponsorWallet = node.evm.deriveSponsorWallet(airnodeHDNode, requestSponsor);
             const nonce = nextNonce++;
             const overrides = {
@@ -449,16 +499,5 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   await Promise.all(providerPromises);
 
-  const completedAt = new Date();
-  const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  node.logger.info(
-    `Airkeeper finished at ${node.utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
-    baseLogOptions
-  );
-
-  const response = {
-    ok: true,
-    data: { message: 'Airkeeper invocation has finished' },
-  };
-  return { statusCode: 200, body: JSON.stringify(response) };
+  return state;
 };
