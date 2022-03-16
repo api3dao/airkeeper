@@ -114,7 +114,7 @@ Follow these steps to run Airkeeper locally:
 1. Deploy all required contracts (RrpBeaconServer, DapiServer, etc) and set everything up (whitelisting, sponsorship,
    etc).
 1. Switch to the Airkeeper root directory and run `yarn install`.
-1. Add appropriate values to the `config.json` and `airkeeper.env` files.
+1. Add appropriate values to the `config.json` and `airkeeper.json` files.
 1. Finally, run `yarn sls:invoke-local:psp` to invoke the `psp.beaconUpdate` handler function or run
    `yarn sls:invoke-local:rrp` to invoke the `rrp.beaconUpdate` handler function.
 
