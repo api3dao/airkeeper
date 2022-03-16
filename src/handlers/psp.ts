@@ -299,7 +299,7 @@ const groupSubscriptionsBySponsorWallet = async (
   );
   const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
   const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
-    (acc: SponsorWalletWithSubscriptions[], [logs, data]) => {
+    (acc: SponsorWalletWithSubscriptions[], [logs, data], idx) => {
       const sponsorLogOptions: node.LogOptions = {
         ...providerLogOptions,
         additional: {
@@ -314,13 +314,12 @@ const groupSubscriptionsBySponsorWallet = async (
         return acc;
       }
 
-      let nextNonce = data.transactionCount;
       return [
         ...acc,
         {
           subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription) => ({
             ...subscription,
-            nonce: nextNonce++,
+            nonce: data.transactionCount + idx + 1,
           })),
           sponsorWallet: data.sponsorWallet,
         },
