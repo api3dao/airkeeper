@@ -1,7 +1,5 @@
 import { ethers } from 'ethers';
 import { checkSubscriptionCondition } from './check-conditions';
-import { dapiServerAbi } from './initialize-provider';
-import * as utils from '../utils';
 
 describe('checkSubscriptionCondition', () => {
   beforeEach(() => jest.restoreAllMocks());
@@ -20,28 +18,60 @@ describe('checkSubscriptionCondition', () => {
     id: '0x168194af62ab1b621eff3be1df9646f198dcef36f9eace0474fd19d47b2e0039',
   };
   const apiValue = ethers.BigNumber.from(723392020);
+  const getFunctionMock = (_nameOrSignatureOrSighash: string) => {
+    return {
+      name: 'conditionPspBeaconUpdate',
+    };
+  };
+  const getFunctionSpy = jest.fn().mockImplementation(getFunctionMock);
+  const conditionPspBeaconUpdateMock = (
+    _subscriptionId: string,
+    _encodedFulfillmentData: string,
+    _conditionParameters: string
+  ) => Promise.resolve([true]);
+  const conditionPspBeaconUpdateSpy = jest.fn().mockImplementation(conditionPspBeaconUpdateMock);
+  const dapiServerMock = {
+    connect(_signerOrProvider: ethers.Signer | ethers.providers.Provider | string) {
+      return this;
+    },
+    interface: {
+      getFunction: getFunctionSpy,
+    },
+    functions: {
+      conditionPspBeaconUpdate: conditionPspBeaconUpdateSpy,
+    },
+  };
   const provider = new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545/');
-  const dapiServer = new ethers.Contract('0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0', dapiServerAbi, provider);
   const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
   it('should return true if subscription conditions check passes', async () => {
-    // TODO: Mocking retryGo because it is not trivial to mock the contract object
-    const retryGoSpy = jest.spyOn(utils, 'retryGo').mockResolvedValueOnce([null, [true]]);
+    const [logs, data] = await checkSubscriptionCondition(subscription, apiValue, dapiServerMock as any, voidSigner);
 
-    const [logs, data] = await checkSubscriptionCondition(subscription, apiValue, dapiServer, voidSigner);
-
-    expect(retryGoSpy).toHaveBeenCalledTimes(1);
+    expect(getFunctionSpy).toHaveBeenCalledTimes(1);
+    expect(conditionPspBeaconUpdateSpy).toHaveBeenCalledTimes(1);
     expect(logs).toEqual([]);
     expect(data).toEqual(true);
   });
 
   it('should return false if subscription conditions check does not passes', async () => {
-    // TODO: Mocking retryGo because it is not trivial to mock the contract object
-    const retryGoSpy = jest.spyOn(utils, 'retryGo').mockResolvedValueOnce([null, [false]]);
+    const [logs, data] = await checkSubscriptionCondition(
+      subscription,
+      apiValue,
+      {
+        ...dapiServerMock,
+        functions: {
+          conditionPspBeaconUpdate: (
+            _subscriptionId: string,
+            _encodedFulfillmentData: string,
+            _conditionParameters: string
+          ) => Promise.resolve([false]),
+        },
+      } as any,
+      voidSigner
+    );
 
-    const [logs, data] = await checkSubscriptionCondition(subscription, apiValue, dapiServer, voidSigner);
-
-    expect(retryGoSpy).toHaveBeenCalledTimes(1);
+    expect(getFunctionSpy).toHaveBeenCalledTimes(1);
+    expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
     expect(logs).toEqual([
       {
         level: 'WARN',
@@ -52,17 +82,15 @@ describe('checkSubscriptionCondition', () => {
   });
 
   it('returns false with error log if conditions decode fails', async () => {
-    // TODO: Mocking retryGo because it is not trivial to mock the contract object
-    const retryGoSpy = jest.spyOn(utils, 'retryGo').mockResolvedValueOnce([null, [true]]);
-
     const [logs, data] = await checkSubscriptionCondition(
       { ...subscription, conditions: '0xinvalid' },
       apiValue,
-      dapiServer,
+      dapiServerMock as any,
       voidSigner
     );
 
-    expect(retryGoSpy).toHaveBeenCalledTimes(0);
+    expect(getFunctionSpy).not.toHaveBeenCalled();
+    expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
     expect(logs).toEqual([
       {
         error: expect.objectContaining({ message: expect.stringContaining('invalid arrayify value') }),
@@ -73,14 +101,60 @@ describe('checkSubscriptionCondition', () => {
     expect(data).toEqual(false);
   });
 
+  it('returns false with error log if conditions function does not exist in ABI', async () => {
+    const getFunctionErrorSpy = jest.fn().mockImplementation((_nameOrSignatureOrSighash: string) => {
+      throw new Error(
+        'ERROR Error: no matching function (argument="name", value="0xinvalid", code=INVALID_ARGUMENT, version=abi/5.6.0)'
+      );
+    });
+
+    const [logs, data] = await checkSubscriptionCondition(
+      {
+        ...subscription,
+        conditions:
+          '0x31624200000000000000000000000000000000000000000000000000000000005f636f6e646974696f6e46756e6374696f6e496400000000000000000000000011e4b036000000000000000000000000000000000000000000000000000000005f636f6e646974696f6e506172616d657465727300000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000989680',
+      },
+      apiValue,
+      { ...dapiServerMock, interface: { getFunction: getFunctionErrorSpy } } as any,
+      voidSigner
+    );
+
+    expect(getFunctionSpy).not.toHaveBeenCalled();
+    expect(getFunctionErrorSpy).toHaveBeenCalledTimes(1);
+    expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
+    expect(logs).toEqual([
+      {
+        error: expect.objectContaining({ message: expect.stringContaining('no matching function') }),
+        level: 'ERROR',
+        message: 'Failed to decode conditions',
+      },
+    ]);
+    expect(data).toEqual(false);
+  });
+
   it('returns false with error log if condition function returns an error', async () => {
     const unexpectedError = new Error('Something when wrong');
-    // TODO: Mocking retryGo because it is not trivial to mock the contract object
-    const retryGoSpy = jest.spyOn(utils, 'retryGo').mockResolvedValueOnce([unexpectedError, null]);
+    const conditionPspBeaconUpdateErrorSpy = jest
+      .fn()
+      .mockImplementation((_subscriptionId: string, _encodedFulfillmentData: string, _conditionParameters: string) =>
+        Promise.reject(unexpectedError)
+      );
 
-    const [logs, data] = await checkSubscriptionCondition(subscription, apiValue, dapiServer, voidSigner);
+    const [logs, data] = await checkSubscriptionCondition(
+      subscription,
+      apiValue,
+      {
+        ...dapiServerMock,
+        functions: {
+          conditionPspBeaconUpdate: conditionPspBeaconUpdateErrorSpy,
+        },
+      } as any,
+      voidSigner
+    );
 
-    expect(retryGoSpy).toHaveBeenCalledTimes(1);
+    expect(getFunctionSpy).toHaveBeenCalledTimes(1);
+    expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
+    expect(conditionPspBeaconUpdateErrorSpy).toHaveBeenCalledTimes(1);
     expect(logs).toEqual([
       {
         error: unexpectedError,
@@ -90,13 +164,28 @@ describe('checkSubscriptionCondition', () => {
     ]);
     expect(data).toEqual(false);
   });
+
   it('returns false with error log if conditions result is null', async () => {
-    // TODO: Mocking retryGo because it is not trivial to mock the contract object
-    const retryGoSpy = jest.spyOn(utils, 'retryGo').mockResolvedValueOnce([null, null]);
+    const conditionPspBeaconUpdateNullSpy = jest
+      .fn()
+      .mockImplementation((_subscriptionId: string, _encodedFulfillmentData: string, _conditionParameters: string) =>
+        Promise.resolve(null)
+      );
+    const [logs, data] = await checkSubscriptionCondition(
+      subscription,
+      apiValue,
+      {
+        ...dapiServerMock,
+        functions: {
+          conditionPspBeaconUpdate: conditionPspBeaconUpdateNullSpy,
+        },
+      } as any,
+      voidSigner
+    );
 
-    const [logs, data] = await checkSubscriptionCondition(subscription, apiValue, dapiServer, voidSigner);
-
-    expect(retryGoSpy).toHaveBeenCalledTimes(1);
+    expect(getFunctionSpy).toHaveBeenCalledTimes(1);
+    expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
+    expect(conditionPspBeaconUpdateNullSpy).toHaveBeenCalledTimes(1);
     expect(logs).toEqual([
       {
         level: 'ERROR',
