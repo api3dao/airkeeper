@@ -1,4 +1,4 @@
-import { evm } from '@api3/airnode-node';
+import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import { processSponsorWallet } from './process-sponsor-wallet';
 
@@ -86,7 +86,7 @@ describe('processSponsorWallet', () => {
   };
   const subscriptions = [subscription1, subscription2, subscription3];
   const provider = new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545/');
-  const sponsorWallet = evm
+  const sponsorWallet = node.evm
     .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC', '2')
     .connect(provider);
 
