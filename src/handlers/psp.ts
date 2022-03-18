@@ -1,6 +1,6 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
-import { logger, buildBaseOptions, randomHexString, formatDateTime, LogOptions } from '@api3/airnode-utilities';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
