@@ -1,5 +1,5 @@
 import * as node from '@api3/airnode-node';
-import { PendingLog, LogOptions } from '@api3/airnode-utilities';
+import * as utils from '@api3/airnode-utilities';
 import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 import {
@@ -40,14 +40,14 @@ export interface CallApiOptions {
 
 export interface LogsAndApiValuesByBeaconId {
   [beaconId: string]: {
-    logs: PendingLog[];
+    logs: utils.PendingLog[];
     apiValue: ethers.BigNumber | null;
   };
 }
 
 export interface BaseState {
   config: Config;
-  baseLogOptions: LogOptions;
+  baseLogOptions: utils.LogOptions;
 }
 export interface State extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];

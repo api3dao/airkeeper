@@ -12,7 +12,7 @@ export const callApi = async (payload: {
   if (!apiCallResponse.success) {
     // TODO: check error message
     const message = `Failed to extract or encode value from API response: ${JSON.stringify(apiCallResponse)}`;
-    const log = logger.pend('ERROR', message, apiCallResponse.errorMessage as any);
+    const log = utils.logger.pend('ERROR', message, apiCallResponse.errorMessage as any);
     return [[...logs, log], null];
   }
 

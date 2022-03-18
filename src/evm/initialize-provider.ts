@@ -1,6 +1,6 @@
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
-import { logger, getGasPrice } from '@api3/airnode-utilities';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
 import { ChainConfig, EVMProviderState } from '../types';
@@ -38,24 +38,24 @@ export const initializeProvider = async (
   const [errorGetBlockNumber, currentBlock] = await retryGo(() => provider.getBlockNumber());
   if (errorGetBlockNumber || isNil(currentBlock)) {
     const message = 'Failed to fetch the blockNumber';
-    const log = logger.pend('ERROR', message, errorGetBlockNumber);
+    const log = utils.logger.pend('ERROR', message, errorGetBlockNumber);
     return [[log], null];
   }
   const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock}`;
-  const currentBlockLog = logger.pend('INFO', currentBlockMessage);
+  const currentBlockLog = utils.logger.pend('INFO', currentBlockMessage);
 
   // Fetch current gas fee data
-  const [gasPriceLogs, gasTarget] = await getGasPrice({
+  const [gasPriceLogs, gasTarget] = await utils.getGasPrice({
     provider,
     chainOptions: chain.options,
   });
   if (!gasTarget) {
     const message = 'Failed to fetch gas price';
-    const log = logger.pend('ERROR', message);
+    const log = utils.logger.pend('ERROR', message);
     return [[log], null];
   }
   const gasTargetMessage = `Gas target for chainId ${chain.id}: ${JSON.stringify(gasTarget)}`;
-  const gasTargetLog = logger.pend('INFO', gasTargetMessage);
+  const gasTargetLog = utils.logger.pend('INFO', gasTargetMessage);
 
   return [
     [currentBlockLog, ...gasPriceLogs, gasTargetLog],

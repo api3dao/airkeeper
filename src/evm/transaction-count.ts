@@ -1,5 +1,5 @@
 import * as node from '@api3/airnode-node';
-import { logger } from '@api3/airnode-utilities';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
 import { SponsorWalletTransactionCount } from '../types';
@@ -23,11 +23,11 @@ export const getSponsorWalletAndTransactionCount = async (
   );
   if (errorGetTransactionCount || isNil(transactionCount)) {
     const message = 'Failed to fetch the sponsor wallet transaction count';
-    const log = logger.pend('ERROR', message, errorGetTransactionCount);
+    const log = utils.logger.pend('ERROR', message, errorGetTransactionCount);
     return [[log], null];
   }
 
   const message = `Sponsor wallet ${shortenAddress(sponsorWallet.address)} transaction count: ${transactionCount}`;
-  const log = logger.pend('INFO', message, errorGetTransactionCount);
+  const log = utils.logger.pend('INFO', message, errorGetTransactionCount);
   return [[log], { sponsorWallet, transactionCount }];
 };
