@@ -167,23 +167,13 @@ const initializeState = (config: Config): State => {
 
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
-  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
-  const airnodeAddress = (
-    config.airnodeXpub
-      ? ethers.utils.HDNode.fromExtendedKey(config.airnodeXpub).derivePath('0/0')
-      : airnodeHDNode.derivePath(ethers.utils.defaultPath)
-  ).address;
-  if (config.airnodeAddress && config.airnodeAddress !== airnodeAddress) {
-    throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
-  }
-
   const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
 
     return retryGo(() =>
       callApi(config, {
         id: template.id,
-        airnodeAddress,
+        airnodeAddress: subscriptions.find((s) => s.templateId === Object.keys(template)[0])!.airnodeAddress,
         endpointId: endpoint.id,
         endpointName: endpoint.endpointName,
         oisTitle: endpoint.oisTitle,

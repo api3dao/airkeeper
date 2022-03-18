@@ -43,8 +43,6 @@ describe('callApi', () => {
     });
 
     const [logs, res] = await callApi(config, callApiOptions);
-    console.log('logs', logs);
-    console.log('res', res);
 
     expect(logs).toHaveLength(0);
     expect(res).toBeDefined();
