@@ -5,6 +5,7 @@ import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
+import { keccak256 } from 'ethers/lib/utils';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { checkSubscriptionCondition } from '../evm/check-conditions';
@@ -65,19 +66,22 @@ const initializeState = (config: Config): State => {
       return acc;
     }
     // Verify subscriptionId
-    const expectedSubscriptionId = ethers.utils.solidityKeccak256(
-      ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-      [
-        subscription.chainId,
-        subscription.airnodeAddress,
-        subscription.templateId,
-        subscription.parameters,
-        subscription.conditions,
-        subscription.relayer,
-        subscription.sponsor,
-        subscription.requester,
-        subscription.fulfillFunctionId,
-      ]
+    // Verify subscriptionId
+    const expectedSubscriptionId = keccak256(
+      ethers.utils.defaultAbiCoder.encode(
+        ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+        [
+          subscription.chainId,
+          subscription.airnodeAddress,
+          subscription.templateId,
+          subscription.parameters,
+          subscription.conditions,
+          subscription.relayer,
+          subscription.sponsor,
+          subscription.requester,
+          subscription.fulfillFunctionId,
+        ]
+      )
     );
     if (subscriptionId !== expectedSubscriptionId) {
       node.logger.warn(

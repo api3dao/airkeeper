@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const ethers = require('ethers');
 const abi = require('@api3/airnode-abi');
+const { keccak256 } = require('ethers/lib/utils');
 const { deriveSponsorWallet } = require('../dist/src/wallet.js');
 
 async function main() {
@@ -104,8 +105,8 @@ async function main() {
       airnodeWallet.address,
       roles.sponsor.address
     );
-  const beaconUpdateSubscriptionId = ethers.utils.keccak256(
-    ethers.utils.solidityPack(
+  const beaconUpdateSubscriptionId = keccak256(
+    ethers.utils.defaultAbiCoder.encode(
       ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
       [
         (await provider.getNetwork()).chainId,
