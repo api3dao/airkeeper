@@ -6,12 +6,15 @@ import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
+import { keccak256 } from 'ethers/lib/utils';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import { checkSubscriptionCondition } from '../evm/check-conditions';
-import { initializeProvider } from '../evm/initialize-provider';
-import { processSponsorWallet } from '../evm/process-sponsor-wallet';
-import { getSponsorWalletAndTransactionCount } from '../evm/transaction-count';
+import {
+  checkSubscriptionCondition,
+  getSponsorWalletAndTransactionCount,
+  initializeProvider,
+  processSponsorWallet,
+} from '../evm';
 import {
   CheckedSubscription,
   Config,
@@ -66,19 +69,22 @@ const initializeState = (config: Config): State => {
       return acc;
     }
     // Verify subscriptionId
-    const expectedSubscriptionId = ethers.utils.solidityKeccak256(
-      ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-      [
-        subscription.chainId,
-        subscription.airnodeAddress,
-        subscription.templateId,
-        subscription.parameters,
-        subscription.conditions,
-        subscription.relayer,
-        subscription.sponsor,
-        subscription.requester,
-        subscription.fulfillFunctionId,
-      ]
+    // Verify subscriptionId
+    const expectedSubscriptionId = keccak256(
+      ethers.utils.defaultAbiCoder.encode(
+        ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+        [
+          subscription.chainId,
+          subscription.airnodeAddress,
+          subscription.templateId,
+          subscription.parameters,
+          subscription.conditions,
+          subscription.relayer,
+          subscription.sponsor,
+          subscription.requester,
+          subscription.fulfillFunctionId,
+        ]
+      )
     );
     if (subscriptionId !== expectedSubscriptionId) {
       logger.warn(`SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`, baseLogOptions);
@@ -165,15 +171,7 @@ const executeApiCalls = async (state: State): Promise<State> => {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
 
-  // TODO: promise.all? 🤔
-  let apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber } = {};
-  for (const { subscriptions, template, endpoint } of groupedSubscriptions) {
-    const templateLogOptions: LogOptions = {
-      ...baseLogOptions,
-      additional: {
-        templateId: template.id,
-      },
-    };
+  const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
     // requestId is only needed for the AggregatedApiCall type but it is not used
     const requestId = randomHexString(16);
@@ -191,24 +189,51 @@ const executeApiCalls = async (state: State): Promise<State> => {
       //   ...template,
       // },
     };
-    const [errorCallApi, logsData] = await retryGo(() => callApi({ config, aggregatedApiCall }));
-    if (!isNil(errorCallApi) || isNil(logsData)) {
-      logger.warn('Failed to fecth API value', templateLogOptions);
-      continue;
-    }
-    const [logs, apiValue] = logsData;
-    logger.logPending(logs, templateLogOptions);
+    return retryGo(() =>
+      callApi({ config, aggregatedApiCall }).then(
+        ([logs, data]) =>
+          [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
+            templateId: string;
+            apiValue: ethers.BigNumber | null;
+            subscriptions: Id<Subscription>[];
+          }>
+      )
+    );
+  });
+  const responses = await Promise.all(apiValuePromises);
 
-    if (isNil(apiValue)) {
-      logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
-      continue;
-    }
+  const apiValuesBySubscriptionId = responses.reduce(
+    (acc: { [subscriptionId: string]: ethers.BigNumber }, [errorCallApi, logsData]) => {
+      if (!isNil(errorCallApi) || isNil(logsData)) {
+        logger.warn('Failed to fecth API value', baseLogOptions);
+        return acc;
+      }
 
-    apiValuesBySubscriptionId = {
-      ...apiValuesBySubscriptionId,
-      ...subscriptions.reduce((acc, subscription) => ({ ...acc, [subscription.id]: apiValue }), {}),
-    };
-  }
+      const [logs, data] = logsData;
+
+      const templateLogOptions: LogOptions = {
+        ...baseLogOptions,
+        additional: {
+          templateId: data.templateId,
+        },
+      };
+
+      logger.logPending(logs, templateLogOptions);
+
+      if (isNil(data.apiValue)) {
+        logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
+        return acc;
+      }
+
+      return {
+        ...acc,
+        ...data.subscriptions.reduce((acc2, { id }) => {
+          return { ...acc2, [id]: data.apiValue };
+        }, {}),
+      };
+    },
+    {}
+  );
 
   return { ...state, apiValuesBySubscriptionId };
 };

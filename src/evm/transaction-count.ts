@@ -6,9 +6,6 @@ import { SponsorWalletTransactionCount } from '../types';
 import { retryGo } from '../utils';
 import { shortenAddress } from '../wallet';
 
-// TODO: should this be in a centralized enum somewhere (api3/airnode-protocol maybe)?
-const pspProtocolId = '2';
-
 export const getSponsorWalletAndTransactionCount = async (
   airnodeWallet: ethers.Wallet,
   provider: ethers.providers.Provider,
@@ -18,7 +15,7 @@ export const getSponsorWalletAndTransactionCount = async (
   // Derive sponsorWallet address
   // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
   const sponsorWallet = node.evm
-    .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, pspProtocolId)
+    .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, '2')
     .connect(provider);
 
   // Fetch sponsorWallet transaction count

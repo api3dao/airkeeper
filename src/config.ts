@@ -3,7 +3,7 @@ import path from 'path';
 import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
-import { validateConfig, AirkeeperConfig } from './validator';
+import { AirkeeperConfig, validateConfig } from './validator';
 
 export const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
