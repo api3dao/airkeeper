@@ -1,5 +1,6 @@
-import * as node from '@api3/airnode-node';
+import { go, retryOnTimeout, PromiseOptions } from '@api3/airnode-utilities';
 import { DEFAULT_RETRY_TIMEOUT_MS } from './constants';
 
-export const retryGo = <T>(fn: () => Promise<T>, options?: node.utils.PromiseOptions) =>
-  node.utils.go(() => node.utils.retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, fn), options);
+// NOTE: There is another PR which will remove this and replace retries with promise-utils package
+export const retryGo = <T>(fn: () => Promise<T>, options?: PromiseOptions) =>
+  go(() => retryOnTimeout(DEFAULT_RETRY_TIMEOUT_MS, fn), options);

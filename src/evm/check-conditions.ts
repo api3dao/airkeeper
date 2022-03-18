@@ -1,5 +1,6 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import { logger } from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
 import { Id } from '../types';
@@ -35,7 +36,7 @@ export const checkSubscriptionCondition = async (
     ({ conditionFunction, conditionParameters } = decodeConditions(subscription.conditions, contract));
   } catch (err) {
     const message = 'Failed to decode conditions';
-    const log = node.logger.pend('ERROR', message, err as any);
+    const log = logger.pend('ERROR', message, err as any);
     return [[log], false];
   }
 
@@ -48,7 +49,7 @@ export const checkSubscriptionCondition = async (
   );
   if (errorConditionFunction || isNil(result)) {
     const message = 'Failed to check conditions';
-    const log = node.logger.pend('ERROR', message, errorConditionFunction);
+    const log = logger.pend('ERROR', message, errorConditionFunction);
     return [[log], false];
   }
   // The result will always be ethers.Result type even if solidity function retuns a single value
@@ -56,7 +57,7 @@ export const checkSubscriptionCondition = async (
   // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
   if (!result[0]) {
     const message = 'Conditions not met. Skipping update...';
-    const log = node.logger.pend('WARN', message);
+    const log = logger.pend('WARN', message);
     return [[log], false];
   }
 

@@ -1,4 +1,5 @@
 import * as node from '@api3/airnode-node';
+import { logger } from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { GAS_LIMIT } from '../constants';
 import { ProcessableSubscription } from '../types';
@@ -40,7 +41,7 @@ export const processSponsorWallet = async (
       fulfillFunction = contract.interface.getFunction(fulfillFunctionId);
     } catch (error) {
       const message = 'Failed to get fulfill function';
-      const log = node.logger.pend('ERROR', message, error as any);
+      const log = logger.pend('ERROR', message, error as any);
       return [...logs, [[log], subscription]];
     }
     const [errfulfillFunction, tx] = await retryGo<ethers.ContractTransaction>(() =>
@@ -63,11 +64,11 @@ export const processSponsorWallet = async (
     );
     if (errfulfillFunction) {
       const message = `Failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`;
-      const log = node.logger.pend('ERROR', message, errfulfillFunction);
+      const log = logger.pend('ERROR', message, errfulfillFunction);
       return [...logs, [[log], subscription]];
     }
     const message = `Tx submitted: ${tx?.hash}`;
-    const log = node.logger.pend('INFO', message);
+    const log = logger.pend('INFO', message);
     logs.push([[log], subscription]);
   }
 
