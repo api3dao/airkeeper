@@ -3,7 +3,6 @@ import { join } from 'path';
 import * as abi from '@api3/airnode-abi';
 import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
-import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { callApi } from './call-api';
 import { AirkeeperConfig } from '../validator';
@@ -22,13 +21,12 @@ describe('callApi', () => {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
   const endpointId = Object.keys(airkeeperConfig.endpoints)[0];
-  const templateParameters =
-    airkeeperConfig.templates['0xea30f92923ece1a97af69d450a8418db31be5a26a886540a13c09c739ba8eaaa'].templateParameters;
+  const templateId = Object.keys(airkeeperConfig.templates)[0];
+  const templateParameters = airkeeperConfig.templates[templateId].templateParameters;
   const apiCallParameters = abi.decode(templateParameters);
-  const requestId = utils.randomHexString(16);
-  const aggregatedApiCall: node.AggregatedApiCall = {
-    type: 'beacon',
-    id: requestId,
+
+  const callApiOptions = {
+    id: templateId,
     airnodeAddress,
     endpointId,
     endpointName: airkeeperConfig.endpoints[endpointId].endpointName,
@@ -44,7 +42,7 @@ describe('callApi', () => {
       data: apiResponse,
     });
 
-    const [logs, res] = await callApi({ config, aggregatedApiCall });
+    const [logs, res] = await callApi(config, callApiOptions);
     console.log('logs', logs);
     console.log('res', res);
 
@@ -64,10 +62,7 @@ describe('callApi', () => {
       })),
     }));
 
-    const [logs, res] = await callApi({
-      config: { ...config, ois: oisesWithoutType },
-      aggregatedApiCall,
-    });
+    const [logs, res] = await callApi({ ...config, ois: oisesWithoutType }, callApiOptions);
 
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(
@@ -92,7 +87,7 @@ describe('callApi', () => {
     const error = new Error('Network is down');
     spy.mockRejectedValueOnce(error);
 
-    const [logs, res] = await callApi({ config, aggregatedApiCall });
+    const [logs, res] = await callApi(config, callApiOptions);
 
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(
@@ -128,7 +123,7 @@ describe('callApi', () => {
       throw error;
     });
 
-    const [logs, res] = await callApi({ config, aggregatedApiCall });
+    const [logs, res] = await callApi(config, callApiOptions);
 
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(

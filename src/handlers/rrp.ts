@@ -84,26 +84,15 @@ export const handler = async (_event: any = {}): Promise<any> => {
       }
 
       const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
-      // requestId is only needed for the AggregatedApiCall type but it is not used
-      const requestId = utils.randomHexString(16);
-      const aggregatedApiCall: node.AggregatedApiCall = {
-        type: 'beacon',
-        id: requestId,
+
+      return callApi(config, {
+        id: templateId,
         airnodeAddress,
         endpointId,
         endpointName,
         oisTitle,
         parameters: apiCallParameters,
-        // templateId: templateId,
-        // template: {
-        //   id: templateId,
-        //   ...template,
-        // },
-      };
-
-      return callApi({ config, aggregatedApiCall }).then(
-        ([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>
-      );
+      }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
     })
   );
   const responses = await Promise.all(apiValuePromises);

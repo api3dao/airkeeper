@@ -179,24 +179,16 @@ const executeApiCalls = async (state: State): Promise<State> => {
 
   const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-    // requestId is only needed for the AggregatedApiCall type but it is not used
-    const requestId = utils.randomHexString(16);
-    const aggregatedApiCall: node.AggregatedApiCall = {
-      type: 'beacon',
-      id: requestId,
-      airnodeAddress,
-      endpointId: endpoint.id,
-      endpointName: endpoint.endpointName,
-      oisTitle: endpoint.oisTitle,
-      parameters: apiCallParameters,
-      // templateId: templateId,
-      // template: {
-      //   id: templateId,
-      //   ...template,
-      // },
-    };
+
     return retryGo(() =>
-      callApi({ config, aggregatedApiCall }).then(
+      callApi(config, {
+        id: template.id,
+        airnodeAddress,
+        endpointId: endpoint.id,
+        endpointName: endpoint.endpointName,
+        oisTitle: endpoint.oisTitle,
+        parameters: apiCallParameters,
+      }).then(
         ([logs, data]) =>
           [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
             templateId: string;
