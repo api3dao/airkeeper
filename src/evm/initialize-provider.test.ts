@@ -48,12 +48,18 @@ describe('initializeProvider', () => {
     expect(getBlockNumberSpy).toHaveBeenCalled();
     expect(txType === 'legacy' ? blockSpy : gasPriceSpy).not.toHaveBeenCalled();
     expect(txType === 'eip1559' ? blockSpy : gasPriceSpy).toHaveBeenCalled();
+    const gasPriceLogMessage =
+      txType === 'legacy'
+        ? expect.stringMatching(/Gas price \(legacy\) set to [0-9]*\.[0-9]+ Gwei/)
+        : expect.stringMatching(
+            /Gas price \(EIP-1559\) set to a Max Fee of [0-9]*\.[0-9]+ Gwei and a Priority Fee of [0-9]*\.[0-9]+ Gwei/
+          );
     expect(logs).toEqual(
       expect.arrayContaining([
         { level: 'INFO', message: `Current block number for chainId 31337: ${currentBlock}` },
         {
           level: 'INFO',
-          message: `Gas target for chainId 31337: ${JSON.stringify(gasTarget)}`,
+          message: gasPriceLogMessage,
         },
       ])
     );
