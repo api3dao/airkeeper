@@ -1,5 +1,5 @@
 import * as node from '@api3/airnode-node';
-import { logger } from '@api3/airnode-utilities';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { Config } from '../types';
 
