@@ -13,7 +13,6 @@ export const getSponsorWalletAndTransactionCount = async (
   sponsor: string
 ): Promise<node.LogsData<SponsorWalletTransactionCount | null>> => {
   // Derive sponsorWallet address
-  // TODO: switch to node.evm.deriveSponsorWallet when @api3/airnode-node allows setting the `protocolId`
   const sponsorWallet = node.evm
     .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, '2')
     .connect(provider);
