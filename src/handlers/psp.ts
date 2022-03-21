@@ -1,6 +1,7 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
@@ -26,7 +27,7 @@ import {
   SponsorWalletWithSubscriptions,
   State,
 } from '../types';
-import { retryGo } from '../utils';
+import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
 
@@ -170,34 +171,36 @@ const executeApiCalls = async (state: State): Promise<State> => {
   const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
 
-    return retryGo(() =>
-      callApi(config, {
-        id: template.id,
-        airnodeAddress: subscriptions.find((s) => s.templateId === Object.keys(template)[0])!.airnodeAddress,
-        endpointId: endpoint.id,
-        endpointName: endpoint.endpointName,
-        oisTitle: endpoint.oisTitle,
-        parameters: apiCallParameters,
-      }).then(
-        ([logs, data]) =>
-          [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
-            templateId: string;
-            apiValue: ethers.BigNumber | null;
-            subscriptions: Id<Subscription>[];
-          }>
-      )
+    return go(
+      () =>
+        callApi(config, {
+          id: template.id,
+          airnodeAddress: subscriptions.find((s) => s.templateId === Object.keys(template)[0])!.airnodeAddress,
+          endpointId: endpoint.id,
+          endpointName: endpoint.endpointName,
+          oisTitle: endpoint.oisTitle,
+          parameters: apiCallParameters,
+        }).then(
+          ([logs, data]) =>
+            [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
+              templateId: string;
+              apiValue: ethers.BigNumber | null;
+              subscriptions: Id<Subscription>[];
+            }>
+        ),
+      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
     );
   });
   const responses = await Promise.all(apiValuePromises);
 
   const apiValuesBySubscriptionId = responses.reduce(
-    (acc: { [subscriptionId: string]: ethers.BigNumber }, [errorCallApi, logsData]) => {
-      if (!isNil(errorCallApi) || isNil(logsData)) {
-        utils.logger.warn('Failed to fecth API value', baseLogOptions);
+    (acc: { [subscriptionId: string]: ethers.BigNumber }, logsData) => {
+      if (!logsData.success) {
+        utils.logger.warn('Failed to fetch API value', baseLogOptions);
         return acc;
       }
 
-      const [logs, data] = logsData;
+      const [logs, data] = logsData.data;
 
       const templateLogOptions: utils.LogOptions = {
         ...baseLogOptions,

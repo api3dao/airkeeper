@@ -1,10 +1,11 @@
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
 import * as utils from '@api3/airnode-utilities';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
 import { ChainConfig, EVMProviderState } from '../types';
-import { retryGo } from '../utils';
+import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 
 const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
   ethers.utils.FormatTypes.minimal
@@ -35,13 +36,13 @@ export const initializeProvider = async (
   const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
   // Fetch current block number
-  const [errorGetBlockNumber, currentBlock] = await retryGo(() => provider.getBlockNumber());
-  if (errorGetBlockNumber || isNil(currentBlock)) {
+  const currentBlock = await go(() => provider.getBlockNumber(), { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS });
+  if (!currentBlock.success) {
     const message = 'Failed to fetch the blockNumber';
-    const log = utils.logger.pend('ERROR', message, errorGetBlockNumber);
+    const log = utils.logger.pend('ERROR', message, currentBlock.error);
     return [[log], null];
   }
-  const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock}`;
+  const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock.data}`;
   const currentBlockLog = utils.logger.pend('INFO', currentBlockMessage);
 
   // Fetch current gas fee data
@@ -63,7 +64,7 @@ export const initializeProvider = async (
       provider,
       contracts,
       voidSigner,
-      currentBlock,
+      currentBlock: currentBlock.data,
       gasTarget,
     },
   ];
