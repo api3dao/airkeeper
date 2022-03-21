@@ -114,19 +114,16 @@ describe('callApi', () => {
     },
   ];
 
-  const templateId = '0x6f737bbf31dfed584a16f53b7d725ff64bee67e79a468259456fb40aa19c60c4';
   const templateParameters =
     '0x3173737373730000000000000000000000000000000000000000000000000000746f00000000000000000000000000000000000000000000000000000000000055534400000000000000000000000000000000000000000000000000000000005f74797065000000000000000000000000000000000000000000000000000000696e7432353600000000000000000000000000000000000000000000000000005f70617468000000000000000000000000000000000000000000000000000000726573756c7400000000000000000000000000000000000000000000000000005f74696d65730000000000000000000000000000000000000000000000000000313030303030300000000000000000000000000000000000000000000000000066726f6d000000000000000000000000000000000000000000000000000000004554480000000000000000000000000000000000000000000000000000000000';
   const oisTitle = 'Currency Converter API';
   const endpointName = 'convertToUSD';
 
-  const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, templateParameters]);
   const apiCallParameters = abi.decode(templateParameters);
 
   const callApiOptions = {
     oises,
     apiCredentials,
-    id: beaconId,
     apiCallParameters,
     oisTitle,
     endpointName,
@@ -135,7 +132,7 @@ describe('callApi', () => {
   it('calls the adapter with the given parameters', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
-    const apiResponse = { success: true, result: '723.392028' };
+    const apiResponse = { data: { success: true, result: '723.392028' } };
     spy.mockResolvedValueOnce(apiResponse);
 
     const [logs, res] = await callApi(callApiOptions);
@@ -145,7 +142,7 @@ describe('callApi', () => {
       expect.arrayContaining([
         {
           level: 'DEBUG',
-          message: `API server response data: ${JSON.stringify(apiResponse)}`,
+          message: `API server response data: ${JSON.stringify(apiResponse.data)}`,
         },
         {
           level: 'INFO',
@@ -242,7 +239,7 @@ describe('callApi', () => {
 
   it('returns an error if the API call fails to extract and encode response', async () => {
     const buildAndExecuteRequestSpy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-    const apiResponse = { success: true, result: '723.392028' };
+    const apiResponse = { data: { success: true, result: '723.392028' } };
     buildAndExecuteRequestSpy.mockResolvedValueOnce(apiResponse);
 
     const extractAndEncodeResponseSpy = jest.spyOn(adapter, 'extractAndEncodeResponse');
@@ -259,7 +256,7 @@ describe('callApi', () => {
         {
           error,
           level: 'ERROR',
-          message: `Failed to extract or encode value from API response: ${JSON.stringify(apiResponse)}`,
+          message: `Failed to extract or encode value from API response: ${JSON.stringify(apiResponse.data)}`,
         },
       ])
     );
@@ -282,6 +279,6 @@ describe('callApi', () => {
       metadata: null,
     });
     expect(extractAndEncodeResponseSpy).toHaveBeenCalledTimes(1);
-    expect(extractAndEncodeResponseSpy).toHaveBeenCalledWith(apiResponse, expect.any(Object));
+    expect(extractAndEncodeResponseSpy).toHaveBeenCalledWith(apiResponse.data, expect.any(Object));
   });
 });

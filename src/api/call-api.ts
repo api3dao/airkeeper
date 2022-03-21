@@ -39,14 +39,17 @@ export const callApi = async ({
   };
 
   // Call API
-  const apiResponse = await go(() => adapter.buildAndExecuteRequest(options), {
+  const result = await go(() => adapter.buildAndExecuteRequest(options), {
     timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
   });
-  if (!apiResponse.success) {
+  if (!result.success) {
     const message = `Failed to fetch data from API for endpoint: ${endpointName}`;
-    const log = node.logger.pend('ERROR', message, apiResponse.error);
+    const log = node.logger.pend('ERROR', message, result.error);
     return [[log], null];
   }
+
+  const apiResponse = result.data;
+
   const messageApiResponse = `API server response data: ${JSON.stringify(apiResponse.data)}`;
   const logApiResponse = node.logger.pend('DEBUG', messageApiResponse);
 
