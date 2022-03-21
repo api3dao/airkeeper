@@ -3,7 +3,7 @@ import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { TIMEOUT_MS } from '../constants';
 import { Id } from '../types';
 import { Subscription } from '../validator';
 
@@ -46,7 +46,8 @@ export const checkSubscriptionCondition = async (
         .connect(voidSigner)
         .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters),
     {
-      timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+      timeoutMs: TIMEOUT_MS,
+      retries: 1,
     }
   );
   if (!result.success) {

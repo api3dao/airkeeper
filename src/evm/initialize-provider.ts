@@ -5,7 +5,7 @@ import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import isNil from 'lodash/isNil';
 import { ChainConfig, EVMProviderState } from '../types';
-import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { TIMEOUT_MS } from '../constants';
 
 const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
   ethers.utils.FormatTypes.minimal
@@ -36,7 +36,7 @@ export const initializeProvider = async (
   const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
   // Fetch current block number
-  const currentBlock = await go(() => provider.getBlockNumber(), { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS });
+  const currentBlock = await go(() => provider.getBlockNumber(), { timeoutMs: TIMEOUT_MS, retries: 1 });
   if (!currentBlock.success) {
     const message = 'Failed to fetch the blockNumber';
     const log = utils.logger.pend('ERROR', message, currentBlock.error);
