@@ -166,17 +166,9 @@ const initializeState = (config: Config): State => {
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
-  // TODO: promise.all? 🤔
-  let apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber } = {};
-  for (const { subscriptions, template, endpoint } of groupedSubscriptions) {
-    const templateLogOptions: node.LogOptions = {
-      ...baseLogOptions,
-      additional: {
-        templateId: template.id,
-      },
-    };
+  const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-    const logsData = await go(
+    return go(
       () =>
         callApi({
           oises: config.ois,
@@ -184,26 +176,48 @@ const executeApiCalls = async (state: State): Promise<State> => {
           apiCallParameters,
           oisTitle: endpoint.oisTitle,
           endpointName: endpoint.endpointName,
-        }),
+        }).then(
+          ([logs, data]) =>
+            [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
+              templateId: string;
+              apiValue: ethers.BigNumber | null;
+              subscriptions: Id<Subscription>[];
+            }>
+        ),
       { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
     );
-    if (!logsData.success) {
-      node.logger.warn('Failed to fecth API value', templateLogOptions);
-      continue;
+  });
+  const responses = await Promise.all(apiValuePromises);
+
+  const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
+    if (!result.success) {
+      node.logger.warn('Failed to fecth API value', baseLogOptions);
+      return acc;
     }
-    const [logs, apiValue] = logsData.data;
+
+    const [logs, data] = result.data;
+
+    const templateLogOptions: node.LogOptions = {
+      ...baseLogOptions,
+      additional: {
+        templateId: data.templateId,
+      },
+    };
+
     node.logger.logPending(logs, templateLogOptions);
 
-    if (isNil(apiValue)) {
+    if (isNil(data.apiValue)) {
       node.logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
-      continue;
+      return acc;
     }
 
-    apiValuesBySubscriptionId = {
-      ...apiValuesBySubscriptionId,
-      ...subscriptions.reduce((acc, subscription) => ({ ...acc, [subscription.id]: apiValue }), {}),
+    return {
+      ...acc,
+      ...data.subscriptions.reduce((acc2, { id }) => {
+        return { ...acc2, [id]: data.apiValue };
+      }, {}),
     };
-  }
+  }, {});
 
   return { ...state, apiValuesBySubscriptionId };
 };

@@ -10,7 +10,6 @@ const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFa
   ethers.utils.FormatTypes.minimal
 );
 
-//TODO: where to get abi from?
 export const dapiServerAbi = [
   'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
   'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
