@@ -65,15 +65,12 @@ describe('callApi', () => {
     expect(logs).toHaveLength(2);
     expect(logs).toEqual(
       expect.arrayContaining([
+        { level: 'ERROR', message: "Cannot read properties of undefined (reading 'length')" },
         {
-          level: 'ERROR',
-          message: "Cannot read property 'length' of undefined",
-        },
-        {
-          error: "Cannot read property 'length' of undefined",
+          error: "Cannot read properties of undefined (reading 'length')",
           level: 'ERROR',
           message:
-            'Failed to extract or encode value from API response: {"success":false,"errorMessage":"Cannot read property \'length\' of undefined"}',
+            'Failed to extract or encode value from API response: {"success":false,"errorMessage":"Cannot read properties of undefined (reading \'length\')"}',
         },
       ])
     );

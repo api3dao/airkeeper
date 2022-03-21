@@ -1,7 +1,7 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
-import { go } from '@api3/promise-utils';
+import { go, goSync } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
@@ -34,10 +34,18 @@ import { shortenAddress } from '../wallet';
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
-  const airnodeConfig = loadAirnodeConfig();
+  const airnodeConfig = goSync(loadAirnodeConfig);
+  if (!airnodeConfig.success) {
+    utils.logger.error(airnodeConfig.error.message);
+    throw airnodeConfig.error;
+  }
   // This file will be merged with config.json from above
-  const airkeeperConfig = loadAirkeeperConfig();
-  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
+  const airkeeperConfig = goSync(loadAirkeeperConfig);
+  if (!airkeeperConfig.success) {
+    utils.logger.error(airkeeperConfig.error.message);
+    throw airkeeperConfig.error;
+  }
+  const config = mergeConfigs(airnodeConfig.data, airkeeperConfig.data);
 
   const state = await updateBeacon(config);
 

@@ -8,7 +8,6 @@ import { AirkeeperConfig, validateConfig } from './validator';
 export const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
   const nodeConfigPath = path.resolve(__dirname, '..', '..', 'config', `config.json`);
-  //TODO: loadConfig can be wrapped in a custom validation function and logger can be used there to log possible errors thrown by node.config.loadConfig
   return node.config.loadConfig(nodeConfigPath, process.env);
 };
 

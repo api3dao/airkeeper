@@ -2,7 +2,7 @@ import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
 import * as utils from '@api3/airnode-utilities';
-import { go } from '@api3/promise-utils';
+import { go, goSync } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import flatMap from 'lodash/flatMap';
 import groupBy from 'lodash/groupBy';
@@ -25,26 +25,34 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  const airnodeConfig = loadAirnodeConfig();
+  const airnodeConfig = goSync(loadAirnodeConfig);
+  if (!airnodeConfig.success) {
+    utils.logger.error(airnodeConfig.error.message);
+    throw airnodeConfig.error;
+  }
   // This file will be merged with config.json from above
-  const airkeeperConfig = loadAirkeeperConfig();
+  const airkeeperConfig = goSync(loadAirkeeperConfig);
+  if (!airkeeperConfig.success) {
+    utils.logger.error(airkeeperConfig.error.message);
+    throw airkeeperConfig.error;
+  }
 
-  const baseLogOptions = utils.buildBaseOptions(airnodeConfig, {
+  const baseLogOptions = utils.buildBaseOptions(airnodeConfig.data, {
     coordinatorId: utils.randomHexString(8),
   });
   utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
+  const config = mergeConfigs(airnodeConfig.data, airkeeperConfig.data);
   const { chains, triggers, endpoints } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
   const airnodeAddress = (
-    airkeeperConfig.airnodeXpub
-      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.airnodeXpub).derivePath('0/0')
+    airkeeperConfig.data.airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.data.airnodeXpub).derivePath('0/0')
       : airnodeHDNode.derivePath(ethers.utils.defaultPath)
   ).address;
 
-  if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
+  if (airkeeperConfig.data.airnodeAddress && airkeeperConfig.data.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
 
