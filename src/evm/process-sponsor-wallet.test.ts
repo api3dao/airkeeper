@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 import { processSponsorWallet } from './process-sponsor-wallet';
 import { deriveSponsorWallet } from '../wallet';
+import { GAS_LIMIT } from '../constants';
 
 describe('processSponsorWallet', () => {
   beforeEach(() => jest.restoreAllMocks());
@@ -101,8 +102,19 @@ describe('processSponsorWallet', () => {
       sponsorWallet
     );
 
-    expect(getFunctionSpy).toHaveBeenCalledTimes(3);
-    expect(fulfillPspBeaconUpdateSpy).toHaveBeenCalledTimes(3);
+    expect(getFunctionSpy).toHaveBeenNthCalledWith(2, '0x206b48f4');
+    subscriptions.forEach((subscription, idx) =>
+      expect(fulfillPspBeaconUpdateSpy).toHaveBeenCalledWith(
+        subscription.id,
+        subscription.airnodeAddress,
+        subscription.relayer,
+        subscription.sponsor,
+        expect.anything(), // timestamp
+        ethers.utils.defaultAbiCoder.encode(['int256'], [subscription.apiValue]),
+        expect.any(String), // signature
+        { gasLimit: GAS_LIMIT, ...gasTarget, nonce: idx }
+      )
+    );
     expect(logsData).toEqual(
       expect.arrayContaining([
         [

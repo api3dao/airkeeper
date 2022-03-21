@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { getSponsorWalletAndTransactionCount } from './transaction-count';
+import { deriveSponsorWallet } from '../wallet';
 
 describe('getSponsorWalletAndTransactionCount', () => {
   const airnodeWallet = ethers.Wallet.fromMnemonic(
@@ -16,7 +17,11 @@ describe('getSponsorWalletAndTransactionCount', () => {
 
     const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
 
-    expect(getTransactionCountSpy).toHaveBeenCalled();
+    expect(getTransactionCountSpy).toHaveBeenNthCalledWith(
+      1,
+      deriveSponsorWallet(airnodeWallet.mnemonic.phrase, sponsor, '2').address,
+      expect.any(Number)
+    );
     expect(logs).toEqual(
       expect.arrayContaining([
         { level: 'INFO', message: `Sponsor wallet 0x83F...50FF transaction count: ${transactionCount}` },
