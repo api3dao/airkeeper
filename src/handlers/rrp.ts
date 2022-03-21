@@ -63,7 +63,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
     go(
-      () => {
+      async () => {
         const { oisTitle, endpointName } = endpoints[endpointId];
 
         const encodedParameters = abi.encode(templateParameters);
@@ -94,14 +94,16 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
 
-        return callApi(config, {
+        const [logs, data] = await callApi(config, {
           id: templateId,
           airnodeAddress,
           endpointId,
           endpointName,
           oisTitle,
           parameters: apiCallParameters,
-        }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
+        });
+
+        return [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>;
       },
       { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
     )
