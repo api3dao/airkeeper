@@ -17,7 +17,7 @@ export const callApi = async (
 ): Promise<node.LogsData<ethers.BigNumber | null>> => {
   const [logs, apiCallResponse] = await node.handlers.callApi({
     config,
-    aggregatedApiCall: { type: 'beacon', ...callApiOptions },
+    aggregatedApiCall: { type: 'http-gateway', ...callApiOptions },
   });
   if (!apiCallResponse.success) {
     // TODO: check error message
