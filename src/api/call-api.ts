@@ -1,5 +1,4 @@
 import * as node from '@api3/airnode-node';
-import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { Config } from '../types';
 
@@ -20,10 +19,7 @@ export const callApi = async (
     aggregatedApiCall: { type: 'http-gateway', ...callApiOptions },
   });
   if (!apiCallResponse.success) {
-    // TODO: check error message
-    const message = `Failed to extract or encode value from API response: ${JSON.stringify(apiCallResponse)}`;
-    const log = utils.logger.pend('ERROR', message, apiCallResponse.errorMessage as any);
-    return [[...logs, log], null];
+    return [logs, null];
   }
 
   const parsedData = JSON.parse(apiCallResponse.value);

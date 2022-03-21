@@ -34,21 +34,15 @@ describe('callApi', () => {
     parameters: apiCallParameters,
   };
 
-  it('calls the adapter with the given parameters', async () => {
+  it('calls the api and return the value', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-
     const apiResponse = { success: true, result: '723.392028' };
-    spy.mockResolvedValueOnce({
-      data: apiResponse,
-    });
+    spy.mockResolvedValueOnce({ data: apiResponse });
 
     const [logs, res] = await callApi(config, callApiOptions);
 
-    expect(logs).toHaveLength(0);
-    expect(res).toBeDefined();
-    expect(res).toEqual(ethers.BigNumber.from(723392028));
-    expect(spy).toHaveBeenCalledTimes(1);
-    // expect(spy).toHaveBeenCalledWith(config);
+    expect(logs).toEqual([]);
+    expect(res).toEqual(ethers.BigNumber.from('723392028'));
   });
 
   it("returns null if reserved parameter '_type' is missing", async () => {
@@ -62,47 +56,11 @@ describe('callApi', () => {
 
     const [logs, res] = await callApi({ ...config, ois: oisesWithoutType }, callApiOptions);
 
-    expect(logs).toHaveLength(2);
+    expect(logs).toHaveLength(1);
     expect(logs).toEqual(
-      expect.arrayContaining([
-        { level: 'ERROR', message: "Cannot read properties of undefined (reading 'length')" },
-        {
-          error: "Cannot read properties of undefined (reading 'length')",
-          level: 'ERROR',
-          message:
-            'Failed to extract or encode value from API response: {"success":false,"errorMessage":"Cannot read properties of undefined (reading \'length\')"}',
-        },
-      ])
+      expect.arrayContaining([{ level: 'ERROR', message: "Cannot read property 'length' of undefined" }])
     );
     expect(res).toEqual(null);
-  });
-
-  it('returns an error if the API call fails to execute', async () => {
-    const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-    const error = new Error('Network is down');
-    spy.mockRejectedValueOnce(error);
-
-    const [logs, res] = await callApi(config, callApiOptions);
-
-    expect(logs).toHaveLength(2);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          error,
-          level: 'ERROR',
-          message: 'Failed to call Endpoint:convertToUSD',
-        },
-        {
-          error: 'API call failed',
-          level: 'ERROR',
-          message:
-            'Failed to extract or encode value from API response: {"success":false,"errorMessage":"API call failed"}',
-        },
-      ])
-    );
-    expect(res).toEqual(null);
-    expect(spy).toHaveBeenCalledTimes(1);
-    // expect(spy).toHaveBeenCalledWith(config);
   });
 
   it('returns an error if the API call fails to extract and encode response', async () => {
@@ -120,21 +78,10 @@ describe('callApi', () => {
 
     const [logs, res] = await callApi(config, callApiOptions);
 
-    expect(logs).toHaveLength(2);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        { level: 'ERROR', message: 'Unexpected error' },
-        // {
-        //   error,
-        //   level: 'ERROR',
-        //   message: `Failed to extract or encode value from API response: ${JSON.stringify(apiResponse)}`,
-        // },
-      ])
-    );
+    expect(logs).toHaveLength(1);
+    expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Unexpected error' }]));
     expect(res).toEqual(null);
     expect(buildAndExecuteRequestSpy).toHaveBeenCalledTimes(1);
-    // const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
-    // expect(buildAndExecuteRequestSpy).toHaveBeenCalledWith(config);
     expect(extractAndEncodeResponseSpy).toHaveBeenCalledTimes(1);
     expect(extractAndEncodeResponseSpy).toHaveBeenCalledWith(apiResponse, expect.any(Object));
   });
