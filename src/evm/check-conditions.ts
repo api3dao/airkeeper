@@ -12,10 +12,8 @@ const decodeConditions = (conditions: string, contract: ethers.Contract) => {
     ['bytes32'],
     decodedConditions._conditionFunctionId
   );
-  // TODO: is this really needed?
-  // Airnode ABI only supports bytes32 but
-  // function selector is '0x' plus 4 bytes and
-  // that is why we need to ignore the trailing zeros
+  // Airnode ABI only supports bytes32 but function selector is '0x' plus 4 bytes and that is why
+  // we need to ignore the trailing zeros instead of just using bytes4 when decoding _conditionFunctionId
   return {
     conditionFunction: contract.interface.getFunction(decodedConditionFunctionId.substring(0, 2 + 4 * 2)),
     conditionParameters: decodedConditions._conditionParameters,
@@ -39,8 +37,6 @@ export const checkSubscriptionCondition = async (
     return [[log], false];
   }
 
-  // TODO: Should we also include the condition contract address to be called in subscription.conditions
-  //       and connect to that contract instead of dapiServer contract to call the conditionFunction?
   const result = await go<ethers.utils.Result, Error>(
     () =>
       contract
