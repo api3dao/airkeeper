@@ -136,9 +136,7 @@ describe('callApi', () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
     const apiResponse = { success: true, result: '723.392028' };
-    spy.mockResolvedValueOnce({
-      data: apiResponse,
-    });
+    spy.mockResolvedValueOnce(apiResponse);
 
     const [logs, res] = await callApi(callApiOptions);
 
@@ -245,9 +243,7 @@ describe('callApi', () => {
   it('returns an error if the API call fails to extract and encode response', async () => {
     const buildAndExecuteRequestSpy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
     const apiResponse = { success: true, result: '723.392028' };
-    buildAndExecuteRequestSpy.mockResolvedValueOnce({
-      data: apiResponse,
-    });
+    buildAndExecuteRequestSpy.mockResolvedValueOnce(apiResponse);
 
     const extractAndEncodeResponseSpy = jest.spyOn(adapter, 'extractAndEncodeResponse');
     const error = new Error('Unexpected error');

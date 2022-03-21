@@ -1,8 +1,8 @@
 import * as node from '@api3/airnode-node';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { GAS_LIMIT } from '../constants';
+import { GAS_LIMIT, DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
 import { ProcessableSubscription } from '../types';
-import { retryGo } from '../utils';
 
 export const processSponsorWallet = async (
   airnodeWallet: ethers.Wallet,
@@ -43,30 +43,32 @@ export const processSponsorWallet = async (
       const log = node.logger.pend('ERROR', message, error as any);
       return [...logs, [[log], subscription]];
     }
-    const [errfulfillFunction, tx] = await retryGo<ethers.ContractTransaction>(() =>
-      contract
-        .connect(sponsorWallet)
-        .functions[fulfillFunction.name](
-          subscriptionId,
-          airnodeWallet.address,
-          relayer,
-          sponsor,
-          timestamp,
-          encodedFulfillmentData,
-          signature,
-          {
-            gasLimit: GAS_LIMIT,
-            ...gasTarget,
-            nonce,
-          }
-        )
+    const tx = await go<ethers.ContractTransaction, Error>(
+      () =>
+        contract
+          .connect(sponsorWallet)
+          .functions[fulfillFunction.name](
+            subscriptionId,
+            airnodeWallet.address,
+            relayer,
+            sponsor,
+            timestamp,
+            encodedFulfillmentData,
+            signature,
+            {
+              gasLimit: GAS_LIMIT,
+              ...gasTarget,
+              nonce,
+            }
+          ),
+      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
     );
-    if (errfulfillFunction) {
+    if (!tx.success) {
       const message = `Failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`;
-      const log = node.logger.pend('ERROR', message, errfulfillFunction);
+      const log = node.logger.pend('ERROR', message, tx.error);
       return [...logs, [[log], subscription]];
     }
-    const message = `Tx submitted: ${tx?.hash}`;
+    const message = `Tx submitted: ${tx.data.hash}`;
     const log = node.logger.pend('INFO', message);
     logs.push([[log], subscription]);
   }
