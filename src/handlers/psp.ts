@@ -27,7 +27,7 @@ import {
   SponsorWalletWithSubscriptions,
   State,
 } from '../types';
-import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { TIMEOUT_MS } from '../constants';
 import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
 
@@ -196,7 +196,7 @@ const executeApiCalls = async (state: State): Promise<State> => {
               subscriptions: Id<Subscription>[];
             }>
         ),
-      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+      { timeoutMs: TIMEOUT_MS, retries: 1 }
     );
   });
   const responses = await Promise.all(apiValuePromises);

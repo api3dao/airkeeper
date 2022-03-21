@@ -10,7 +10,7 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
-import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, TIMEOUT_MS } from '../constants';
 import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
 import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
 import { shortenAddress } from '../wallet';
@@ -103,7 +103,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
           parameters: apiCallParameters,
         }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
       },
-      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+      { timeoutMs: TIMEOUT_MS, retries: 1 }
     )
   );
   const responses = await Promise.all(apiValuePromises);
@@ -162,7 +162,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         // Fetch current block number from chain via provider
         const currentBlock = await go(() => provider.getBlockNumber(), {
-          timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+          timeoutMs: TIMEOUT_MS,
+          retries: 1,
         });
         if (!currentBlock.success) {
           utils.logger.error('failed to fetch the blockNumber', {
@@ -205,7 +206,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
           const keeperSponsorWalletTransactionCount = await go(
             () => provider.getTransactionCount(keeperSponsorWallet.address, currentBlock.data),
-            { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+            { timeoutMs: TIMEOUT_MS, retries: 1 }
           );
           if (!keeperSponsorWalletTransactionCount.success) {
             utils.logger.error('failed to fetch the keeperSponsorWallet transaction count', {
@@ -293,7 +294,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // address(0) is considered whitelisted
             const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
             const beaconResponse = await go(() => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId), {
-              timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+              timeoutMs: TIMEOUT_MS,
+              retries: 1,
             });
             if (!beaconResponse.success) {
               utils.logger.error(`failed to read value for beaconId: ${beaconId}`, {
@@ -353,7 +355,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             );
             const requestedBeaconUpdateEvents = await go(
               () => rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter, blockHistoryLimit * -1, currentBlock.data),
-              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+              { timeoutMs: TIMEOUT_MS, retries: 1 }
             );
             if (!requestedBeaconUpdateEvents.success) {
               utils.logger.error('failed to fetch RequestedBeaconUpdate events', {
@@ -367,7 +369,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             const updatedBeaconFilter = rrpBeaconServer.filters.UpdatedBeacon(beaconId);
             const updatedBeaconEvents = await go(
               () => rrpBeaconServer.queryFilter(updatedBeaconFilter, blockHistoryLimit * -1, currentBlock.data),
-              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+              { timeoutMs: TIMEOUT_MS, retries: 1 }
             );
             if (!updatedBeaconEvents.success) {
               utils.logger.error('failed to fetch UpdatedBeacon events', {
@@ -385,7 +387,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // Check if RequestedBeaconUpdate event is awaiting fulfillment by calling AirnodeRrp.requestIsAwaitingFulfillment with requestId and check if beacon value is fresh enough and skip if it is
               const requestIsAwaitingFulfillment = await go(
                 () => airnodeRrp.requestIsAwaitingFulfillment(pendingRequestedBeaconUpdateEvent.args!['requestId']),
-                { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+                { timeoutMs: TIMEOUT_MS, retries: 1 }
               );
               if (!requestIsAwaitingFulfillment.success) {
                 utils.logger.error('failed to check if request is awaiting fulfillment', {
@@ -445,7 +447,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                     encodedParameters,
                     overrides
                   ),
-              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+              { timeoutMs: TIMEOUT_MS, retries: 1 }
             );
             if (!tx.success) {
               utils.logger.error(
