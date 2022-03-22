@@ -9,30 +9,25 @@ import { AirkeeperConfig } from '../validator';
 import { mergeConfigs } from '../config';
 
 describe('callApi', () => {
+  const airnodeWalletMnemonic = 'achieve climb couple wait accident symbol spy blouse reduce foil echo label';
   const airnodeConfig: node.Config = JSON.parse(
     readFileSync(join(__dirname, '../../config/config.example.json')).toString()
   );
   const airkeeperConfig: AirkeeperConfig = JSON.parse(
     readFileSync(join(__dirname, '../../config/airkeeper.example.json')).toString()
   );
-  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
+  const config = mergeConfigs(
+    { ...airnodeConfig, nodeSettings: { ...airnodeConfig.nodeSettings, airnodeWalletMnemonic: airnodeWalletMnemonic } },
+    airkeeperConfig
+  );
   const airnodeAddress = airkeeperConfig.airnodeAddress;
   if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
-  const endpointId = Object.keys(airkeeperConfig.endpoints)[0];
+  const endpoint = airkeeperConfig.endpoints[Object.keys(airkeeperConfig.endpoints)[0]];
   const templateId = Object.keys(airkeeperConfig.templates)[0];
   const templateParameters = airkeeperConfig.templates[templateId].templateParameters;
   const apiCallParameters = abi.decode(templateParameters);
-
-  const callApiOptions = {
-    id: templateId,
-    airnodeAddress,
-    endpointId,
-    endpointName: airkeeperConfig.endpoints[endpointId].endpointName,
-    oisTitle: airkeeperConfig.endpoints[endpointId].oisTitle,
-    parameters: apiCallParameters,
-  };
 
   it('calls the api and returns the value', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
@@ -40,7 +35,7 @@ describe('callApi', () => {
     const apiResponse = { data: { success: true, result: '723.392028' } };
     spy.mockResolvedValueOnce(apiResponse);
 
-    const [logs, res] = await callApi(config, callApiOptions);
+    const [logs, res] = await callApi(config, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(0);
     expect(res).toBeDefined();
@@ -61,7 +56,7 @@ describe('callApi', () => {
       })),
     }));
 
-    const [logs, res] = await callApi({ ...config, ois: oisesWithoutType }, callApiOptions);
+    const [logs, res] = await callApi({ ...config, ois: oisesWithoutType }, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -81,7 +76,7 @@ describe('callApi', () => {
       throw error;
     });
 
-    const [logs, res] = await callApi(config, callApiOptions);
+    const [logs, res] = await callApi(config, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Unexpected error' }]));

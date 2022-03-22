@@ -94,14 +94,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
 
-        return callApi(config, {
-          id: templateId,
-          airnodeAddress,
-          endpointId,
-          endpointName,
-          oisTitle,
-          parameters: apiCallParameters,
-        }).then(([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>);
+        return callApi(config, endpoints[endpointId], apiCallParameters).then(
+          ([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>
+        );
       },
       { timeoutMs: TIMEOUT_MS, retries: 1 }
     )

@@ -181,14 +181,7 @@ const executeApiCalls = async (state: State): Promise<State> => {
     const apiCallParameters = abi.decode(template.templateParameters);
     return go(
       () =>
-        callApi(config, {
-          id: template.id,
-          airnodeAddress: subscriptions.find((s) => s.templateId === Object.keys(template)[0])!.airnodeAddress,
-          endpointId: endpoint.id,
-          endpointName: endpoint.endpointName,
-          oisTitle: endpoint.oisTitle,
-          parameters: apiCallParameters,
-        }).then(
+        callApi(config, endpoint, apiCallParameters).then(
           ([logs, data]) =>
             [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
               templateId: string;
