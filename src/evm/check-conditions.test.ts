@@ -159,7 +159,7 @@ describe('checkSubscriptionCondition', () => {
 
     expect(getFunctionSpy).toHaveBeenCalledTimes(1);
     expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
-    expect(conditionPspBeaconUpdateErrorSpy).toHaveBeenCalledTimes(1);
+    expect(conditionPspBeaconUpdateErrorSpy).toHaveBeenCalledTimes(2);
     expect(logs).toEqual([
       {
         error: unexpectedError,
