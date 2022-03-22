@@ -34,15 +34,18 @@ describe('callApi', () => {
     parameters: apiCallParameters,
   };
 
-  it('calls the api and return the value', async () => {
+  it('calls the api and returns the value', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-    const apiResponse = { success: true, result: '723.392028' };
-    spy.mockResolvedValueOnce({ data: apiResponse });
+
+    const apiResponse = { data: { success: true, result: '723.392028' } };
+    spy.mockResolvedValueOnce(apiResponse);
 
     const [logs, res] = await callApi(config, callApiOptions);
 
-    expect(logs).toEqual([]);
-    expect(res).toEqual(ethers.BigNumber.from('723392028'));
+    expect(logs).toHaveLength(0);
+    expect(res).toBeDefined();
+    expect(res).toEqual(ethers.BigNumber.from(723392028));
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
   it("returns null if reserved parameter '_type' is missing", async () => {
@@ -65,10 +68,8 @@ describe('callApi', () => {
 
   it('returns an error if the API call fails to extract and encode response', async () => {
     const buildAndExecuteRequestSpy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-    const apiResponse = { success: true, result: '723.392028' };
-    buildAndExecuteRequestSpy.mockResolvedValueOnce({
-      data: apiResponse,
-    });
+    const apiResponse = { data: { success: true, result: '723.392028' } };
+    buildAndExecuteRequestSpy.mockResolvedValueOnce(apiResponse);
 
     const extractAndEncodeResponseSpy = jest.spyOn(adapter, 'extractAndEncodeResponse');
     const error = new Error('Unexpected error');
@@ -83,6 +84,6 @@ describe('callApi', () => {
     expect(res).toEqual(null);
     expect(buildAndExecuteRequestSpy).toHaveBeenCalledTimes(1);
     expect(extractAndEncodeResponseSpy).toHaveBeenCalledTimes(1);
-    expect(extractAndEncodeResponseSpy).toHaveBeenCalledWith(apiResponse, expect.any(Object));
+    expect(extractAndEncodeResponseSpy).toHaveBeenCalledWith(apiResponse.data, expect.any(Object));
   });
 });

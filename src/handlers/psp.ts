@@ -176,9 +176,9 @@ const initializeState = (config: Config): State => {
 
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
+
   const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-
     return go(
       () =>
         callApi(config, {
@@ -201,38 +201,35 @@ const executeApiCalls = async (state: State): Promise<State> => {
   });
   const responses = await Promise.all(apiValuePromises);
 
-  const apiValuesBySubscriptionId = responses.reduce(
-    (acc: { [subscriptionId: string]: ethers.BigNumber }, logsData) => {
-      if (!logsData.success) {
-        utils.logger.warn('Failed to fetch API value', baseLogOptions);
-        return acc;
-      }
+  const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
+    if (!result.success) {
+      utils.logger.warn('Failed to fecth API value', baseLogOptions);
+      return acc;
+    }
 
-      const [logs, data] = logsData.data;
+    const [logs, data] = result.data;
 
-      const templateLogOptions: utils.LogOptions = {
-        ...baseLogOptions,
-        additional: {
-          templateId: data.templateId,
-        },
-      };
+    const templateLogOptions: utils.LogOptions = {
+      ...baseLogOptions,
+      additional: {
+        templateId: data.templateId,
+      },
+    };
 
-      utils.logger.logPending(logs, templateLogOptions);
+    utils.logger.logPending(logs, templateLogOptions);
 
-      if (isNil(data.apiValue)) {
-        utils.logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
-        return acc;
-      }
+    if (isNil(data.apiValue)) {
+      utils.logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
+      return acc;
+    }
 
-      return {
-        ...acc,
-        ...data.subscriptions.reduce((acc2, { id }) => {
-          return { ...acc2, [id]: data.apiValue };
-        }, {}),
-      };
-    },
-    {}
-  );
+    return {
+      ...acc,
+      ...data.subscriptions.reduce((acc2, { id }) => {
+        return { ...acc2, [id]: data.apiValue };
+      }, {}),
+    };
+  }, {});
 
   return { ...state, apiValuesBySubscriptionId };
 };

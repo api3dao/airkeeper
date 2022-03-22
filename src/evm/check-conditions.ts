@@ -38,8 +38,6 @@ export const checkSubscriptionCondition = async (
     return [[log], false];
   }
 
-  // TODO: Should we also include the condition contract address to be called in subscription.conditions
-  //       and connect to that contract instead of dapiServer contract to call the conditionFunction?
   const result = await go(
     () =>
       contract
