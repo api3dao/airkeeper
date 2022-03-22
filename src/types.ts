@@ -1,6 +1,5 @@
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
-import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 import {
   Triggers,
@@ -27,14 +26,6 @@ export interface Config extends node.Config {
   readonly subscriptions: Subscriptions;
   readonly templates: Templates;
   readonly endpoints: Endpoints;
-}
-//TODO: is this needed anymore? if not the airnode-ois dependency can be also removed
-export interface CallApiOptions {
-  oises: ois.OIS[];
-  apiCredentials: node.ApiCredentials[];
-  apiCallParameters: node.ApiCallParameters;
-  oisTitle: string;
-  endpointName: string;
 }
 
 export interface LogsAndApiValuesByBeaconId {
