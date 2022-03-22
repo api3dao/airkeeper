@@ -4,7 +4,6 @@ import { ethers } from 'ethers';
 import { Config } from '../types';
 import { Endpoint } from '../validator';
 
-//TODO: check if Airkeeper's merged Config is ok or we should be using node.Config type
 export const callApi = async (
   config: Config,
   endpoint: Endpoint,

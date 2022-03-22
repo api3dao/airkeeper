@@ -85,7 +85,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
           airnodeAddress,
           endpointId: expectedEndpointId,
           encodedParameters,
-          // id: templateId, // TODO: is this needed? Airnode type has chaned to ApiCallTemplateWithoutId
         });
         if (expectedTemplateId !== templateId) {
           const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;

@@ -28,8 +28,7 @@ export interface Config extends node.Config {
   readonly templates: Templates;
   readonly endpoints: Endpoints;
 }
-
-//TODO: check if BuildRequestOptions from airnode can be used or this can be removed entirely
+//TODO: is this needed anymore? if not the airnode-ois dependency can be also removed
 export interface CallApiOptions {
   oises: ois.OIS[];
   apiCredentials: node.ApiCredentials[];
