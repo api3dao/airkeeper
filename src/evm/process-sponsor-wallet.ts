@@ -14,7 +14,7 @@ export const processSponsorWallet = async (
   const logs: node.LogsData<ProcessableSubscription>[] = [];
 
   // Process each subscription in serial to keep nonces in order
-  for (const subscription of subscriptions.sort((a, b) => a.nonce - b.nonce) || []) {
+  for (const subscription of subscriptions.sort((a, b) => a.nonce - b.nonce)) {
     const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, nonce, apiValue } = subscription;
 
     // Encode API value

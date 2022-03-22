@@ -9,10 +9,12 @@ import isNil from 'lodash/isNil';
 import { keccak256 } from 'ethers/lib/utils';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import { checkSubscriptionCondition } from '../evm/check-conditions';
-import { initializeProvider } from '../evm/initialize-provider';
-import { processSponsorWallet } from '../evm/process-sponsor-wallet';
-import { getSponsorWalletAndTransactionCount } from '../evm/transaction-count';
+import {
+  checkSubscriptionCondition,
+  getSponsorWalletAndTransactionCount,
+  initializeProvider,
+  processSponsorWallet,
+} from '../evm';
 import {
   CheckedSubscription,
   Config,
