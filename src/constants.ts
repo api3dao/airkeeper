@@ -12,3 +12,6 @@ export const BASE_FEE_MULTIPLIER = 2;
 
 // The default gas limit for transactions
 export const GAS_LIMIT = 500_000;
+
+// The protocol id for PSP used when deriving sponsor wallet addresses
+export const PROTOCOL_ID_PSP = '2';
