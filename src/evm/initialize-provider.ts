@@ -10,7 +10,6 @@ const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFa
   ethers.utils.FormatTypes.minimal
 );
 
-//TODO: where to get abi from?
 export const dapiServerAbi = [
   'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
   'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
@@ -55,7 +54,15 @@ export const initializeProvider = async (
     const log = node.logger.pend('ERROR', message);
     return [[log], null];
   }
-  const gasTargetMessage = `Gas target for chainId ${chain.id}: ${JSON.stringify(gasTarget)}`;
+  let gasTargetMessage;
+  if (chain.options.txType === 'eip1559') {
+    const gweiMaxFee = node.evm.weiToGwei(gasTarget.maxFeePerGas!);
+    const gweiPriorityFee = node.evm.weiToGwei(gasTarget.maxPriorityFeePerGas!);
+    gasTargetMessage = `Gas price (EIP-1559) set to a Max Fee of ${gweiMaxFee} Gwei and a Priority Fee of ${gweiPriorityFee} Gwei`;
+  } else {
+    const gweiPrice = node.evm.weiToGwei(gasTarget.gasPrice!);
+    gasTargetMessage = `Gas price (legacy) set to ${gweiPrice} Gwei`;
+  }
   const gasTargetLog = node.logger.pend('INFO', gasTargetMessage);
 
   return [
