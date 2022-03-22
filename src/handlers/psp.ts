@@ -7,7 +7,6 @@ import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
-import { keccak256 } from 'ethers/lib/utils';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import {
@@ -16,6 +15,7 @@ import {
   initializeProvider,
   processSponsorWallet,
 } from '../evm';
+import { buildLogOptions } from '../logger';
 import {
   CheckedSubscription,
   Config,
@@ -78,8 +78,7 @@ const initializeState = (config: Config): State => {
       return acc;
     }
     // Verify subscriptionId
-    // Verify subscriptionId
-    const expectedSubscriptionId = keccak256(
+    const expectedSubscriptionId = ethers.utils.keccak256(
       ethers.utils.defaultAbiCoder.encode(
         ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
         [
@@ -196,18 +195,13 @@ const executeApiCalls = async (state: State): Promise<State> => {
 
   const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
     if (!result.success) {
-      utils.logger.warn('Failed to fecth API value', baseLogOptions);
+      utils.logger.warn('Failed to fetch API value', baseLogOptions);
       return acc;
     }
 
     const [logs, data] = result.data;
 
-    const templateLogOptions: utils.LogOptions = {
-      ...baseLogOptions,
-      additional: {
-        templateId: data.templateId,
-      },
-    };
+    const templateLogOptions = buildLogOptions('additional', { templateId: data.templateId }, baseLogOptions);
 
     utils.logger.logPending(logs, templateLogOptions);
 
@@ -238,14 +232,7 @@ const initializeProviders = async (state: State): Promise<State> => {
   }
   const providerPromises = evmChains.flatMap((chain) =>
     Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
-      const providerLogOptions: utils.LogOptions = {
-        ...baseLogOptions,
-        meta: {
-          ...baseLogOptions.meta,
-          chainId: chain.id,
-          providerName,
-        },
-      };
+      const providerLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
 
       // Initialize provider specific data
       const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
@@ -285,14 +272,10 @@ const checkSubscriptionsConditions = async (
   );
   const result = await Promise.all(conditionPromises);
   const validSubscriptions = result.reduce((acc: CheckedSubscription[], [log, data]) => {
-    const subscriptionLogOptions: utils.LogOptions = {
-      ...logOptions,
-      additional: {
-        ...logOptions.additional,
-        subscriptionId: data.subscription.id,
-      },
-    };
+    const subscriptionLogOptions = buildLogOptions('additional', { subscriptionId: data.subscription.id }, logOptions);
+
     utils.logger.logPending(log, subscriptionLogOptions);
+
     if (data.isValid) {
       return [
         ...acc,
@@ -302,6 +285,7 @@ const checkSubscriptionsConditions = async (
         },
       ];
     }
+
     return acc;
   }, []);
 
@@ -326,13 +310,8 @@ const groupSubscriptionsBySponsorWallet = async (
   const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
   const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
     (acc: SponsorWalletWithSubscriptions[], [logs, data]) => {
-      const sponsorLogOptions: utils.LogOptions = {
-        ...providerLogOptions,
-        additional: {
-          ...providerLogOptions.additional,
-          sponsor: data.sponsor,
-        },
-      };
+      const sponsorLogOptions = buildLogOptions('additional', { sponsor: data.sponsor }, providerLogOptions);
+
       utils.logger.logPending(logs, sponsorLogOptions);
 
       if (isNil(data.sponsorWallet) || isNil(data.transactionCount)) {
@@ -364,14 +343,7 @@ const submitTransactions = async (state: State) => {
     const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
       providerState;
 
-    const providerLogOptions: utils.LogOptions = {
-      ...baseLogOptions,
-      meta: {
-        ...baseLogOptions.meta,
-        chainId,
-        providerName,
-      },
-    };
+    const providerLogOptions = buildLogOptions('meta', { chainId, providerName }, baseLogOptions);
 
     // Get subscriptions from template/endnpoint groups
     const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
@@ -405,13 +377,11 @@ const submitTransactions = async (state: State) => {
 
     // Process sponsor wallets in parallel
     const sponsorWalletPromises = subscriptionsBySponsorWallets.map(async ({ subscriptions, sponsorWallet }) => {
-      const sponsorWalletLogOptions: utils.LogOptions = {
-        ...providerLogOptions,
-        additional: {
-          ...providerLogOptions.additional,
-          sponsorWallet: shortenAddress(sponsorWallet.address),
-        },
-      };
+      const sponsorWalletLogOptions = buildLogOptions(
+        'additional',
+        { sponsorWallet: shortenAddress(sponsorWallet.address) },
+        providerLogOptions
+      );
 
       utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
 
@@ -424,13 +394,11 @@ const submitTransactions = async (state: State) => {
       );
 
       logs.forEach(([logs, data]) => {
-        const subscriptionLogOptions: utils.LogOptions = {
-          ...sponsorWalletLogOptions,
-          additional: {
-            ...sponsorWalletLogOptions.additional,
-            subscriptionId: data.id,
-          },
-        };
+        const subscriptionLogOptions = buildLogOptions(
+          'additional',
+          { subscriptionId: data.id },
+          sponsorWalletLogOptions
+        );
         utils.logger.logPending(logs, subscriptionLogOptions);
       });
     });

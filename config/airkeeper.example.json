@@ -28,10 +28,10 @@
         "requestSponsor": "0x61648B2Ec3e6b3492E90184Ef281C2ba28a675ec"
       }
     ],
-    "protoPsp": ["0x168194af62ab1b621eff3be1df9646f198dcef36f9eace0474fd19d47b2e0039"]
+    "protoPsp": ["0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e"]
   },
   "subscriptions": {
-    "0x168194af62ab1b621eff3be1df9646f198dcef36f9eace0474fd19d47b2e0039": {
+    "0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e": {
       "chainId": "31337",
       "airnodeAddress": "0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace",
       "templateId": "0xea30f92923ece1a97af69d450a8418db31be5a26a886540a13c09c739ba8eaaa",

@@ -11,7 +11,8 @@ import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, TIMEOUT_MS } from '../constants';
-import { loadAirnodeConfig, mergeConfigs, loadAirkeeperConfig } from '../config';
+import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
+import { buildLogOptions } from '../logger';
 import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
 import { shortenAddress } from '../wallet';
 
@@ -63,7 +64,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
     go(
-      () => {
+      async () => {
         const { oisTitle, endpointName } = endpoints[endpointId];
 
         const encodedParameters = abi.encode(templateParameters);
@@ -115,10 +116,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   // Print pending logs
   Object.keys(logsAndApiValuesByBeaconId).forEach((beaconId) =>
-    utils.logger.logPending(logsAndApiValuesByBeaconId[beaconId].logs, {
-      ...baseLogOptions,
-      additional: { beaconId },
-    })
+    utils.logger.logPending(
+      logsAndApiValuesByBeaconId[beaconId].logs,
+      buildLogOptions('additional', { beaconId }, baseLogOptions)
+    )
   );
 
   // **************************************************************************
@@ -133,14 +134,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   const providerPromises = flatMap(
     evmChains.map((chain: ChainConfig) => {
       return map(chain.providers, async (chainProvider, providerName) => {
-        const providerLogOptions = {
-          ...baseLogOptions,
-          meta: {
-            ...baseLogOptions.meta,
-            providerName,
-            chainId: chain.id,
-          },
-        };
+        const providerLogOptions = buildLogOptions('meta', { providerName, chainId: chain.id }, baseLogOptions);
 
         // **************************************************************************
         // 3.1 Initialize provider specific data
@@ -187,12 +181,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
             .deriveSponsorWalletFromMnemonic(config.nodeSettings.airnodeWalletMnemonic, keeperSponsor, '12345')
             .connect(provider);
 
-          const keeperSponsorWalletLogOptions = {
-            ...providerLogOptions,
-            additional: {
-              keeperSponsorWallet: shortenAddress(keeperSponsorWallet.address),
-            },
-          };
+          const keeperSponsorWalletLogOptions = buildLogOptions(
+            'additional',
+            { keeperSponsorWallet: shortenAddress(keeperSponsorWallet.address) },
+            providerLogOptions
+          );
 
           // **************************************************************************
           // 3.2.2 Fetch keeperSponsorWallet transaction count
@@ -233,13 +226,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             const encodedParameters = abi.encode(templateParameters);
             const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
 
-            const beaconIdLogOptions = {
-              ...keeperSponsorWalletLogOptions,
-              additional: {
-                ...keeperSponsorWalletLogOptions.additional,
-                beaconId,
-              },
-            };
+            const beaconIdLogOptions = buildLogOptions('additional', { beaconId }, keeperSponsorWalletLogOptions);
 
             // **************************************************************************
             // 3.2.3.2 Verify if beacon must be updated for current chain

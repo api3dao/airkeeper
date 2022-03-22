@@ -3,7 +3,7 @@ import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { SponsorWalletTransactionCount } from '../types';
-import { TIMEOUT_MS } from '../constants';
+import { TIMEOUT_MS, PROTOCOL_ID_PSP } from '../constants';
 import { shortenAddress } from '../wallet';
 
 export const getSponsorWalletAndTransactionCount = async (
@@ -14,7 +14,7 @@ export const getSponsorWalletAndTransactionCount = async (
 ): Promise<node.LogsData<SponsorWalletTransactionCount | null>> => {
   // Derive sponsorWallet address
   const sponsorWallet = node.evm
-    .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, '2')
+    .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, PROTOCOL_ID_PSP)
     .connect(provider);
 
   // Fetch sponsorWallet transaction count

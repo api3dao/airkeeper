@@ -6,6 +6,8 @@ import { ChainConfig } from '../types';
 describe('initializeProvider', () => {
   beforeEach(() => jest.restoreAllMocks());
 
+  const providerUrl = 'http://localhost:8545';
+
   const chain: ChainConfig = {
     maxConcurrency: 100,
     authorizers: [],
@@ -15,7 +17,7 @@ describe('initializeProvider', () => {
       DapiServer: '0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0',
     },
     id: '31337',
-    providers: { local: { url: 'http://127.0.0.1:8545' } },
+    providers: { local: { url: providerUrl } },
     type: 'evm',
     options: {
       txType: 'eip1559',
@@ -23,26 +25,41 @@ describe('initializeProvider', () => {
       priorityFee: { value: 3.12, unit: 'gwei' },
     },
   };
-  const providerUrl = 'http://localhost:8545';
 
-  it('should initialize provider', async () => {
+  test.each(['legacy', 'eip1559'] as const)('should initialize provider - txType: %s', async (txType) => {
     const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
     const currentBlock = Math.floor(Date.now() / 1000);
     getBlockNumberSpy.mockResolvedValueOnce(currentBlock);
 
-    const { gasTarget, blockSpy, gasPriceSpy } = createAndMockGasTarget('eip1559');
+    const { gasTarget, blockSpy, gasPriceSpy } = createAndMockGasTarget(txType);
 
-    const [logs, data] = await initializeProvider(chain, providerUrl);
+    const [logs, data] = await initializeProvider(
+      {
+        ...chain,
+        options: {
+          txType,
+          baseFeeMultiplier: 2,
+          priorityFee: { value: 3.12, unit: 'gwei' },
+        },
+      },
+      providerUrl
+    );
 
     expect(getBlockNumberSpy).toHaveBeenCalled();
-    expect(blockSpy).toHaveBeenCalled();
-    expect(gasPriceSpy).not.toHaveBeenCalled();
+    expect(txType === 'legacy' ? blockSpy : gasPriceSpy).not.toHaveBeenCalled();
+    expect(txType === 'eip1559' ? blockSpy : gasPriceSpy).toHaveBeenCalled();
+    const gasPriceLogMessage =
+      txType === 'legacy'
+        ? expect.stringMatching(/Gas price \(legacy\) set to [0-9]*\.[0-9]+ Gwei/)
+        : expect.stringMatching(
+            /Gas price \(EIP-1559\) set to a Max Fee of [0-9]*\.[0-9]+ Gwei and a Priority Fee of [0-9]*\.[0-9]+ Gwei/
+          );
     expect(logs).toEqual(
       expect.arrayContaining([
         { level: 'INFO', message: `Current block number for chainId 31337: ${currentBlock}` },
         {
           level: 'INFO',
-          message: `Gas target for chainId 31337: ${JSON.stringify(gasTarget)}`,
+          message: gasPriceLogMessage,
         },
       ])
     );
