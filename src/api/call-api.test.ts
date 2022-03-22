@@ -49,6 +49,10 @@ describe('callApi', () => {
   });
 
   it("returns null if reserved parameter '_type' is missing", async () => {
+    const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
+
+    const apiResponse = { data: { success: true, result: '723.392028' } };
+    spy.mockResolvedValueOnce(apiResponse);
     const oisesWithoutType = airnodeConfig.ois.map((o) => ({
       ...o,
       endpoints: o.endpoints.map((e) => ({
