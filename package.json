@@ -13,7 +13,7 @@
     "*.js"
   ],
   "scripts": {
-    "postinstall": "git clone https://github.com/api3dao/airnode.git airnode; cd airnode && yarn run bootstrap && yarn build && cd ..; cp -a airnode/node_modules/@api3/airnode-node/. node_modules/@api3/airnode-node; rm -rf airnode",
+    "postinstall": "git clone https://github.com/api3dao/airnode.git airnode; cd airnode && git checkout 994d895f37ca871f57224ac1603ea58e79ef071e && yarn run bootstrap && yarn build && cd ..; cp -a airnode/node_modules/@api3/airnode-node/. node_modules/@api3/airnode-node; rm -rf airnode",
     "build": "yarn clean && yarn compile:build",
     "clean": "rimraf -rf ./dist *.tgz",
     "compile": "tsc -p tsconfig.json",
