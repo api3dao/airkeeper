@@ -22,3 +22,6 @@ aws.env
 **/config.json
 **/secrets.env
 **/psp-beacon-local.json
+
+# Temporarily add airnode for unpublished changes
+airnode
