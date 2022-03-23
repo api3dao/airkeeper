@@ -19,7 +19,7 @@ export const getSponsorWalletAndTransactionCount = async (
 
   // Fetch sponsorWallet transaction count
   const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlock), {
-    timeoutMs: TIMEOUT_MS / 3,
+    timeoutMs: TIMEOUT_MS,
     retries: RETRIES,
   });
   console.log('transactionCount', transactionCount);
