@@ -3,7 +3,7 @@ import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { SponsorWalletTransactionCount } from '../types';
-import { TIMEOUT_MS, PROTOCOL_ID_PSP } from '../constants';
+import { TIMEOUT_MS, RETRIES, PROTOCOL_ID_PSP } from '../constants';
 import { shortenAddress } from '../wallet';
 
 export const getSponsorWalletAndTransactionCount = async (
@@ -20,7 +20,7 @@ export const getSponsorWalletAndTransactionCount = async (
   // Fetch sponsorWallet transaction count
   const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlock), {
     timeoutMs: TIMEOUT_MS,
-    retries: 1,
+    retries: RETRIES,
   });
   if (!transactionCount.success) {
     const message = 'Failed to fetch the sponsor wallet transaction count';

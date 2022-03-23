@@ -1,7 +1,7 @@
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import { processSponsorWallet } from './process-sponsor-wallet';
-import { GAS_LIMIT } from '../constants';
+import { GAS_LIMIT, PROTOCOL_ID_PSP } from '../constants';
 
 describe('processSponsorWallet', () => {
   beforeEach(() => jest.restoreAllMocks());
@@ -88,7 +88,11 @@ describe('processSponsorWallet', () => {
   const subscriptions = [subscription1, subscription2, subscription3];
   const provider = new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545/');
   const sponsorWallet = node.evm
-    .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC', '2')
+    .deriveSponsorWalletFromMnemonic(
+      airnodeWallet.mnemonic.phrase,
+      '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+      PROTOCOL_ID_PSP
+    )
     .connect(provider);
 
   it('should process all subscriptions for a single sponsor wallet', async () => {

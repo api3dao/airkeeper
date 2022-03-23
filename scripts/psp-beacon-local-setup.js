@@ -3,6 +3,7 @@ const path = require('path');
 const ethers = require('ethers');
 const abi = require('@api3/airnode-abi');
 const { evm } = require('@api3/airnode-node');
+const { PROTOCOL_ID_PSP } = require('../src/constants');
 
 async function main() {
   const config = JSON.parse(fs.readFileSync(path.resolve('./scripts/config/psp-beacon-local.json')).toString());
@@ -58,7 +59,7 @@ async function main() {
   const airnodeWallet = ethers.Wallet.fromMnemonic(config.airnodeMnemonic);
   console.log('👛 ~ airnodeWallet', airnodeWallet.address);
   const airnodePspSponsorWallet = evm
-    .deriveSponsorWalletFromMnemonic(config.airnodeMnemonic, roles.sponsor.address, '2')
+    .deriveSponsorWalletFromMnemonic(config.airnodeMnemonic, roles.sponsor.address, PROTOCOL_ID_PSP)
     .connect(provider);
   console.log('👛 ~ airnodePspSponsorWallet', airnodePspSponsorWallet.address);
   await roles.deployer.sendTransaction({

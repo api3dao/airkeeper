@@ -2,7 +2,7 @@ import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { GAS_LIMIT, TIMEOUT_MS } from '../constants';
+import { GAS_LIMIT, TIMEOUT_MS, RETRIES } from '../constants';
 import { ProcessableSubscription } from '../types';
 
 export const processSponsorWallet = async (
@@ -62,7 +62,7 @@ export const processSponsorWallet = async (
               nonce,
             }
           ),
-      { timeoutMs: TIMEOUT_MS }
+      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
     );
     if (!tx.success) {
       const message = `Failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`;
