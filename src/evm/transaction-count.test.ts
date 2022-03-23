@@ -4,8 +4,6 @@ import { getSponsorWalletAndTransactionCount } from './transaction-count';
 import { PROTOCOL_ID_PSP } from '../constants';
 
 describe('getSponsorWalletAndTransactionCount', () => {
-  beforeAll(() => jest.setTimeout(15_000));
-
   const airnodeWallet = ethers.Wallet.fromMnemonic(
     'achieve climb couple wait accident symbol spy blouse reduce foil echo label'
   );
@@ -41,13 +39,11 @@ describe('getSponsorWalletAndTransactionCount', () => {
   it('returns null with error log if transaction count cannot be fetched', async () => {
     const getTransactionCountSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getTransactionCount');
     const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
-    getTransactionCountSpy
-      .mockRejectedValueOnce(new Error(errorMessage))
-      .mockRejectedValueOnce(new Error(errorMessage));
+    getTransactionCountSpy.mockRejectedValueOnce(new Error(errorMessage));
 
     const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
 
-    expect(getTransactionCountSpy).toHaveBeenCalledTimes(2);
+    expect(getTransactionCountSpy).toHaveBeenCalled();
     expect(logs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
