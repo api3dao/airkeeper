@@ -44,6 +44,7 @@ describe('getSponsorWalletAndTransactionCount', () => {
       .mockRejectedValueOnce(new Error(errorMessage));
 
     const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
+    console.log('logs', logs);
 
     expect(getTransactionCountSpy).toHaveBeenCalledTimes(2);
     expect(logs).toEqual(
