@@ -38,9 +38,7 @@ export const checkSubscriptionCondition = async (
     return [[log], false];
   }
 
-  // TODO: Should we also include the condition contract address to be called in subscription.conditions
-  //       and connect to that contract instead of dapiServer contract to call the conditionFunction?
-  const result = await go(
+  const result = await go<ethers.utils.Result, Error>(
     () =>
       contract
         .connect(voidSigner)
@@ -64,7 +62,7 @@ export const checkSubscriptionCondition = async (
   // The result will always be ethers.Result type even if solidity function retuns a single value
   // because we are not calling contract.METHOD_NAME but contract.functions.METHOD_NAME instead
   // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
-  if (!result.data[0]) {
+  if (!result.data || !result.data[0]) {
     const message = 'Conditions not met. Skipping update...';
     const log = utils.logger.pend('WARN', message);
     return [[log], false];

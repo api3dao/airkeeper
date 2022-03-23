@@ -55,7 +55,15 @@ export const initializeProvider = async (
     const log = utils.logger.pend('ERROR', message);
     return [[log], null];
   }
-  const gasTargetMessage = `Gas target for chainId ${chain.id}: ${JSON.stringify(gasTarget)}`;
+  let gasTargetMessage;
+  if (chain.options.txType === 'eip1559') {
+    const gweiMaxFee = node.evm.weiToGwei(gasTarget.maxFeePerGas!);
+    const gweiPriorityFee = node.evm.weiToGwei(gasTarget.maxPriorityFeePerGas!);
+    gasTargetMessage = `Gas price (EIP-1559) set to a Max Fee of ${gweiMaxFee} Gwei and a Priority Fee of ${gweiPriorityFee} Gwei`;
+  } else {
+    const gweiPrice = node.evm.weiToGwei(gasTarget.gasPrice!);
+    gasTargetMessage = `Gas price (legacy) set to ${gweiPrice} Gwei`;
+  }
   const gasTargetLog = utils.logger.pend('INFO', gasTargetMessage);
 
   return [

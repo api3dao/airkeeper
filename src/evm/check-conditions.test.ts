@@ -47,8 +47,13 @@ describe('checkSubscriptionCondition', () => {
   it('should return true if subscription conditions check passes', async () => {
     const [logs, data] = await checkSubscriptionCondition(subscription, apiValue, dapiServerMock as any, voidSigner);
 
-    expect(getFunctionSpy).toHaveBeenCalledTimes(1);
-    expect(conditionPspBeaconUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(getFunctionSpy).toHaveBeenNthCalledWith(1, '0xdc96acc8');
+    expect(conditionPspBeaconUpdateSpy).toHaveBeenNthCalledWith(
+      1,
+      subscription.id,
+      '0x000000000000000000000000000000000000000000000000000000002b1e1614',
+      '0x0000000000000000000000000000000000000000000000000000000000989680'
+    );
     expect(logs).toEqual([]);
     expect(data).toEqual(true);
   });
@@ -154,7 +159,7 @@ describe('checkSubscriptionCondition', () => {
 
     expect(getFunctionSpy).toHaveBeenCalledTimes(1);
     expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
-    expect(conditionPspBeaconUpdateErrorSpy).toHaveBeenCalledTimes(1);
+    expect(conditionPspBeaconUpdateErrorSpy).toHaveBeenCalledTimes(2);
     expect(logs).toEqual([
       {
         error: unexpectedError,
@@ -165,11 +170,11 @@ describe('checkSubscriptionCondition', () => {
     expect(data).toEqual(false);
   });
 
-  it('returns false with error log if conditions result is null', async () => {
+  it('returns false with warn log if conditions result is undefined', async () => {
     const conditionPspBeaconUpdateNullSpy = jest
       .fn()
       .mockImplementation((_subscriptionId: string, _encodedFulfillmentData: string, _conditionParameters: string) =>
-        Promise.resolve(null)
+        Promise.resolve(undefined)
       );
     const [logs, data] = await checkSubscriptionCondition(
       subscription,
@@ -188,8 +193,8 @@ describe('checkSubscriptionCondition', () => {
     expect(conditionPspBeaconUpdateNullSpy).toHaveBeenCalledTimes(1);
     expect(logs).toEqual([
       {
-        level: 'ERROR',
-        message: 'Failed to check conditions',
+        level: 'WARN',
+        message: 'Conditions not met. Skipping update...',
       },
     ]);
     expect(data).toEqual(false);
