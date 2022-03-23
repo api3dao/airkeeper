@@ -37,6 +37,7 @@ describe('getSponsorWalletAndTransactionCount', () => {
   });
 
   it('returns null with error log if transaction count cannot be fetched', async () => {
+    jest.setTimeout(15_000);
     const getTransactionCountSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getTransactionCount');
     const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
     getTransactionCountSpy
@@ -44,7 +45,6 @@ describe('getSponsorWalletAndTransactionCount', () => {
       .mockRejectedValueOnce(new Error(errorMessage));
 
     const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
-    console.log('logs', logs);
 
     expect(getTransactionCountSpy).toHaveBeenCalledTimes(2);
     expect(logs).toEqual(

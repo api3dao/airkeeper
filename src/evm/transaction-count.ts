@@ -17,16 +17,12 @@ export const getSponsorWalletAndTransactionCount = async (
     .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, PROTOCOL_ID_PSP)
     .connect(provider);
 
-  console.log('sponsorWallet', sponsorWallet);
-
   // Fetch sponsorWallet transaction count
   const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlock), {
     timeoutMs: 1000,
     retries: RETRIES,
   });
-  console.log('transactionCount', transactionCount);
   if (!transactionCount.success) {
-    console.log('here');
     const message = 'Failed to fetch the sponsor wallet transaction count';
     const log = utils.logger.pend('ERROR', message, transactionCount.error);
     return [[log], null];
