@@ -1,7 +1,8 @@
 import * as node from '@api3/airnode-node';
+import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { GAS_LIMIT, DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { GAS_LIMIT, TIMEOUT_MS, RETRIES } from '../constants';
 import { ProcessableSubscription } from '../types';
 
 export const processSponsorWallet = async (
@@ -40,7 +41,7 @@ export const processSponsorWallet = async (
       fulfillFunction = contract.interface.getFunction(fulfillFunctionId);
     } catch (error) {
       const message = 'Failed to get fulfill function';
-      const log = node.logger.pend('ERROR', message, error as any);
+      const log = utils.logger.pend('ERROR', message, error as any);
       return [...logs, [[log], subscription]];
     }
     const tx = await go<ethers.ContractTransaction, Error>(
@@ -61,15 +62,15 @@ export const processSponsorWallet = async (
               nonce,
             }
           ),
-      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
     );
     if (!tx.success) {
       const message = `Failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`;
-      const log = node.logger.pend('ERROR', message, tx.error);
+      const log = utils.logger.pend('ERROR', message, tx.error);
       return [...logs, [[log], subscription]];
     }
     const message = `Tx submitted: ${tx.data.hash}`;
-    const log = node.logger.pend('INFO', message);
+    const log = utils.logger.pend('INFO', message);
     logs.push([[log], subscription]);
   }
 

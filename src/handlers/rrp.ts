@@ -1,7 +1,8 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
-import { go } from '@api3/promise-utils';
+import * as utils from '@api3/airnode-utilities';
+import { go, goSync } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import flatMap from 'lodash/flatMap';
 import groupBy from 'lodash/groupBy';
@@ -9,11 +10,11 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, TIMEOUT_MS, RETRIES } from '../constants';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import { BLOCK_COUNT_HISTORY_LIMIT, DEFAULT_RETRY_TIMEOUT_MS, GAS_LIMIT } from '../constants';
 import { buildLogOptions } from '../logger';
 import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
-import { deriveSponsorWallet, shortenAddress } from '../wallet';
+import { shortenAddress } from '../wallet';
 
 type ApiValueByBeaconId = {
   [beaconId: string]: ethers.BigNumber | null;
@@ -25,33 +26,41 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  const airnodeConfig = loadAirnodeConfig();
+  const airnodeConfig = goSync(loadAirnodeConfig);
+  if (!airnodeConfig.success) {
+    utils.logger.error(airnodeConfig.error.message);
+    throw airnodeConfig.error;
+  }
   // This file will be merged with config.json from above
-  const airkeeperConfig = loadAirkeeperConfig();
+  const airkeeperConfig = goSync(loadAirkeeperConfig);
+  if (!airkeeperConfig.success) {
+    utils.logger.error(airkeeperConfig.error.message);
+    throw airkeeperConfig.error;
+  }
 
-  const baseLogOptions = node.logger.buildBaseOptions(airnodeConfig, {
-    coordinatorId: node.utils.randomHexString(8),
+  const baseLogOptions = utils.buildBaseOptions(airnodeConfig.data, {
+    coordinatorId: utils.randomHexString(8),
   });
-  node.logger.info(`Airkeeper started at ${node.utils.formatDateTime(startedAt)}`, baseLogOptions);
+  utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
-  const { chains, triggers, ois: oises, apiCredentials, endpoints } = config;
+  const config = mergeConfigs(airnodeConfig.data, airkeeperConfig.data);
+  const { chains, triggers, endpoints } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
   const airnodeAddress = (
-    airkeeperConfig.airnodeXpub
-      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.airnodeXpub).derivePath('0/0')
+    airkeeperConfig.data.airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.data.airnodeXpub).derivePath('0/0')
       : airnodeHDNode.derivePath(ethers.utils.defaultPath)
   ).address;
 
-  if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
+  if (airkeeperConfig.data.airnodeAddress && airkeeperConfig.data.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
 
   // **************************************************************************
   // 2. Read and cache API values
   // **************************************************************************
-  node.logger.debug('making API requests...', baseLogOptions);
+  utils.logger.debug('making API requests...', baseLogOptions);
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
     go(
@@ -67,7 +76,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
         );
         if (expectedEndpointId !== endpointId) {
           const message = `endpointId '${endpointId}' does not match expected endpointId '${expectedEndpointId}'`;
-          const log = node.logger.pend('ERROR', message);
+          const log = utils.logger.pend('ERROR', message);
           return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
         }
 
@@ -76,26 +85,20 @@ export const handler = async (_event: any = {}): Promise<any> => {
           airnodeAddress,
           endpointId: expectedEndpointId,
           encodedParameters,
-          id: templateId,
         });
         if (expectedTemplateId !== templateId) {
           const message = `templateId '${templateId}' does not match expected templateId '${expectedTemplateId}'`;
-          const log = node.logger.pend('ERROR', message);
+          const log = utils.logger.pend('ERROR', message);
           return Promise.resolve([[log], { [beaconId]: null }] as node.LogsData<ApiValueByBeaconId>);
         }
 
         const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
 
-        const [logs, data] = await callApi({
-          oises,
-          apiCredentials,
-          apiCallParameters,
-          oisTitle,
-          endpointName,
-        });
-        return [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>;
+        return callApi(config, endpoints[endpointId], apiCallParameters).then(
+          ([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>
+        );
       },
-      { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
     )
   );
   const responses = await Promise.all(apiValuePromises);
@@ -112,7 +115,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   // Print pending logs
   Object.keys(logsAndApiValuesByBeaconId).forEach((beaconId) =>
-    node.logger.logPending(
+    utils.logger.logPending(
       logsAndApiValuesByBeaconId[beaconId].logs,
       buildLogOptions('additional', { beaconId }, baseLogOptions)
     )
@@ -121,7 +124,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 3. Process chain providers in parallel
   // **************************************************************************
-  node.logger.debug('processing chain providers...', baseLogOptions);
+  utils.logger.debug('processing chain providers...', baseLogOptions);
 
   const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
   if (isEmpty(evmChains)) {
@@ -135,7 +138,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
         // **************************************************************************
         // 3.1 Initialize provider specific data
         // **************************************************************************
-        node.logger.debug('initializing...', providerLogOptions);
+        utils.logger.debug('initializing...', providerLogOptions);
 
         const blockHistoryLimit = chain.blockHistoryLimit || BLOCK_COUNT_HISTORY_LIMIT;
         const chainProviderUrl = chainProvider.url || '';
@@ -147,10 +150,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         // Fetch current block number from chain via provider
         const currentBlock = await go(() => provider.getBlockNumber(), {
-          timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+          timeoutMs: TIMEOUT_MS,
+          retries: RETRIES,
         });
         if (!currentBlock.success) {
-          node.logger.error('failed to fetch the blockNumber', {
+          utils.logger.error('failed to fetch the blockNumber', {
             ...providerLogOptions,
             error: currentBlock.error,
           });
@@ -160,7 +164,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
         // **************************************************************************
         // 3.2 Process each keeperSponsor address in parallel
         // **************************************************************************
-        node.logger.debug('processing keeperSponsor addresses...', providerLogOptions);
+        utils.logger.debug('processing keeperSponsor addresses...', providerLogOptions);
 
         // Group rrpBeaconServerKeeperJobs by keeperSponsor
         const rrpBeaconServerKeeperJobsByKeeperSponsor = groupBy(triggers.rrpBeaconServerKeeperJobs, 'keeperSponsor');
@@ -170,13 +174,11 @@ export const handler = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           // 3.2.1 Derive keeperSponsorWallet address
           // **************************************************************************
-          node.logger.debug('deriving keeperSponsorWallet...', providerLogOptions);
+          utils.logger.debug('deriving keeperSponsorWallet...', providerLogOptions);
 
-          const keeperSponsorWallet = deriveSponsorWallet(
-            config.nodeSettings.airnodeWalletMnemonic,
-            keeperSponsor,
-            '12345'
-          ).connect(provider);
+          const keeperSponsorWallet = node.evm
+            .deriveSponsorWalletFromMnemonic(config.nodeSettings.airnodeWalletMnemonic, keeperSponsor, '12345')
+            .connect(provider);
 
           const keeperSponsorWalletLogOptions = buildLogOptions(
             'additional',
@@ -187,14 +189,14 @@ export const handler = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           // 3.2.2 Fetch keeperSponsorWallet transaction count
           // **************************************************************************
-          node.logger.debug('fetching transaction count...', keeperSponsorWalletLogOptions);
+          utils.logger.debug('fetching transaction count...', keeperSponsorWalletLogOptions);
 
           const keeperSponsorWalletTransactionCount = await go(
             () => provider.getTransactionCount(keeperSponsorWallet.address, currentBlock.data),
-            { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+            { timeoutMs: TIMEOUT_MS, retries: RETRIES }
           );
           if (!keeperSponsorWalletTransactionCount.success) {
-            node.logger.error('failed to fetch the keeperSponsorWallet transaction count', {
+            utils.logger.error('failed to fetch the keeperSponsorWallet transaction count', {
               ...keeperSponsorWalletLogOptions,
               error: keeperSponsorWalletTransactionCount.error,
             });
@@ -205,7 +207,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           // 3.2.3 Process each rrpBeaconServerKeeperJob in serial to keep nonces in order
           // **************************************************************************
-          node.logger.debug('processing rrpBeaconServerKeeperJobs...', keeperSponsorWalletLogOptions);
+          utils.logger.debug('processing rrpBeaconServerKeeperJobs...', keeperSponsorWalletLogOptions);
 
           const rrpBeaconServerKeeperJobs = rrpBeaconServerKeeperJobsByKeeperSponsor[keeperSponsor];
           for (const {
@@ -218,7 +220,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             // 3.2.3.1 Derive beaconId
             // **************************************************************************
-            node.logger.debug('deriving beaconId...', keeperSponsorWalletLogOptions);
+            utils.logger.debug('deriving beaconId...', keeperSponsorWalletLogOptions);
 
             const encodedParameters = abi.encode(templateParameters);
             const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
@@ -228,29 +230,29 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             // 3.2.3.2 Verify if beacon must be updated for current chain
             // **************************************************************************
-            node.logger.debug('verifying if beacon must be updated for current chain...', beaconIdLogOptions);
+            utils.logger.debug('verifying if beacon must be updated for current chain...', beaconIdLogOptions);
 
             // If chainIds is not defined, beacon must be updated to keep backward compatibility
             if (chainIds && !chainIds.includes(chain.id)) {
-              node.logger.debug('skipping beaconId as it is not for current chain', beaconIdLogOptions);
+              utils.logger.debug('skipping beaconId as it is not for current chain', beaconIdLogOptions);
               continue;
             }
 
             // **************************************************************************
             // 3.2.3.3 Read API value from cache
             // **************************************************************************
-            node.logger.debug('looking for API value...', beaconIdLogOptions);
+            utils.logger.debug('looking for API value...', beaconIdLogOptions);
 
             const apiValue = logsAndApiValuesByBeaconId[beaconId].apiValue;
             if (isNil(apiValue)) {
-              node.logger.warn('API value is missing. skipping update', beaconIdLogOptions);
+              utils.logger.warn('API value is missing. skipping update', beaconIdLogOptions);
               continue;
             }
 
             // **************************************************************************
             // 3.2.3.4 Verify deviationPercentage is between 0 and 100 and has only 2 decimal places
             // **************************************************************************
-            node.logger.debug('verifying deviationPercentage...', beaconIdLogOptions);
+            utils.logger.debug('verifying deviationPercentage...', beaconIdLogOptions);
 
             if (
               isNaN(Number(deviationPercentage)) ||
@@ -258,7 +260,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               Number(deviationPercentage) > 100 ||
               !Number.isInteger(Number(deviationPercentage) * 100) // Only 2 decimal places is allowed
             ) {
-              node.logger.error(
+              utils.logger.error(
                 `deviationPercentage '${deviationPercentage}' must be a number larger than 0 and less then or equal to 100 with no more than 2 decimal places`,
                 beaconIdLogOptions
               );
@@ -268,48 +270,49 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             // 3.2.3.5 Read beacon
             // **************************************************************************
-            node.logger.debug('reading beacon value...', beaconIdLogOptions);
+            utils.logger.debug('reading beacon value...', beaconIdLogOptions);
 
             // address(0) is considered whitelisted
             const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
             const beaconResponse = await go(() => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId), {
-              timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+              timeoutMs: TIMEOUT_MS,
+              retries: RETRIES,
             });
             if (!beaconResponse.success) {
-              node.logger.error(`failed to read value for beaconId: ${beaconId}`, {
+              utils.logger.error(`failed to read value for beaconId: ${beaconId}`, {
                 ...beaconIdLogOptions,
                 error: beaconResponse.error,
               });
               continue;
             }
-            node.logger.info(`beacon server value: ${beaconResponse.data.value.toString()}`, beaconIdLogOptions);
+            utils.logger.info(`beacon server value: ${beaconResponse.data.value.toString()}`, beaconIdLogOptions);
 
             // **************************************************************************
             // 3.2.3.6 Calculate deviation
             // **************************************************************************
-            node.logger.debug('calculating deviation...', beaconIdLogOptions);
+            utils.logger.debug('calculating deviation...', beaconIdLogOptions);
 
             let beaconValue = beaconResponse.data.value;
             const delta = beaconValue.sub(apiValue!).abs();
             if (delta.eq(0)) {
-              node.logger.warn('beacon is up-to-date. skipping update', beaconIdLogOptions);
+              utils.logger.warn('beacon is up-to-date. skipping update', beaconIdLogOptions);
               continue;
             }
             beaconValue = beaconResponse.data.value.isZero() ? ethers.constants.One : beaconResponse.data.value;
             const basisPoints = ethers.utils.parseUnits('1', 16);
             const deviation = delta.mul(basisPoints).mul(100).div(beaconValue);
-            node.logger.info(`deviation (%): ${ethers.utils.formatUnits(deviation, 16)}`, beaconIdLogOptions);
+            utils.logger.info(`deviation (%): ${ethers.utils.formatUnits(deviation, 16)}`, beaconIdLogOptions);
 
             // **************************************************************************
             // 3.2.3.7 Check if deviation is within the threshold
             // **************************************************************************
-            node.logger.debug('checking deviation...', beaconIdLogOptions);
+            utils.logger.debug('checking deviation...', beaconIdLogOptions);
 
             const percentageThreshold = basisPoints.mul(
               Number(deviationPercentage) * 100 // support for percentages up to 2 decimal places
             );
             if (deviation.lte(percentageThreshold.div(100))) {
-              node.logger.warn(
+              utils.logger.warn(
                 'delta between beacon value and API value is within threshold. skipping update',
                 beaconIdLogOptions
               );
@@ -319,7 +322,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             // 3.2.3.8 Fetch previous events to determine if previous update tx is pending
             // **************************************************************************
-            node.logger.debug('checking previous txs...', beaconIdLogOptions);
+            utils.logger.debug('checking previous txs...', beaconIdLogOptions);
 
             // Check to prevent sending the same request for beacon update more than once
             // by checking if a RequestedBeaconUpdate event was emitted but no matching
@@ -333,10 +336,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
             );
             const requestedBeaconUpdateEvents = await go(
               () => rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter, blockHistoryLimit * -1, currentBlock.data),
-              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+              { timeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!requestedBeaconUpdateEvents.success) {
-              node.logger.error('failed to fetch RequestedBeaconUpdate events', {
+              utils.logger.error('failed to fetch RequestedBeaconUpdate events', {
                 ...beaconIdLogOptions,
                 error: requestedBeaconUpdateEvents.error,
               });
@@ -347,10 +350,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
             const updatedBeaconFilter = rrpBeaconServer.filters.UpdatedBeacon(beaconId);
             const updatedBeaconEvents = await go(
               () => rrpBeaconServer.queryFilter(updatedBeaconFilter, blockHistoryLimit * -1, currentBlock.data),
-              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+              { timeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!updatedBeaconEvents.success) {
-              node.logger.error('failed to fetch UpdatedBeacon events', {
+              utils.logger.error('failed to fetch UpdatedBeacon events', {
                 ...beaconIdLogOptions,
                 error: updatedBeaconEvents.error,
               });
@@ -365,17 +368,17 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // Check if RequestedBeaconUpdate event is awaiting fulfillment by calling AirnodeRrp.requestIsAwaitingFulfillment with requestId and check if beacon value is fresh enough and skip if it is
               const requestIsAwaitingFulfillment = await go(
                 () => airnodeRrp.requestIsAwaitingFulfillment(pendingRequestedBeaconUpdateEvent.args!['requestId']),
-                { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+                { timeoutMs: TIMEOUT_MS, retries: RETRIES }
               );
               if (!requestIsAwaitingFulfillment.success) {
-                node.logger.error('failed to check if request is awaiting fulfillment', {
+                utils.logger.error('failed to check if request is awaiting fulfillment', {
                   ...beaconIdLogOptions,
                   error: requestIsAwaitingFulfillment.error,
                 });
                 continue;
               }
               if (requestIsAwaitingFulfillment.data) {
-                node.logger.warn('request is awaiting fulfillment. skipping update', beaconIdLogOptions);
+                utils.logger.warn('request is awaiting fulfillment. skipping update', beaconIdLogOptions);
                 continue;
               }
             }
@@ -383,24 +386,24 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // **************************************************************************
             // 3.2.3.9 Fetch current gas fee data
             // **************************************************************************
-            node.logger.debug('fetching gas price...', beaconIdLogOptions);
+            utils.logger.debug('fetching gas price...', beaconIdLogOptions);
 
-            const [gasPriceLogs, gasTarget] = await node.evm.getGasPrice({
+            const [gasPriceLogs, gasTarget] = await utils.getGasPrice({
               provider,
               chainOptions: chain.options,
             });
             if (!isEmpty(gasPriceLogs)) {
-              node.logger.logPending(gasPriceLogs, beaconIdLogOptions);
+              utils.logger.logPending(gasPriceLogs, beaconIdLogOptions);
             }
             if (!gasTarget) {
-              node.logger.warn('failed to fetch gas price. Skipping update...', beaconIdLogOptions);
+              utils.logger.warn('failed to fetch gas price. Skipping update...', beaconIdLogOptions);
               continue;
             }
 
             // **************************************************************************
             // 3.2.3.10 Update beacon (submit requestBeaconUpdate transaction)
             // **************************************************************************
-            node.logger.debug('updating beacon...', beaconIdLogOptions);
+            utils.logger.debug('updating beacon...', beaconIdLogOptions);
 
             /**
              * 1. Airnode must first call setSponsorshipStatus(rrpBeaconServer.address, true) to enable the beacon server to make requests to AirnodeRrp
@@ -425,10 +428,10 @@ export const handler = async (_event: any = {}): Promise<any> => {
                     encodedParameters,
                     overrides
                   ),
-              { timeoutMs: DEFAULT_RETRY_TIMEOUT_MS }
+              { timeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!tx.success) {
-              node.logger.error(
+              utils.logger.error(
                 `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${nonce}. skipping update`,
                 {
                   ...beaconIdLogOptions,
@@ -437,7 +440,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               );
               continue;
             }
-            node.logger.info(`beacon update tx submitted: ${tx.data.hash}`, beaconIdLogOptions);
+            utils.logger.info(`beacon update tx submitted: ${tx.data.hash}`, beaconIdLogOptions);
           }
         });
 
@@ -450,8 +453,8 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  node.logger.info(
-    `Airkeeper finished at ${node.utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
+  utils.logger.info(
+    `Airkeeper finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
     baseLogOptions
   );
 

@@ -1,180 +1,54 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import * as abi from '@api3/airnode-abi';
 import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
-import * as ois from '@api3/airnode-ois';
 import { ethers } from 'ethers';
 import { callApi } from './call-api';
+import { AirkeeperConfig } from '../validator';
+import { mergeConfigs } from '../config';
 
 describe('callApi', () => {
-  const oises: ois.OIS[] = [
-    {
-      oisFormat: '1.0.0',
-      version: '1.2.3',
-      title: 'Currency Converter API',
-      apiSpecifications: {
-        servers: [
-          {
-            url: 'http://localhost:5000',
-          },
-        ],
-        paths: {
-          '/convert': {
-            get: {
-              parameters: [
-                {
-                  in: 'query',
-                  name: 'from',
-                },
-                {
-                  in: 'query',
-                  name: 'to',
-                },
-                {
-                  in: 'query',
-                  name: 'amount',
-                },
-                {
-                  in: 'query',
-                  name: 'date',
-                },
-              ],
-            },
-          },
-        },
-        components: {
-          securitySchemes: {
-            'Currency Converter Security Scheme': {
-              in: 'query',
-              type: 'apiKey',
-              name: 'access_key',
-            },
-          },
-        },
-        security: {
-          'Currency Converter Security Scheme': [],
-        },
-      },
-      endpoints: [
-        {
-          name: 'convertToUSD',
-          operation: {
-            method: 'get',
-            path: '/convert',
-          },
-          fixedOperationParameters: [
-            {
-              operationParameter: {
-                in: 'query',
-                name: 'to',
-              },
-              value: 'USD',
-            },
-          ],
-          reservedParameters: [
-            {
-              name: '_type',
-              fixed: 'int256',
-            },
-            {
-              name: '_path',
-              fixed: 'result',
-            },
-            {
-              name: '_times',
-              default: '1000000',
-            },
-          ],
-          parameters: [
-            {
-              name: 'from',
-              default: 'EUR',
-              operationParameter: {
-                in: 'query',
-                name: 'from',
-              },
-            },
-            {
-              name: 'amount',
-              default: '1',
-              operationParameter: {
-                name: 'amount',
-                in: 'query',
-              },
-            },
-          ],
-        },
-      ],
-    },
-  ];
-  const apiCredentials: node.ApiCredentials[] = [
-    {
-      oisTitle: 'Currency Converter API',
-      securitySchemeName: 'Currency Converter Security Scheme',
-      securitySchemeValue: '${SS_CURRENCY_CONVERTER_API_KEY}',
-    },
-  ];
-
-  const templateParameters =
-    '0x3173737373730000000000000000000000000000000000000000000000000000746f00000000000000000000000000000000000000000000000000000000000055534400000000000000000000000000000000000000000000000000000000005f74797065000000000000000000000000000000000000000000000000000000696e7432353600000000000000000000000000000000000000000000000000005f70617468000000000000000000000000000000000000000000000000000000726573756c7400000000000000000000000000000000000000000000000000005f74696d65730000000000000000000000000000000000000000000000000000313030303030300000000000000000000000000000000000000000000000000066726f6d000000000000000000000000000000000000000000000000000000004554480000000000000000000000000000000000000000000000000000000000';
-  const oisTitle = 'Currency Converter API';
-  const endpointName = 'convertToUSD';
-
+  const airnodeWalletMnemonic = 'achieve climb couple wait accident symbol spy blouse reduce foil echo label';
+  const airnodeConfig: node.Config = JSON.parse(
+    readFileSync(join(__dirname, '../../config/config.example.json')).toString()
+  );
+  const airkeeperConfig: AirkeeperConfig = JSON.parse(
+    readFileSync(join(__dirname, '../../config/airkeeper.example.json')).toString()
+  );
+  const config = mergeConfigs(
+    { ...airnodeConfig, nodeSettings: { ...airnodeConfig.nodeSettings, airnodeWalletMnemonic: airnodeWalletMnemonic } },
+    airkeeperConfig
+  );
+  const airnodeAddress = airkeeperConfig.airnodeAddress;
+  if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
+    throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
+  }
+  const endpoint = airkeeperConfig.endpoints[Object.keys(airkeeperConfig.endpoints)[0]];
+  const templateId = Object.keys(airkeeperConfig.templates)[0];
+  const templateParameters = airkeeperConfig.templates[templateId].templateParameters;
   const apiCallParameters = abi.decode(templateParameters);
 
-  const callApiOptions = {
-    oises,
-    apiCredentials,
-    apiCallParameters,
-    oisTitle,
-    endpointName,
-  };
-
-  it('calls the adapter with the given parameters', async () => {
+  it('calls the api and returns the value', async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
     const apiResponse = { data: { success: true, result: '723.392028' } };
     spy.mockResolvedValueOnce(apiResponse);
 
-    const [logs, res] = await callApi(callApiOptions);
+    const [logs, res] = await callApi(config, endpoint, apiCallParameters);
 
-    expect(logs).toHaveLength(2);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          level: 'DEBUG',
-          message: `API server response data: ${JSON.stringify(apiResponse.data)}`,
-        },
-        {
-          level: 'INFO',
-          message: 'API value: 723392028',
-        },
-      ])
-    );
+    expect(logs).toHaveLength(0);
     expect(res).toBeDefined();
     expect(res).toEqual(ethers.BigNumber.from(723392028));
     expect(spy).toHaveBeenCalledTimes(1);
-    const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
-    expect(spy).toHaveBeenCalledWith({
-      ois: oises[0],
-      endpointName: 'convertToUSD',
-      parameters: {
-        to: 'USD',
-        from: 'ETH',
-      },
-      apiCredentials: [
-        {
-          securitySchemeName,
-          securitySchemeValue,
-        },
-      ],
-      metadata: null,
-    });
   });
 
   it("returns null if reserved parameter '_type' is missing", async () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
-    const oisesWithoutType = oises.map((o) => ({
+    const apiResponse = { data: { success: true, result: '723.392028' } };
+    spy.mockResolvedValueOnce(apiResponse);
+    const oisesWithoutType = airnodeConfig.ois.map((o) => ({
       ...o,
       endpoints: o.endpoints.map((e) => ({
         ...e,
@@ -182,59 +56,13 @@ describe('callApi', () => {
       })),
     }));
 
-    const [logs, res] = await callApi({
-      ...callApiOptions,
-      oises: oisesWithoutType,
-    });
+    const [logs, res] = await callApi({ ...config, ois: oisesWithoutType }, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          level: 'ERROR',
-          message: expect.stringMatching("reserved parameter '_type' is missing for endpoint: convertToUSD"),
-        },
-      ])
+      expect.arrayContaining([{ level: 'ERROR', message: "Cannot read property 'length' of undefined" }])
     );
     expect(res).toEqual(null);
-    expect(spy).not.toHaveBeenCalled();
-  });
-
-  it('returns an error if the API call fails to execute', async () => {
-    const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
-    const error = new Error('Network is down');
-    spy.mockRejectedValueOnce(error);
-
-    const [logs, res] = await callApi(callApiOptions);
-
-    expect(logs).toHaveLength(1);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          error,
-          level: 'ERROR',
-          message: expect.stringMatching('Failed to fetch data from API for endpoint: convertToUSD'),
-        },
-      ])
-    );
-    expect(res).toEqual(null);
-    expect(spy).toHaveBeenCalledTimes(1);
-    const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
-    expect(spy).toHaveBeenCalledWith({
-      ois: oises[0],
-      endpointName: 'convertToUSD',
-      parameters: {
-        to: 'USD',
-        from: 'ETH',
-      },
-      apiCredentials: [
-        {
-          securitySchemeName,
-          securitySchemeValue,
-        },
-      ],
-      metadata: null,
-    });
   });
 
   it('returns an error if the API call fails to extract and encode response', async () => {
@@ -248,36 +76,12 @@ describe('callApi', () => {
       throw error;
     });
 
-    const [logs, res] = await callApi(callApiOptions);
+    const [logs, res] = await callApi(config, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        {
-          error,
-          level: 'ERROR',
-          message: `Failed to extract or encode value from API response: ${JSON.stringify(apiResponse.data)}`,
-        },
-      ])
-    );
+    expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Unexpected error' }]));
     expect(res).toEqual(null);
     expect(buildAndExecuteRequestSpy).toHaveBeenCalledTimes(1);
-    const { securitySchemeName, securitySchemeValue } = apiCredentials[0];
-    expect(buildAndExecuteRequestSpy).toHaveBeenCalledWith({
-      ois: oises[0],
-      endpointName: 'convertToUSD',
-      parameters: {
-        to: 'USD',
-        from: 'ETH',
-      },
-      apiCredentials: [
-        {
-          securitySchemeName,
-          securitySchemeValue,
-        },
-      ],
-      metadata: null,
-    });
     expect(extractAndEncodeResponseSpy).toHaveBeenCalledTimes(1);
     expect(extractAndEncodeResponseSpy).toHaveBeenCalledWith(apiResponse.data, expect.any(Object));
   });

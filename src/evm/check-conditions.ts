@@ -1,8 +1,9 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { DEFAULT_RETRY_TIMEOUT_MS } from '../constants';
+import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Id } from '../types';
 import { Subscription } from '../validator';
 
@@ -33,7 +34,7 @@ export const checkSubscriptionCondition = async (
     ({ conditionFunction, conditionParameters } = decodeConditions(subscription.conditions, contract));
   } catch (err) {
     const message = 'Failed to decode conditions';
-    const log = node.logger.pend('ERROR', message, err as any);
+    const log = utils.logger.pend('ERROR', message, err as any);
     return [[log], false];
   }
 
@@ -43,12 +44,19 @@ export const checkSubscriptionCondition = async (
         .connect(voidSigner)
         .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters),
     {
-      timeoutMs: DEFAULT_RETRY_TIMEOUT_MS,
+      timeoutMs: TIMEOUT_MS,
+      retries: RETRIES,
     }
   );
   if (!result.success) {
     const message = 'Failed to check conditions';
-    const log = node.logger.pend('ERROR', message, result.error);
+    const log = utils.logger.pend('ERROR', message, result.error);
+    return [[log], false];
+  }
+
+  if (result.data === null) {
+    const message = 'Failed to check conditions';
+    const log = utils.logger.pend('ERROR', message);
     return [[log], false];
   }
   // The result will always be ethers.Result type even if solidity function retuns a single value
@@ -56,7 +64,7 @@ export const checkSubscriptionCondition = async (
   // See https://docs.ethers.io/v5/api/contract/contract/#Contract-functionsCall
   if (!result.data || !result.data[0]) {
     const message = 'Conditions not met. Skipping update...';
-    const log = node.logger.pend('WARN', message);
+    const log = utils.logger.pend('WARN', message);
     return [[log], false];
   }
 

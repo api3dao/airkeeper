@@ -1,6 +1,7 @@
+import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
 import { getSponsorWalletAndTransactionCount } from './transaction-count';
-import { deriveSponsorWallet } from '../wallet';
+import { PROTOCOL_ID_PSP } from '../constants';
 
 describe('getSponsorWalletAndTransactionCount', () => {
   const airnodeWallet = ethers.Wallet.fromMnemonic(
@@ -19,7 +20,7 @@ describe('getSponsorWalletAndTransactionCount', () => {
 
     expect(getTransactionCountSpy).toHaveBeenNthCalledWith(
       1,
-      deriveSponsorWallet(airnodeWallet.mnemonic.phrase, sponsor, '2').address,
+      node.evm.deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, PROTOCOL_ID_PSP).address,
       expect.any(Number)
     );
     expect(logs).toEqual(
@@ -38,7 +39,9 @@ describe('getSponsorWalletAndTransactionCount', () => {
   it('returns null with error log if transaction count cannot be fetched', async () => {
     const getTransactionCountSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getTransactionCount');
     const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
-    getTransactionCountSpy.mockRejectedValueOnce(new Error(errorMessage));
+    getTransactionCountSpy.mockImplementation(() => {
+      throw new Error(errorMessage);
+    });
 
     const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
 

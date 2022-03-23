@@ -8,21 +8,7 @@ import { AirkeeperConfig, validateConfig } from './validator';
 export const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
   const nodeConfigPath = path.resolve(__dirname, '..', '..', 'config', `config.json`);
-
-  const {
-    config,
-    shouldSkipValidation,
-    validationOutput: { messages, valid },
-  } = node.config.parseConfig(nodeConfigPath, process.env, true);
-
-  if (shouldSkipValidation) {
-    return config;
-  }
-  if (!valid) {
-    throw new Error(`Invalid Airnode configuration file: ${JSON.stringify(messages, null, 2)}`);
-  }
-
-  return config;
+  return node.config.loadConfig(nodeConfigPath, process.env);
 };
 
 export const loadAirkeeperConfig = () => {

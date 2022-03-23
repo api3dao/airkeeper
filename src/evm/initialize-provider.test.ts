@@ -21,8 +21,8 @@ describe('initializeProvider', () => {
     type: 'evm',
     options: {
       txType: 'eip1559',
-      baseFeeMultiplier: '2',
-      priorityFee: { value: '3.12', unit: 'gwei' },
+      baseFeeMultiplier: 2,
+      priorityFee: { value: 3.12, unit: 'gwei' },
     },
   };
 
@@ -38,8 +38,8 @@ describe('initializeProvider', () => {
         ...chain,
         options: {
           txType,
-          baseFeeMultiplier: '2',
-          priorityFee: { value: '3.12', unit: 'gwei' },
+          baseFeeMultiplier: 2,
+          priorityFee: { value: 3.12, unit: 'gwei' },
         },
       },
       providerUrl
