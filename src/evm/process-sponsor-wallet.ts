@@ -62,7 +62,7 @@ export const processSponsorWallet = async (
               nonce,
             }
           ),
-      { timeoutMs: TIMEOUT_MS }
+      { timeoutMs: TIMEOUT_MS, retries: 1 }
     );
     if (!tx.success) {
       const message = `Failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`;

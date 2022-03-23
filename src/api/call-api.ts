@@ -10,7 +10,6 @@ export const callApi = async (
   parameters: node.ApiCallParameters
 ): Promise<node.LogsData<ethers.BigNumber | null>> => {
   // Note: airnodeAddress, endpointId, id are not used in callApi verification, but are required by the node.AggregatedApiCall type
-  //airnodeAddress
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
   const airnodeAddress = (
     config.airnodeXpub
