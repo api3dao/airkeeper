@@ -3,7 +3,7 @@ import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { TIMEOUT_MS } from '../constants';
+import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Id } from '../types';
 import { Subscription } from '../validator';
 
@@ -45,7 +45,7 @@ export const checkSubscriptionCondition = async (
         .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters),
     {
       timeoutMs: TIMEOUT_MS,
-      retries: 1,
+      retries: RETRIES,
     }
   );
   if (!result.success) {
