@@ -3,7 +3,7 @@ import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { SponsorWalletTransactionCount } from '../types';
-import { TIMEOUT_MS, RETRIES, PROTOCOL_ID_PSP } from '../constants';
+import { RETRIES, PROTOCOL_ID_PSP } from '../constants';
 import { shortenAddress } from '../wallet';
 
 export const getSponsorWalletAndTransactionCount = async (
@@ -17,13 +17,16 @@ export const getSponsorWalletAndTransactionCount = async (
     .deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, PROTOCOL_ID_PSP)
     .connect(provider);
 
+  console.log('sponsorWallet', sponsorWallet);
+
   // Fetch sponsorWallet transaction count
   const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlock), {
-    timeoutMs: TIMEOUT_MS,
+    timeoutMs: 1000,
     retries: RETRIES,
   });
   console.log('transactionCount', transactionCount);
   if (!transactionCount.success) {
+    console.log('here');
     const message = 'Failed to fetch the sponsor wallet transaction count';
     const log = utils.logger.pend('ERROR', message, transactionCount.error);
     return [[log], null];
