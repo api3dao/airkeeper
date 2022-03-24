@@ -94,9 +94,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
 
-        return callApi(config, endpoints[endpointId], apiCallParameters).then(
-          ([logs, data]) => [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>
-        );
+        const [logs, data] = await callApi(config, endpoints[endpointId], apiCallParameters);
+
+        return [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>;
       },
       { timeoutMs: TIMEOUT_MS, retries: RETRIES }
     )

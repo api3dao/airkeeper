@@ -179,15 +179,14 @@ const executeApiCalls = async (state: State): Promise<State> => {
   const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
     return go(
-      () =>
-        callApi(config, endpoint, apiCallParameters).then(
-          ([logs, data]) =>
-            [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
-              templateId: string;
-              apiValue: ethers.BigNumber | null;
-              subscriptions: Id<Subscription>[];
-            }>
-        ),
+      async () => {
+        const [logs, data] = await callApi(config, endpoint, apiCallParameters);
+        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
+          templateId: string;
+          apiValue: ethers.BigNumber | null;
+          subscriptions: Id<Subscription>[];
+        }>;
+      },
       { timeoutMs: TIMEOUT_MS, retries: RETRIES }
     );
   });
@@ -264,12 +263,15 @@ const checkSubscriptionsConditions = async (
   voidSigner: ethers.VoidSigner,
   logOptions: utils.LogOptions
 ) => {
-  const conditionPromises = subscriptions.map(
-    (subscription) =>
-      checkSubscriptionCondition(subscription, apiValuesBySubscriptionId[subscription.id], contract, voidSigner).then(
-        ([logs, isValid]) => [logs, { subscription, isValid }]
-      ) as Promise<node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>>
-  );
+  const conditionPromises = subscriptions.map(async (subscription) => {
+    const [logs, isValid] = await checkSubscriptionCondition(
+      subscription,
+      apiValuesBySubscriptionId[subscription.id],
+      contract,
+      voidSigner
+    );
+    return [logs, { subscription, isValid }] as node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>;
+  });
   const result = await Promise.all(conditionPromises);
   const validSubscriptions = result.reduce((acc: CheckedSubscription[], [log, data]) => {
     const subscriptionLogOptions = buildLogOptions('additional', { subscriptionId: data.subscription.id }, logOptions);
@@ -300,13 +302,10 @@ const groupSubscriptionsBySponsorWallet = async (
   providerLogOptions: utils.LogOptions
 ): Promise<SponsorWalletWithSubscriptions[]> => {
   const sponsorAddresses = Object.keys(subscriptionsBySponsor);
-  const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(
-    (sponsor) =>
-      getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor).then(([logs, data]) => [
-        logs,
-        { ...data, sponsor },
-      ]) as Promise<node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>>
-  );
+  const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(async (sponsor) => {
+    const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
+    return [logs, { ...data, sponsor }] as node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>;
+  });
   const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
   const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
     (acc: SponsorWalletWithSubscriptions[], [logs, data]) => {
