@@ -111,6 +111,7 @@ yarn install
 Follow these steps to run Airkeeper locally:
 
 1. Open a new terminal and start a new local ethereum node.
+1. Open a new terminal and start the local 'Currency Converter API' server.
 1. Deploy all required contracts (RrpBeaconServer, DapiServer, etc) and set everything up (whitelisting, sponsorship,
    etc).
 1. Switch to the Airkeeper root directory and run `yarn install`.
@@ -160,8 +161,8 @@ The `scripts` directory contains scripts that can be used to test the lambda fun
 
 ### Local PSP beacon update
 
-First you need to start a local node and grab private keys of funded test accounts to add them to each account in the
-psp-beacon-local.json config file.
+First you need to start a local ethereum node and grab private keys of funded test accounts to add them to each account
+in the psp-beacon-local.json config file. Then you need to start the local 'Currency Converter API' server.
 
 After that you can run the following command:
 
