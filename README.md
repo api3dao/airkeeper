@@ -166,5 +166,5 @@ psp-beacon-local.json config file.
 After that you can run the following command:
 
 - `yarn run setup:psp-local`: Deploys the DapiServer contract and registers a single subscription. Use the values
-  displayed in the console to fill in the `airkeeper.json` file. Then you can run `yarn sls:invoke-local:psp-beacon-update` to update
-  the beacon using PSP.
+  displayed in the console to fill in the `airkeeper.json` file. Then you can run
+  `yarn sls:invoke-local:psp-beacon-update` to update the beacon using PSP.
