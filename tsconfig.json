@@ -1,13 +1,13 @@
 {
   "compilerOptions": {
     "declaration": true,
-    "lib": ["es6"],
+    "lib": ["es2017"],
     "module": "commonjs",
     "esModuleInterop": true,
     "moduleResolution": "node",
     "sourceMap": true,
     "strict": true,
-    "target": "es5",
+    "target": "es2017",
     "skipLibCheck": true,
     "baseUrl": "./",
     "outDir": "./dist/src"
