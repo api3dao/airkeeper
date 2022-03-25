@@ -3,10 +3,11 @@
   "license": "MIT",
   "version": "1.0.0",
   "description": "A tool to update a beacon server value on a time interval",
+  "main": "./src/index",
+  "types": "./src/index",
   "engines": {
     "node": "^14.17.1"
   },
-  "main": "./dist/src/start.js",
   "files": [
     "dist",
     "serverless.yml",
