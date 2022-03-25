@@ -1,5 +1,5 @@
 import * as node from '@api3/airnode-node';
-import * as ois from '@api3/airnode-ois';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import {
   Triggers,
@@ -13,20 +13,9 @@ import {
   AirkeeperChainConfig,
 } from './validator';
 
-export interface PriorityFee {
-  readonly value: string;
-  readonly unit?: 'wei' | 'kwei' | 'mwei' | 'gwei' | 'szabo' | 'finney' | 'ether';
-}
-
-export interface ChainOptions {
-  readonly txType: 'legacy' | 'eip1559';
-  readonly baseFeeMultiplier?: string;
-  readonly priorityFee?: PriorityFee;
-}
-
 export interface ChainConfig extends node.ChainConfig {
   readonly contracts: node.ChainContracts & AirkeeperChainContracts;
-  readonly options: ChainOptions;
+  readonly options: node.ChainOptions;
 }
 
 export interface Config extends node.Config {
@@ -39,24 +28,16 @@ export interface Config extends node.Config {
   readonly endpoints: Endpoints;
 }
 
-export interface CallApiOptions {
-  oises: ois.OIS[];
-  apiCredentials: node.ApiCredentials[];
-  apiCallParameters: node.ApiCallParameters;
-  oisTitle: string;
-  endpointName: string;
-}
-
 export interface LogsAndApiValuesByBeaconId {
   [beaconId: string]: {
-    logs: node.PendingLog[];
+    logs: utils.PendingLog[];
     apiValue: ethers.BigNumber | null;
   };
 }
 
 export interface BaseState {
   config: Config;
-  baseLogOptions: node.LogOptions;
+  baseLogOptions: utils.LogOptions;
 }
 export interface State extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];

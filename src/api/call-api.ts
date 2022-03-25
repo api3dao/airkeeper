@@ -1,67 +1,35 @@
-import * as adapter from '@api3/airnode-adapter';
 import * as node from '@api3/airnode-node';
-import * as ois from '@api3/airnode-ois';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
-import isNil from 'lodash/isNil';
-import { CallApiOptions } from '../types';
-import { retryGo } from '../utils';
+import { Config } from '../types';
+import { Endpoint } from '../validator';
 
-export const callApi = async ({
-  oises,
-  apiCredentials,
-  apiCallParameters,
-  oisTitle,
-  endpointName,
-}: CallApiOptions): Promise<node.LogsData<ethers.BigNumber | null>> => {
-  const configOis = oises.find((o) => o.title === oisTitle)!;
-  const configEndpoint = configOis.endpoints.find((e) => e.name === endpointName)!;
-  const reservedParameters = node.adapters.http.parameters.getReservedParameters(configEndpoint, apiCallParameters);
-  if (!reservedParameters._type) {
-    const message = `reserved parameter '_type' is missing for endpoint: ${endpointName}`;
-    const log = node.logger.pend('ERROR', message);
-    return [[log], null];
+export const callApi = async (
+  config: Config,
+  endpoint: Endpoint,
+  parameters: node.ApiCallParameters
+): Promise<node.LogsData<ethers.BigNumber | null>> => {
+  // Note: airnodeAddress, endpointId, id are not used in callApi verification, but are required by the node.AggregatedApiCall type
+  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
+  const airnodeAddress = (
+    config.airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(config.airnodeXpub).derivePath('0/0')
+      : airnodeHDNode.derivePath(ethers.utils.defaultPath)
+  ).address;
+  const endpointId = ethers.utils.keccak256(
+    ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
+  );
+  const id = utils.randomHexString(16);
+
+  const [logs, apiCallResponse] = await node.handlers.callApi({
+    config,
+    aggregatedApiCall: { type: 'http-gateway', airnodeAddress, endpointId, id, parameters, ...endpoint },
+  });
+  if (!apiCallResponse.success) {
+    return [logs, null];
   }
 
-  // Remove reserved parameters
-  const sanitizedParameters: adapter.Parameters = node.utils.removeKeys(apiCallParameters, ois.RESERVED_PARAMETERS);
-
-  // Remove oisTitle from credentials
-  const adapterApiCredentials = apiCredentials
-    .filter((c) => c.oisTitle === oisTitle)
-    .map((c) => node.utils.removeKey(c, 'oisTitle'));
-
-  const options: adapter.BuildRequestOptions = {
-    ois: configOis,
-    endpointName,
-    parameters: sanitizedParameters,
-    apiCredentials: adapterApiCredentials as adapter.ApiCredentials[],
-    metadata: null,
-  };
-
-  // Call API
-  const [errBuildAndExecuteRequest, apiResponse] = await retryGo(() => adapter.buildAndExecuteRequest(options));
-  if (errBuildAndExecuteRequest || isNil(apiResponse) || isNil(apiResponse.data)) {
-    const message = `Failed to fetch data from API for endpoint: ${endpointName}`;
-    const log = node.logger.pend('ERROR', message, errBuildAndExecuteRequest);
-    return [[log], null];
-  }
-  const messageApiResponse = `API server response data: ${JSON.stringify(apiResponse.data)}`;
-  const logApiResponse = node.logger.pend('DEBUG', messageApiResponse);
-
-  // Extract API value
-  try {
-    const response = adapter.extractAndEncodeResponse(
-      apiResponse!.data,
-      reservedParameters as adapter.ReservedParameters
-    );
-    const apiValue = ethers.BigNumber.from(response.values[0].toString());
-    const messageApiValue = `API value: ${apiValue.toString()}`;
-    const logApiValue = node.logger.pend('INFO', messageApiValue);
-
-    return [[logApiResponse, logApiValue], apiValue];
-  } catch (error) {
-    const message = `Failed to extract or encode value from API response: ${JSON.stringify(apiResponse.data)}`;
-    const log = node.logger.pend('ERROR', message, error as any);
-    return [[log], null];
-  }
+  const parsedData = JSON.parse(apiCallResponse.value);
+  const apiValue = ethers.BigNumber.from(parsedData.values[0].toString());
+  return [logs, apiValue];
 };

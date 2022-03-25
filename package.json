@@ -5,12 +5,16 @@
   "description": "A tool to update a beacon server value on a time interval",
   "main": "./src/index",
   "types": "./src/index",
+  "engines": {
+    "node": "^14.17.1"
+  },
   "files": [
     "dist",
     "serverless.yml",
     "*.js"
   ],
   "scripts": {
+    "postinstall": "git clone https://github.com/api3dao/airnode.git airnode; cd airnode && git checkout 994d895f37ca871f57224ac1603ea58e79ef071e && yarn run bootstrap && yarn build && cd ..; cp -a airnode/node_modules/@api3/airnode-node/. node_modules/@api3/airnode-node; rm -rf airnode",
     "build": "yarn clean && yarn compile:build",
     "clean": "rimraf -rf ./dist *.tgz",
     "compile": "tsc -p tsconfig.json",
@@ -31,11 +35,12 @@
     "prepare": "husky install"
   },
   "dependencies": {
-    "@api3/airnode-abi": "^0.4.1",
-    "@api3/airnode-adapter": "^0.4.1",
-    "@api3/airnode-node": "^0.4.1",
-    "@api3/airnode-ois": "^0.4.1",
-    "@api3/airnode-protocol": "^0.4.1",
+    "@api3/airnode-abi": "^0.5.0",
+    "@api3/airnode-adapter": "^0.5.0",
+    "@api3/airnode-node": "^0.5.0",
+    "@api3/airnode-protocol": "^0.5.0",
+    "@api3/airnode-utilities": "^0.5.0",
+    "@api3/promise-utils": "^0.1.0",
     "dotenv-safe": "^8.2.0",
     "ethers": "^5.6.0",
     "lodash": "^4.17.21",

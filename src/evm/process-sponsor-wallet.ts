@@ -1,8 +1,9 @@
 import * as node from '@api3/airnode-node';
+import * as utils from '@api3/airnode-utilities';
+import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { GAS_LIMIT } from '../constants';
+import { GAS_LIMIT, TIMEOUT_MS, RETRIES } from '../constants';
 import { ProcessableSubscription } from '../types';
-import { retryGo } from '../utils';
 
 export const processSponsorWallet = async (
   airnodeWallet: ethers.Wallet,
@@ -14,7 +15,7 @@ export const processSponsorWallet = async (
   const logs: node.LogsData<ProcessableSubscription>[] = [];
 
   // Process each subscription in serial to keep nonces in order
-  for (const subscription of subscriptions.sort((a, b) => a.nonce - b.nonce) || []) {
+  for (const subscription of subscriptions.sort((a, b) => a.nonce - b.nonce)) {
     const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, nonce, apiValue } = subscription;
 
     // Encode API value
@@ -40,34 +41,36 @@ export const processSponsorWallet = async (
       fulfillFunction = contract.interface.getFunction(fulfillFunctionId);
     } catch (error) {
       const message = 'Failed to get fulfill function';
-      const log = node.logger.pend('ERROR', message, error as any);
+      const log = utils.logger.pend('ERROR', message, error as any);
       return [...logs, [[log], subscription]];
     }
-    const [errfulfillFunction, tx] = await retryGo<ethers.ContractTransaction>(() =>
-      contract
-        .connect(sponsorWallet)
-        .functions[fulfillFunction.name](
-          subscriptionId,
-          airnodeWallet.address,
-          relayer,
-          sponsor,
-          timestamp,
-          encodedFulfillmentData,
-          signature,
-          {
-            gasLimit: GAS_LIMIT,
-            ...gasTarget,
-            nonce,
-          }
-        )
+    const tx = await go<ethers.ContractTransaction, Error>(
+      () =>
+        contract
+          .connect(sponsorWallet)
+          .functions[fulfillFunction.name](
+            subscriptionId,
+            airnodeWallet.address,
+            relayer,
+            sponsor,
+            timestamp,
+            encodedFulfillmentData,
+            signature,
+            {
+              gasLimit: GAS_LIMIT,
+              ...gasTarget,
+              nonce,
+            }
+          ),
+      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
     );
-    if (errfulfillFunction) {
+    if (!tx.success) {
       const message = `Failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${nonce}`;
-      const log = node.logger.pend('ERROR', message, errfulfillFunction);
+      const log = utils.logger.pend('ERROR', message, tx.error);
       return [...logs, [[log], subscription]];
     }
-    const message = `Tx submitted: ${tx?.hash}`;
-    const log = node.logger.pend('INFO', message);
+    const message = `Tx submitted: ${tx.data.hash}`;
+    const log = utils.logger.pend('INFO', message);
     logs.push([[log], subscription]);
   }
 

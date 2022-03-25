@@ -3,21 +3,12 @@ import path from 'path';
 import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
-import { validateConfig, AirkeeperConfig } from './validator';
+import { AirkeeperConfig, validateConfig } from './validator';
 
 export const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
   const nodeConfigPath = path.resolve(__dirname, '..', '..', 'config', `config.json`);
-
-  const { config, shouldSkipValidation, validationOutput } = node.config.parseConfig(nodeConfigPath, process.env, true);
-
-  // TODO: Log debug that validation is skipped
-  if (shouldSkipValidation) return config;
-  if (!validationOutput.valid) {
-    throw new Error(`Invalid Airnode configuration file: ${JSON.stringify(validationOutput.messages, null, 2)}`);
-  }
-  // TODO: Log validation warnings - currently not possible since we have troubles constructing logger options
-  return config;
+  return node.config.loadConfig(nodeConfigPath, process.env);
 };
 
 export const loadAirkeeperConfig = () => {

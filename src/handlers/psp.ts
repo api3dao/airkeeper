@@ -1,5 +1,7 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import * as utils from '@api3/airnode-utilities';
+import { go, goSync } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
@@ -7,10 +9,13 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import { checkSubscriptionCondition } from '../evm/check-conditions';
-import { initializeProvider } from '../evm/initialize-provider';
-import { processSponsorWallet } from '../evm/process-sponsor-wallet';
-import { getSponsorWalletAndTransactionCount } from '../evm/transaction-count';
+import {
+  checkSubscriptionCondition,
+  getSponsorWalletAndTransactionCount,
+  initializeProvider,
+  processSponsorWallet,
+} from '../evm';
+import { buildLogOptions } from '../logger';
 import {
   CheckedSubscription,
   Config,
@@ -22,24 +27,32 @@ import {
   SponsorWalletWithSubscriptions,
   State,
 } from '../types';
-import { retryGo } from '../utils';
+import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
-  const airnodeConfig = loadAirnodeConfig();
+  const airnodeConfig = goSync(loadAirnodeConfig);
+  if (!airnodeConfig.success) {
+    utils.logger.error(airnodeConfig.error.message);
+    throw airnodeConfig.error;
+  }
   // This file will be merged with config.json from above
-  const airkeeperConfig = loadAirkeeperConfig();
-  const config = mergeConfigs(airnodeConfig, airkeeperConfig);
+  const airkeeperConfig = goSync(loadAirkeeperConfig);
+  if (!airkeeperConfig.success) {
+    utils.logger.error(airkeeperConfig.error.message);
+    throw airkeeperConfig.error;
+  }
+  const config = mergeConfigs(airnodeConfig.data, airkeeperConfig.data);
 
   const state = await updateBeacon(config);
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  node.logger.info(
-    `PSP beacon update finished at ${node.utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
+  utils.logger.info(
+    `PSP beacon update finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
     state.baseLogOptions
   );
 
@@ -53,34 +66,36 @@ export const handler = async (_event: any = {}): Promise<any> => {
 const initializeState = (config: Config): State => {
   const { triggers, subscriptions } = config;
 
-  const baseLogOptions = node.logger.buildBaseOptions(config, {
-    coordinatorId: node.utils.randomHexString(8),
+  const baseLogOptions = utils.buildBaseOptions(config, {
+    coordinatorId: utils.randomHexString(8),
   });
 
   const enabledSubscriptions = triggers.protoPsp.reduce((acc: Id<Subscription>[], subscriptionId) => {
     // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
-      node.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
+      utils.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
       return acc;
     }
     // Verify subscriptionId
-    const expectedSubscriptionId = ethers.utils.solidityKeccak256(
-      ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-      [
-        subscription.chainId,
-        subscription.airnodeAddress,
-        subscription.templateId,
-        subscription.parameters,
-        subscription.conditions,
-        subscription.relayer,
-        subscription.sponsor,
-        subscription.requester,
-        subscription.fulfillFunctionId,
-      ]
+    const expectedSubscriptionId = ethers.utils.keccak256(
+      ethers.utils.defaultAbiCoder.encode(
+        ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+        [
+          subscription.chainId,
+          subscription.airnodeAddress,
+          subscription.templateId,
+          subscription.parameters,
+          subscription.conditions,
+          subscription.relayer,
+          subscription.sponsor,
+          subscription.requester,
+          subscription.fulfillFunctionId,
+        ]
+      )
     );
     if (subscriptionId !== expectedSubscriptionId) {
-      node.logger.warn(
+      utils.logger.warn(
         `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
         baseLogOptions
       );
@@ -97,7 +112,7 @@ const initializeState = (config: Config): State => {
   }, []);
 
   if (isEmpty(enabledSubscriptions)) {
-    node.logger.info('No proto-PSP subscriptions to process', baseLogOptions);
+    utils.logger.info('No proto-PSP subscriptions to process', baseLogOptions);
   }
 
   const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
@@ -106,7 +121,7 @@ const initializeState = (config: Config): State => {
       // Get template details
       const template = config.templates[templateId];
       if (isNil(template)) {
-        node.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
+        utils.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
         return acc;
       }
       // Verify templateId
@@ -115,14 +130,14 @@ const initializeState = (config: Config): State => {
         [template.endpointId, template.templateParameters]
       );
       if (expectedTemplateId !== templateId) {
-        node.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
+        utils.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
         return acc;
       }
 
       // Get endpoint details
       const endpoint = config.endpoints[template.endpointId];
       if (isNil(endpoint)) {
-        node.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
+        utils.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
         return acc;
       }
       // Verify endpointId
@@ -130,7 +145,7 @@ const initializeState = (config: Config): State => {
         ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
       );
       if (expectedEndpointId !== template.endpointId) {
-        node.logger.warn(
+        utils.logger.warn(
           `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
           baseLogOptions
         );
@@ -161,42 +176,46 @@ const initializeState = (config: Config): State => {
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
-  // TODO: promise.all? 🤔
-  let apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber } = {};
-  for (const { subscriptions, template, endpoint } of groupedSubscriptions) {
-    const templateLogOptions: node.LogOptions = {
-      ...baseLogOptions,
-      additional: {
-        templateId: template.id,
-      },
-    };
+  const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-    const [errorCallApi, logsData] = await retryGo(() =>
-      callApi({
-        oises: config.ois,
-        apiCredentials: config.apiCredentials,
-        apiCallParameters,
-        oisTitle: endpoint.oisTitle,
-        endpointName: endpoint.endpointName,
-      })
+    return go(
+      async () => {
+        const [logs, data] = await callApi(config, endpoint, apiCallParameters);
+        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
+          templateId: string;
+          apiValue: ethers.BigNumber | null;
+          subscriptions: Id<Subscription>[];
+        }>;
+      },
+      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
     );
-    if (!isNil(errorCallApi) || isNil(logsData)) {
-      node.logger.warn('Failed to fecth API value', templateLogOptions);
-      continue;
-    }
-    const [logs, apiValue] = logsData;
-    node.logger.logPending(logs, templateLogOptions);
+  });
+  const responses = await Promise.all(apiValuePromises);
 
-    if (isNil(apiValue)) {
-      node.logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
-      continue;
+  const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
+    if (!result.success) {
+      utils.logger.warn('Failed to fetch API value', baseLogOptions);
+      return acc;
     }
 
-    apiValuesBySubscriptionId = {
-      ...apiValuesBySubscriptionId,
-      ...subscriptions.reduce((acc, subscription) => ({ ...acc, [subscription.id]: apiValue }), {}),
+    const [logs, data] = result.data;
+
+    const templateLogOptions = buildLogOptions('additional', { templateId: data.templateId }, baseLogOptions);
+
+    utils.logger.logPending(logs, templateLogOptions);
+
+    if (isNil(data.apiValue)) {
+      utils.logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
+      return acc;
+    }
+
+    return {
+      ...acc,
+      ...data.subscriptions.reduce((acc2, { id }) => {
+        return { ...acc2, [id]: data.apiValue };
+      }, {}),
     };
-  }
+  }, {});
 
   return { ...state, apiValuesBySubscriptionId };
 };
@@ -212,20 +231,13 @@ const initializeProviders = async (state: State): Promise<State> => {
   }
   const providerPromises = evmChains.flatMap((chain) =>
     Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
-      const providerLogOptions: node.LogOptions = {
-        ...baseLogOptions,
-        meta: {
-          ...baseLogOptions.meta,
-          chainId: chain.id,
-          providerName,
-        },
-      };
+      const providerLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
 
       // Initialize provider specific data
       const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
-      node.logger.logPending(logs, providerLogOptions);
+      utils.logger.logPending(logs, providerLogOptions);
       if (isNil(evmProviderState)) {
-        node.logger.warn('Failed to initialize provider', providerLogOptions);
+        utils.logger.warn('Failed to initialize provider', providerLogOptions);
         return null;
       }
 
@@ -249,24 +261,23 @@ const checkSubscriptionsConditions = async (
   apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber },
   contract: ethers.Contract,
   voidSigner: ethers.VoidSigner,
-  logOptions: node.LogOptions
+  logOptions: utils.LogOptions
 ) => {
-  const conditionPromises = subscriptions.map(
-    (subscription) =>
-      checkSubscriptionCondition(subscription, apiValuesBySubscriptionId[subscription.id], contract, voidSigner).then(
-        ([logs, isValid]) => [logs, { subscription, isValid }]
-      ) as Promise<node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>>
-  );
+  const conditionPromises = subscriptions.map(async (subscription) => {
+    const [logs, isValid] = await checkSubscriptionCondition(
+      subscription,
+      apiValuesBySubscriptionId[subscription.id],
+      contract,
+      voidSigner
+    );
+    return [logs, { subscription, isValid }] as node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>;
+  });
   const result = await Promise.all(conditionPromises);
   const validSubscriptions = result.reduce((acc: CheckedSubscription[], [log, data]) => {
-    const subscriptionLogOptions: node.LogOptions = {
-      ...logOptions,
-      additional: {
-        ...logOptions.additional,
-        subscriptionId: data.subscription.id,
-      },
-    };
-    node.logger.logPending(log, subscriptionLogOptions);
+    const subscriptionLogOptions = buildLogOptions('additional', { subscriptionId: data.subscription.id }, logOptions);
+
+    utils.logger.logPending(log, subscriptionLogOptions);
+
     if (data.isValid) {
       return [
         ...acc,
@@ -276,6 +287,7 @@ const checkSubscriptionsConditions = async (
         },
       ];
     }
+
     return acc;
   }, []);
 
@@ -287,30 +299,22 @@ const groupSubscriptionsBySponsorWallet = async (
   airnodeWallet: ethers.Wallet,
   provider: ethers.providers.Provider,
   currentBlock: number,
-  providerLogOptions: node.LogOptions
+  providerLogOptions: utils.LogOptions
 ): Promise<SponsorWalletWithSubscriptions[]> => {
   const sponsorAddresses = Object.keys(subscriptionsBySponsor);
-  const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(
-    (sponsor) =>
-      getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor).then(([logs, data]) => [
-        logs,
-        { ...data, sponsor },
-      ]) as Promise<node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>>
-  );
+  const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(async (sponsor) => {
+    const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
+    return [logs, { ...data, sponsor }] as node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>;
+  });
   const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
   const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
     (acc: SponsorWalletWithSubscriptions[], [logs, data]) => {
-      const sponsorLogOptions: node.LogOptions = {
-        ...providerLogOptions,
-        additional: {
-          ...providerLogOptions.additional,
-          sponsor: data.sponsor,
-        },
-      };
-      node.logger.logPending(logs, sponsorLogOptions);
+      const sponsorLogOptions = buildLogOptions('additional', { sponsor: data.sponsor }, providerLogOptions);
+
+      utils.logger.logPending(logs, sponsorLogOptions);
 
       if (isNil(data.sponsorWallet) || isNil(data.transactionCount)) {
-        node.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
+        utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
         return acc;
       }
 
@@ -338,14 +342,7 @@ const submitTransactions = async (state: State) => {
     const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
       providerState;
 
-    const providerLogOptions: node.LogOptions = {
-      ...baseLogOptions,
-      meta: {
-        ...baseLogOptions.meta,
-        chainId,
-        providerName,
-      },
-    };
+    const providerLogOptions = buildLogOptions('meta', { chainId, providerName }, baseLogOptions);
 
     // Get subscriptions from template/endnpoint groups
     const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
@@ -379,15 +376,13 @@ const submitTransactions = async (state: State) => {
 
     // Process sponsor wallets in parallel
     const sponsorWalletPromises = subscriptionsBySponsorWallets.map(async ({ subscriptions, sponsorWallet }) => {
-      const sponsorWalletLogOptions: node.LogOptions = {
-        ...providerLogOptions,
-        additional: {
-          ...providerLogOptions.additional,
-          sponsorWallet: shortenAddress(sponsorWallet.address),
-        },
-      };
+      const sponsorWalletLogOptions = buildLogOptions(
+        'additional',
+        { sponsorWallet: shortenAddress(sponsorWallet.address) },
+        providerLogOptions
+      );
 
-      node.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
+      utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
 
       const logs = await processSponsorWallet(
         airnodeWallet,
@@ -398,14 +393,12 @@ const submitTransactions = async (state: State) => {
       );
 
       logs.forEach(([logs, data]) => {
-        const subscriptionLogOptions: node.LogOptions = {
-          ...sponsorWalletLogOptions,
-          additional: {
-            ...sponsorWalletLogOptions.additional,
-            subscriptionId: data.id,
-          },
-        };
-        node.logger.logPending(logs, subscriptionLogOptions);
+        const subscriptionLogOptions = buildLogOptions(
+          'additional',
+          { subscriptionId: data.id },
+          sponsorWalletLogOptions
+        );
+        utils.logger.logPending(logs, subscriptionLogOptions);
       });
     });
 
@@ -420,25 +413,25 @@ const updateBeacon = async (config: Config) => {
   // STEP 1: Initialize state
   // =================================================================
   let state: State = initializeState(config);
-  node.logger.debug('Initial state created...', state.baseLogOptions);
+  utils.logger.debug('Initial state created...', state.baseLogOptions);
 
   // **************************************************************************
   // STEP 2: Make API calls
   // **************************************************************************
   state = await executeApiCalls(state);
-  node.logger.debug('API requests executed...', state.baseLogOptions);
+  utils.logger.debug('API requests executed...', state.baseLogOptions);
 
   // **************************************************************************
   // STEP 3. Initialize providers
   // **************************************************************************
   state = await initializeProviders(state);
-  node.logger.debug('Providers initialized...', state.baseLogOptions);
+  utils.logger.debug('Providers initialized...', state.baseLogOptions);
 
   // **************************************************************************
   // STEP 4. Initiate transactions for each provider, sponsor wallet pair
   // **************************************************************************
   await submitTransactions(state);
-  node.logger.debug('Transactions submitted...', state.baseLogOptions);
+  utils.logger.debug('Transactions submitted...', state.baseLogOptions);
 
   return state;
 };
