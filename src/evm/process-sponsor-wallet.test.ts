@@ -10,9 +10,14 @@ describe('processSponsorWallet', () => {
     'achieve climb couple wait accident symbol spy blouse reduce foil echo label'
   );
   const getFunctionMock = (_nameOrSignatureOrSighash: string) => {
-    return {
-      name: 'fulfillPspBeaconUpdate',
-    };
+    if (_nameOrSignatureOrSighash === '0x206b48f4')
+      return {
+        name: 'fulfillPspBeaconUpdate',
+      };
+    if (_nameOrSignatureOrSighash === '0xdc96acc8')
+      return {
+        name: 'conditionPspBeaconUpdate',
+      };
   };
   const getFunctionSpy = jest.fn().mockImplementation(getFunctionMock);
   const fulfillPspBeaconUpdateMock = (
@@ -25,6 +30,12 @@ describe('processSponsorWallet', () => {
     _signature: string
   ) => Promise.resolve({ hash: ethers.utils.keccak256(ethers.utils.randomBytes(32)) });
   const fulfillPspBeaconUpdateSpy = jest.fn().mockImplementation(fulfillPspBeaconUpdateMock);
+  const conditionPspBeaconUpdateMock = (
+    _subscriptionId: string,
+    _encodedFulfillmentData: string,
+    _conditionParameters: string
+  ) => Promise.resolve([true]);
+  const conditionPspBeaconUpdateSpy = jest.fn().mockImplementation(conditionPspBeaconUpdateMock);
   const dapiServerMock = {
     connect(_signerOrProvider: ethers.Signer | ethers.providers.Provider | string) {
       return this;
@@ -34,6 +45,7 @@ describe('processSponsorWallet', () => {
     },
     functions: {
       fulfillPspBeaconUpdate: fulfillPspBeaconUpdateSpy,
+      conditionPspBeaconUpdate: conditionPspBeaconUpdateSpy,
     },
   };
   const gasTarget = {
@@ -94,6 +106,8 @@ describe('processSponsorWallet', () => {
       PROTOCOL_ID_PSP
     )
     .connect(provider);
+  const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
+  const apiValuesBySubscriptionId = subscriptions.reduce((acc, s) => ({ ...acc, [s.id]: s.apiValue }), {});
 
   it('should process all subscriptions for a single sponsor wallet', async () => {
     const logsData = await processSponsorWallet(
@@ -101,10 +115,19 @@ describe('processSponsorWallet', () => {
       dapiServerMock as any,
       gasTarget,
       subscriptions,
-      sponsorWallet
+      sponsorWallet,
+      voidSigner,
+      apiValuesBySubscriptionId
     );
 
+    // Calls to conditionFunction
+    expect(getFunctionSpy).toHaveBeenNthCalledWith(1, '0xdc96acc8');
+    expect(getFunctionSpy).toHaveBeenNthCalledWith(3, '0xdc96acc8');
+    expect(getFunctionSpy).toHaveBeenNthCalledWith(5, '0xdc96acc8');
+    // Calls to updateFunction
     expect(getFunctionSpy).toHaveBeenNthCalledWith(2, '0x206b48f4');
+    expect(getFunctionSpy).toHaveBeenNthCalledWith(4, '0x206b48f4');
+    expect(getFunctionSpy).toHaveBeenNthCalledWith(6, '0x206b48f4');
     subscriptions.forEach((subscription, idx) =>
       expect(fulfillPspBeaconUpdateSpy).toHaveBeenCalledWith(
         subscription.id,
@@ -154,23 +177,36 @@ describe('processSponsorWallet', () => {
     const getFunctionMockOnceSpy = jest
       .fn()
       .mockImplementationOnce(getFunctionMock)
+      .mockImplementationOnce(getFunctionMock)
+      .mockImplementationOnce(getFunctionMock)
+      // The second subscription fails at getFunction due to an invalid fulfillFunctionId
       .mockImplementationOnce((_nameOrSignatureOrSighash: string) => {
         throw new Error(
           'no matching function (argument="name", value="fulfillFunctionId", code=INVALID_ARGUMENT, version=abi/5.6.0)'
         );
-      });
+      })
+      .mockImplementationOnce(getFunctionMock)
+      .mockImplementationOnce(getFunctionMock);
     const invalidSubscription2 = { ...subscription2, fulfillFunctionId: '0xinvalid' };
     const logsData = await processSponsorWallet(
       airnodeWallet,
       { ...dapiServerMock, interface: { getFunction: getFunctionMockOnceSpy } } as any,
       gasTarget,
       [subscription1, invalidSubscription2, subscription3],
-      sponsorWallet
+      sponsorWallet,
+      voidSigner,
+      apiValuesBySubscriptionId
     );
 
     expect(getFunctionSpy).not.toHaveBeenCalled();
-    expect(getFunctionMockOnceSpy).toHaveBeenCalledTimes(2);
-    expect(fulfillPspBeaconUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(getFunctionMockOnceSpy).toHaveBeenNthCalledWith(1, '0xdc96acc8');
+    expect(getFunctionMockOnceSpy).toHaveBeenNthCalledWith(2, '0x206b48f4');
+    expect(getFunctionMockOnceSpy).toHaveBeenNthCalledWith(3, '0xdc96acc8');
+    expect(getFunctionMockOnceSpy).toHaveBeenNthCalledWith(4, '0xinvalid');
+    expect(getFunctionMockOnceSpy).toHaveBeenNthCalledWith(5, '0xdc96acc8');
+    expect(getFunctionMockOnceSpy).toHaveBeenNthCalledWith(6, '0x206b48f4');
+    // fulfillPspBeaconUpdateSpy called for two successful updates and 1 failure is skipped
+    expect(fulfillPspBeaconUpdateSpy).toHaveBeenCalledTimes(2);
     expect(logsData).toEqual(
       expect.arrayContaining([
         [
@@ -192,6 +228,15 @@ describe('processSponsorWallet', () => {
           ],
           invalidSubscription2,
         ],
+        [
+          [
+            {
+              level: 'INFO',
+              message: expect.stringMatching(/Tx submitted: 0x[A-Fa-f0-9]{64}/),
+            },
+          ],
+          subscription3,
+        ],
       ])
     );
   });
@@ -202,19 +247,29 @@ describe('processSponsorWallet', () => {
       .mockImplementationOnce(fulfillPspBeaconUpdateMock)
       .mockImplementationOnce((_nameOrSignatureOrSighash: string) => {
         throw new Error('unexpected error');
-      });
+      })
+      .mockImplementationOnce(fulfillPspBeaconUpdateMock);
 
     const logsData = await processSponsorWallet(
       airnodeWallet,
-      { ...dapiServerMock, functions: { fulfillPspBeaconUpdate: fulfillPspBeaconUpdateOnceSpy } } as any,
+      {
+        ...dapiServerMock,
+        functions: {
+          fulfillPspBeaconUpdate: fulfillPspBeaconUpdateOnceSpy,
+          conditionPspBeaconUpdate: conditionPspBeaconUpdateSpy,
+        },
+      } as any,
       gasTarget,
       subscriptions,
-      sponsorWallet
+      sponsorWallet,
+      voidSigner,
+      apiValuesBySubscriptionId
     );
 
-    expect(getFunctionSpy).toHaveBeenCalledTimes(2);
+    expect(getFunctionSpy).toHaveBeenCalledTimes(6);
+    expect(conditionPspBeaconUpdateSpy).toHaveBeenCalledTimes(3);
     expect(fulfillPspBeaconUpdateSpy).not.toHaveBeenCalled();
-    expect(fulfillPspBeaconUpdateOnceSpy).toHaveBeenCalledTimes(2);
+    expect(fulfillPspBeaconUpdateOnceSpy).toHaveBeenCalledTimes(3);
     expect(logsData).toEqual(
       expect.arrayContaining([
         [
@@ -235,6 +290,15 @@ describe('processSponsorWallet', () => {
             },
           ],
           subscription2,
+        ],
+        [
+          [
+            {
+              level: 'INFO',
+              message: expect.stringMatching(/Tx submitted: 0x[A-Fa-f0-9]{64}/),
+            },
+          ],
+          subscription3,
         ],
       ])
     );

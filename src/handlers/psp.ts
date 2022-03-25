@@ -3,30 +3,14 @@ import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { go, goSync } from '@api3/promise-utils';
 import { ethers } from 'ethers';
-import { Dictionary } from 'lodash';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import {
-  checkSubscriptionCondition,
-  getSponsorWalletAndTransactionCount,
-  initializeProvider,
-  processSponsorWallet,
-} from '../evm';
+import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
 import { buildLogOptions } from '../logger';
-import {
-  CheckedSubscription,
-  Config,
-  EVMProviderState,
-  GroupedSubscriptions,
-  Id,
-  ProviderState,
-  SponsorWalletTransactionCount,
-  SponsorWalletWithSubscriptions,
-  State,
-} from '../types';
+import { Config, EVMProviderState, GroupedSubscriptions, Id, ProviderState, State } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
@@ -256,85 +240,6 @@ const initializeProviders = async (state: State): Promise<State> => {
   return { ...state, providerStates: validProviderStates };
 };
 
-const checkSubscriptionsConditions = async (
-  subscriptions: Id<Subscription>[],
-  apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber },
-  contract: ethers.Contract,
-  voidSigner: ethers.VoidSigner,
-  logOptions: utils.LogOptions
-) => {
-  const conditionPromises = subscriptions.map(async (subscription) => {
-    const [logs, isValid] = await checkSubscriptionCondition(
-      subscription,
-      apiValuesBySubscriptionId[subscription.id],
-      contract,
-      voidSigner
-    );
-    return [logs, { subscription, isValid }] as node.LogsData<{ subscription: Id<Subscription>; isValid: boolean }>;
-  });
-  const result = await Promise.all(conditionPromises);
-  const validSubscriptions = result.reduce((acc: CheckedSubscription[], [log, data]) => {
-    const subscriptionLogOptions = buildLogOptions('additional', { subscriptionId: data.subscription.id }, logOptions);
-
-    utils.logger.logPending(log, subscriptionLogOptions);
-
-    if (data.isValid) {
-      return [
-        ...acc,
-        {
-          ...data.subscription,
-          apiValue: apiValuesBySubscriptionId[data.subscription.id],
-        },
-      ];
-    }
-
-    return acc;
-  }, []);
-
-  return validSubscriptions;
-};
-
-const groupSubscriptionsBySponsorWallet = async (
-  subscriptionsBySponsor: Dictionary<CheckedSubscription[]>,
-  airnodeWallet: ethers.Wallet,
-  provider: ethers.providers.Provider,
-  currentBlock: number,
-  providerLogOptions: utils.LogOptions
-): Promise<SponsorWalletWithSubscriptions[]> => {
-  const sponsorAddresses = Object.keys(subscriptionsBySponsor);
-  const sponsorWalletAndTransactionCountPromises = sponsorAddresses.map(async (sponsor) => {
-    const [logs, data] = await getSponsorWalletAndTransactionCount(airnodeWallet, provider, currentBlock, sponsor);
-    return [logs, { ...data, sponsor }] as node.LogsData<(SponsorWalletTransactionCount | null) & { sponsor: string }>;
-  });
-  const sponsorWalletsAndTransactionCounts = await Promise.all(sponsorWalletAndTransactionCountPromises);
-  const sponsorWalletsWithSubscriptions = sponsorWalletsAndTransactionCounts.reduce(
-    (acc: SponsorWalletWithSubscriptions[], [logs, data]) => {
-      const sponsorLogOptions = buildLogOptions('additional', { sponsor: data.sponsor }, providerLogOptions);
-
-      utils.logger.logPending(logs, sponsorLogOptions);
-
-      if (isNil(data.sponsorWallet) || isNil(data.transactionCount)) {
-        utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
-        return acc;
-      }
-
-      return [
-        ...acc,
-        {
-          subscriptions: subscriptionsBySponsor[data.sponsor].map((subscription, idx) => ({
-            ...subscription,
-            nonce: data.transactionCount + idx,
-          })),
-          sponsorWallet: data.sponsorWallet,
-        },
-      ];
-    },
-    []
-  );
-
-  return sponsorWalletsWithSubscriptions;
-};
-
 const submitTransactions = async (state: State) => {
   const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
 
@@ -344,43 +249,48 @@ const submitTransactions = async (state: State) => {
 
     const providerLogOptions = buildLogOptions('meta', { chainId, providerName }, baseLogOptions);
 
-    // Get subscriptions from template/endnpoint groups
+    // Get subscriptions from template/endpoint groups
     const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
-    // Filter subscription by chainId and doblue-check that subscription has an associated API value
+    // Filter subscription by chainId and double-check that subscription has an associated API value
     const chainSubscriptions = subscriptions.filter(
       (subscription) => subscription.chainId === chainId && apiValuesBySubscriptionId[subscription.id]
     );
 
-    // Check conditions
-    const validSubscriptions = await checkSubscriptionsConditions(
-      chainSubscriptions,
-      apiValuesBySubscriptionId,
-      contracts['DapiServer'],
-      voidSigner,
-      providerLogOptions
-    );
-
     // Group subscriptions by sponsor address
-    const subscriptionsBySponsor = groupBy(validSubscriptions, 'sponsor');
-
-    // Fetch sponsor wallet transaction counts to be able to assign nonces
-    // to subscriptions and group subscriptions by sponsor wallet
-    const subscriptionsBySponsorWallets = await groupSubscriptionsBySponsorWallet(
-      subscriptionsBySponsor,
-      airnodeWallet,
-      provider,
-      currentBlock,
-      providerLogOptions
-    );
+    const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
 
     // Process sponsor wallets in parallel
-    const sponsorWalletPromises = subscriptionsBySponsorWallets.map(async ({ subscriptions, sponsorWallet }) => {
+    const sponsorWalletPromises = Object.keys(subscriptionsBySponsor).map(async (sponsorAddress) => {
+      // Fetch sponsor wallet transaction counts to be able to assign nonces to subscriptions
+      const [transactionCountLogs, walletData] = await getSponsorWalletAndTransactionCount(
+        airnodeWallet,
+        provider,
+        currentBlock,
+        sponsorAddress
+      );
+
+      // Skip processing for the current sponsorAddress if the wallet functions fail
+      if (isNil(walletData)) {
+        const sponsorLogOptions = buildLogOptions('additional', { sponsor: sponsorAddress }, providerLogOptions);
+        utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
+        return;
+      }
+
+      const sponsorWallet = walletData.sponsorWallet;
+
       const sponsorWalletLogOptions = buildLogOptions(
         'additional',
         { sponsorWallet: shortenAddress(sponsorWallet.address) },
         providerLogOptions
       );
+      utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
+
+      // Get subscriptions for the current sponsorAddress and assign nonces
+      const subscriptions = subscriptionsBySponsor[sponsorAddress].map((subscription, idx) => ({
+        ...subscription,
+        nonce: walletData.transactionCount + idx,
+      }));
 
       utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
 
@@ -389,7 +299,9 @@ const submitTransactions = async (state: State) => {
         contracts['DapiServer'],
         gasTarget,
         subscriptions,
-        sponsorWallet
+        sponsorWallet,
+        voidSigner,
+        apiValuesBySubscriptionId
       );
 
       logs.forEach(([logs, data]) => {
