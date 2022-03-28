@@ -256,7 +256,7 @@ const processSubscriptions = async (
   }[],
   baseLogOptions: utils.LogOptions
 ) => {
-  const providerPromises = providerSubscriptions.map(async (subscriptionGroup) => {
+  const providerSponsorPromises = providerSubscriptions.map(async (subscriptionGroup) => {
     const { sponsorAddress, providerState, subscriptions } = subscriptionGroup;
     const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
       providerState;
