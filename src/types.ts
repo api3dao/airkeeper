@@ -83,7 +83,8 @@ export interface SponsorWalletTransactionCount {
   transactionCount: number;
 }
 
-export interface SponsorWalletWithSubscriptions {
-  subscriptions: ProcessableSubscription[];
-  sponsorWallet: ethers.Wallet;
+export interface ProviderSponsorSubscriptions {
+  sponsorAddress: string;
+  providerState: ProviderState<EVMProviderState>;
+  subscriptions: Id<CheckedSubscription>[];
 }

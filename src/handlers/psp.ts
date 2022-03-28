@@ -18,6 +18,7 @@ import {
   ProviderState,
   State,
   CheckedSubscription,
+  ProviderSponsorSubscriptions,
 } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
@@ -249,14 +250,10 @@ const initializeProviders = async (state: State): Promise<State> => {
 };
 
 const processSubscriptions = async (
-  providerSponsorSubscriptions: {
-    sponsorAddress: string;
-    providerState: ProviderState<EVMProviderState>;
-    subscriptions: Id<CheckedSubscription>[];
-  }[],
+  providerSponsorSubscriptions: ProviderSponsorSubscriptions[],
   baseLogOptions: utils.LogOptions
 ) => {
-  const providerSponsorPromises = providerSubscriptions.map(async (subscriptionGroup) => {
+  const providerSponsorPromises = providerSponsorSubscriptions.map(async (subscriptionGroup) => {
     const { sponsorAddress, providerState, subscriptions } = subscriptionGroup;
     const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
       providerState;
@@ -314,7 +311,7 @@ const processSubscriptions = async (
     });
   });
 
-  await Promise.all(providerPromises);
+  await Promise.all(providerSponsorPromises);
 };
 
 const submitTransactions = async (state: State) => {
@@ -358,7 +355,7 @@ const submitTransactions = async (state: State) => {
   );
 
   // TODO: start new lambdas for each providerSubscriptions array element
-  await processSubscriptions(providerSubscriptions, baseLogOptions);
+  await processSubscriptions(providerSponsorSubscriptions, baseLogOptions);
 };
 
 const updateBeacon = async (config: Config) => {
