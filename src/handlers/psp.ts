@@ -249,7 +249,7 @@ const initializeProviders = async (state: State): Promise<State> => {
 };
 
 const processSubscriptions = async (
-  providerSubscriptions: {
+  providerSponsorSubscriptions: {
     sponsorAddress: string;
     providerState: ProviderState<EVMProviderState>;
     subscriptions: Id<CheckedSubscription>[];
