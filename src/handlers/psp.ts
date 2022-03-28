@@ -345,7 +345,7 @@ const submitTransactions = async (state: State) => {
       // Group filtered subscriptions by sponsorAddress
       const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
 
-      // Collect subscriptions for each provider
+      // Collect subscriptions for each provider + sponsor pair
       const subscriptionGroup = Object.entries(subscriptionsBySponsor).map(([sponsorAddress, subscriptions]) => ({
         sponsorAddress: sponsorAddress,
         providerState: providerState,
