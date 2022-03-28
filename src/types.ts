@@ -74,7 +74,7 @@ export interface CheckedSubscription extends Id<Subscription> {
   apiValue: ethers.BigNumber;
 }
 
-export interface ProcessableSubscription extends Id<Subscription> {
+export interface ProcessableSubscription extends Id<CheckedSubscription> {
   nonce: number;
 }
 

@@ -12,8 +12,7 @@ export const processSponsorWallet = async (
   gasTarget: node.GasTarget,
   subscriptions: ProcessableSubscription[],
   sponsorWallet: ethers.Wallet,
-  voidSigner: ethers.VoidSigner,
-  apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber }
+  voidSigner: ethers.VoidSigner
 ): Promise<node.LogsData<ProcessableSubscription>[]> => {
   const logs: node.LogsData<ProcessableSubscription>[] = [];
   const sortedSubscriptions = subscriptions.sort((a, b) => a.nonce - b.nonce);
@@ -23,8 +22,7 @@ export const processSponsorWallet = async (
   let nextNonce = sortedSubscriptions[0].nonce;
   // Process each subscription in serial to keep nonces in order
   for (const subscription of sortedSubscriptions) {
-    const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, nonce } = subscription;
-    const apiValue = apiValuesBySubscriptionId[subscription.id];
+    const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, apiValue, nonce } = subscription;
 
     // Check subscription
     const [checkSubscriptionLogs, isValid] = await checkSubscriptionCondition(

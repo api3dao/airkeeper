@@ -107,7 +107,6 @@ describe('processSponsorWallet', () => {
     )
     .connect(provider);
   const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
-  const apiValuesBySubscriptionId = subscriptions.reduce((acc, s) => ({ ...acc, [s.id]: s.apiValue }), {});
 
   it('should process all subscriptions for a single sponsor wallet', async () => {
     const logsData = await processSponsorWallet(
@@ -116,8 +115,7 @@ describe('processSponsorWallet', () => {
       gasTarget,
       subscriptions,
       sponsorWallet,
-      voidSigner,
-      apiValuesBySubscriptionId
+      voidSigner
     );
 
     // Calls to conditionFunction
@@ -194,8 +192,7 @@ describe('processSponsorWallet', () => {
       gasTarget,
       [subscription1, invalidSubscription2, subscription3],
       sponsorWallet,
-      voidSigner,
-      apiValuesBySubscriptionId
+      voidSigner
     );
 
     expect(getFunctionSpy).not.toHaveBeenCalled();
@@ -262,8 +259,7 @@ describe('processSponsorWallet', () => {
       gasTarget,
       subscriptions,
       sponsorWallet,
-      voidSigner,
-      apiValuesBySubscriptionId
+      voidSigner
     );
 
     expect(getFunctionSpy).toHaveBeenCalledTimes(6);

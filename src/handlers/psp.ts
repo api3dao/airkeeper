@@ -10,7 +10,15 @@ import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
 import { buildLogOptions } from '../logger';
-import { Config, EVMProviderState, GroupedSubscriptions, Id, ProviderState, State } from '../types';
+import {
+  Config,
+  EVMProviderState,
+  GroupedSubscriptions,
+  Id,
+  ProviderState,
+  State,
+  CheckedSubscription,
+} from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
@@ -240,84 +248,117 @@ const initializeProviders = async (state: State): Promise<State> => {
   return { ...state, providerStates: validProviderStates };
 };
 
-const submitTransactions = async (state: State) => {
-  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
-
-  const providerPromises = providerStates.map(async (providerState) => {
+const processSubscriptions = async (
+  providerSubscriptions: {
+    sponsorAddress: string;
+    providerState: ProviderState<EVMProviderState>;
+    subscriptions: Id<CheckedSubscription>[];
+  }[],
+  baseLogOptions: utils.LogOptions
+) => {
+  const providerPromises = providerSubscriptions.map(async (subscriptionGroup) => {
+    const { sponsorAddress, providerState, subscriptions } = subscriptionGroup;
     const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
       providerState;
 
     const providerLogOptions = buildLogOptions('meta', { chainId, providerName }, baseLogOptions);
 
-    // Get subscriptions from template/endpoint groups
-    const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
-
-    // Filter subscription by chainId and double-check that subscription has an associated API value
-    const chainSubscriptions = subscriptions.filter(
-      (subscription) => subscription.chainId === chainId && apiValuesBySubscriptionId[subscription.id]
+    // Fetch sponsor wallet transaction counts to be able to assign nonces to subscriptions
+    const [transactionCountLogs, walletData] = await getSponsorWalletAndTransactionCount(
+      airnodeWallet,
+      provider,
+      currentBlock,
+      sponsorAddress
     );
 
-    // Group subscriptions by sponsor address
-    const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
+    // Skip processing for the current sponsorAddress if the wallet functions fail
+    if (isNil(walletData)) {
+      const sponsorLogOptions = buildLogOptions('additional', { sponsor: sponsorAddress }, providerLogOptions);
+      utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
+      return;
+    }
 
-    // Process sponsor wallets in parallel
-    const sponsorWalletPromises = Object.keys(subscriptionsBySponsor).map(async (sponsorAddress) => {
-      // Fetch sponsor wallet transaction counts to be able to assign nonces to subscriptions
-      const [transactionCountLogs, walletData] = await getSponsorWalletAndTransactionCount(
-        airnodeWallet,
-        provider,
-        currentBlock,
-        sponsorAddress
-      );
+    const sponsorWallet = walletData.sponsorWallet;
 
-      // Skip processing for the current sponsorAddress if the wallet functions fail
-      if (isNil(walletData)) {
-        const sponsorLogOptions = buildLogOptions('additional', { sponsor: sponsorAddress }, providerLogOptions);
-        utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
-        return;
-      }
+    const sponsorWalletLogOptions = buildLogOptions(
+      'additional',
+      { sponsorWallet: shortenAddress(sponsorWallet.address) },
+      providerLogOptions
+    );
+    utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
 
-      const sponsorWallet = walletData.sponsorWallet;
+    // Get subscriptions for the current sponsorAddress and assign nonces
+    const subscriptionsWithNonce = subscriptions.map((subscription, idx) => ({
+      ...subscription,
+      nonce: walletData.transactionCount + idx,
+    }));
 
-      const sponsorWalletLogOptions = buildLogOptions(
+    utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
+
+    const logs = await processSponsorWallet(
+      airnodeWallet,
+      contracts['DapiServer'],
+      gasTarget,
+      subscriptionsWithNonce,
+      sponsorWallet,
+      voidSigner
+    );
+
+    logs.forEach(([logs, data]) => {
+      const subscriptionLogOptions = buildLogOptions(
         'additional',
-        { sponsorWallet: shortenAddress(sponsorWallet.address) },
-        providerLogOptions
+        { subscriptionId: data.id },
+        sponsorWalletLogOptions
       );
-      utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
-
-      // Get subscriptions for the current sponsorAddress and assign nonces
-      const subscriptions = subscriptionsBySponsor[sponsorAddress].map((subscription, idx) => ({
-        ...subscription,
-        nonce: walletData.transactionCount + idx,
-      }));
-
-      utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
-
-      const logs = await processSponsorWallet(
-        airnodeWallet,
-        contracts['DapiServer'],
-        gasTarget,
-        subscriptions,
-        sponsorWallet,
-        voidSigner,
-        apiValuesBySubscriptionId
-      );
-
-      logs.forEach(([logs, data]) => {
-        const subscriptionLogOptions = buildLogOptions(
-          'additional',
-          { subscriptionId: data.id },
-          sponsorWalletLogOptions
-        );
-        utils.logger.logPending(logs, subscriptionLogOptions);
-      });
+      utils.logger.logPending(logs, subscriptionLogOptions);
     });
-
-    await Promise.all(sponsorWalletPromises);
   });
 
   await Promise.all(providerPromises);
+};
+
+const submitTransactions = async (state: State) => {
+  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
+
+  const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
+
+  const providerSubscriptions = providerStates.reduce(
+    (
+      acc: {
+        sponsorAddress: string;
+        providerState: ProviderState<EVMProviderState>;
+        subscriptions: Id<CheckedSubscription>[];
+      }[],
+      providerState
+    ) => {
+      // Filter subscription by chainId, double-check that subscription has an associated API value and add
+      // it to the subscription object
+      const chainSubscriptions = subscriptions.reduce(
+        (acc: (Id<Subscription> & { apiValue: ethers.BigNumber })[], subscription) => {
+          if (subscription.chainId === providerState.chainId && apiValuesBySubscriptionId[subscription.id])
+            return [...acc, { ...subscription, apiValue: apiValuesBySubscriptionId[subscription.id] }];
+          return acc;
+        },
+        []
+      );
+
+      // Group filtered subscriptions by sponsorAddress
+      const subscriptionsBySponsor = groupBy(chainSubscriptions, 'sponsor');
+
+      // Collect subscriptions for each provider
+      const subscriptionGroup = Object.entries(subscriptionsBySponsor).map(([sponsorAddress, subscriptions]) => ({
+        sponsorAddress: sponsorAddress,
+        providerState: providerState,
+        subscriptions,
+      }));
+
+      return [...acc, ...subscriptionGroup];
+    },
+    []
+  );
+
+  // TODO: start new lambdas for each providerSubscriptions array element
+  await processSubscriptions(providerSubscriptions, baseLogOptions);
 };
 
 const updateBeacon = async (config: Config) => {
