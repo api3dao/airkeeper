@@ -1,7 +1,7 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
-import { go, goSync } from '@api3/promise-utils';
+import { go, GoResult, goSync } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
@@ -20,7 +20,6 @@ import {
   CheckedSubscription,
   ProviderSponsorSubscriptions,
 } from '../types';
-import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
 
@@ -169,22 +168,83 @@ const initializeState = (config: Config): State => {
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
-  const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
-    const apiCallParameters = abi.decode(template.templateParameters);
-    return go(
-      async () => {
-        const [logs, data] = await callApi(config, endpoint, apiCallParameters);
-        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
-          templateId: string;
-          apiValue: ethers.BigNumber | null;
-          subscriptions: Id<Subscription>[];
-        }>;
-      },
-      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
-    );
-  });
-  const responses = await Promise.all(apiValuePromises);
+  const responses: GoResult<
+    node.LogsData<{
+      templateId: string;
+      apiValue: ethers.BigNumber | null;
+      subscriptions: Id<Subscription>[];
+    }>
+  >[] = [];
 
+  let hasParentPromiseTimedout = false;
+  const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
+    const apiCallParameters = abi.decode(template.templateParameters);
+    console.log('🚀 ~ file: psp.ts ~ line 190 ~ executeApiCalls ~ hasParentProcessTimedout', hasParentPromiseTimedout);
+    let hasChildPromiseTimedout = false;
+    const result = await go(
+      async () => {
+        const beforeMs = Date.now();
+        console.log(
+          '🚀 ~ file: psp.ts ~ line 196 ~ executeApiCalls ~ hasParentPromiseTimedout',
+          hasParentPromiseTimedout
+        );
+        if (hasParentPromiseTimedout) {
+          return [[], { templateId: template.id, apiValue: null, subscriptions }] as node.LogsData<{
+            templateId: string;
+            apiValue: ethers.BigNumber | null;
+            subscriptions: Id<Subscription>[];
+          }>;
+        }
+
+        try {
+          const [logs, data] = await callApi(config, endpoint, apiCallParameters);
+          return [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
+            templateId: string;
+            apiValue: ethers.BigNumber | null;
+            subscriptions: Id<Subscription>[];
+          }>;
+        } catch (e) {
+          console.log(
+            '🚀 ~ file: psp.ts ~ line 201 ~ executeApiCalls ~ hasChildPromiseTimedout',
+            hasChildPromiseTimedout
+          );
+          if (hasParentPromiseTimedout || hasChildPromiseTimedout) {
+            return [[], { templateId: template.id, apiValue: null, subscriptions }] as node.LogsData<{
+              templateId: string;
+              apiValue: ethers.BigNumber | null;
+              subscriptions: Id<Subscription>[];
+            }>;
+          }
+          throw e;
+        } finally {
+          console.log('🚀 elapsed time', Date.now() - beforeMs);
+        }
+      },
+      { timeoutMs: 1000, retries: 5, retryDelayMs: 200, factor: 2, minDelay: 100, maxDelay: 500, randomBackoff: true }
+    );
+
+    console.log('🚀 ~ file: psp.ts ~ line 236 ~ apiValuePromises ~ result', result);
+
+    hasChildPromiseTimedout =
+      !result.success && result.error instanceof Error && result.error.message.includes('Operation timed out');
+
+    responses.push(result);
+  });
+
+  const beforeMs = Date.now();
+
+  // Execute all API calls in parallel with a timeout
+  const timeoutMs = 4000;
+  const result = await go(() => Promise.allSettled(apiValuePromises), { timeoutMs, retries: 0, retryDelayMs: 0 });
+  hasParentPromiseTimedout =
+    !result.success && result.error instanceof Error && result.error.message.includes('Operation timed out');
+  if (hasParentPromiseTimedout && !result.success) {
+    utils.logger.error(`Error executing API calls: ${result.error.message}`, baseLogOptions);
+  }
+
+  console.log('🚀 ~ elpased:', Date.now() - beforeMs);
+
+  console.log('🚀 ~ file: psp.ts ~ line 252 ~ apiValuesBySubscriptionId ~ responses', responses);
   const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
     if (!result.success) {
       utils.logger.warn('Failed to fetch API value', baseLogOptions);
@@ -209,7 +269,10 @@ const executeApiCalls = async (state: State): Promise<State> => {
       }, {}),
     };
   }, {});
-
+  console.log(
+    '🚀 ~ file: psp.ts ~ line 219 ~ apiValuesBySubscriptionId ~ apiValuesBySubscriptionId',
+    apiValuesBySubscriptionId
+  );
   return { ...state, apiValuesBySubscriptionId };
 };
 
@@ -365,7 +428,7 @@ const updateBeacon = async (config: Config) => {
   // **************************************************************************
   state = await executeApiCalls(state);
   utils.logger.debug('API requests executed...', state.baseLogOptions);
-
+  return state;
   // **************************************************************************
   // STEP 3. Initialize providers
   // **************************************************************************
