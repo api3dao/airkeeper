@@ -322,7 +322,7 @@ const submitTransactions = async (state: State) => {
 
   const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
-  const providerSubscriptions = providerStates.reduce(
+  const providerSponsorSubscriptions = providerStates.reduce(
     (
       acc: {
         sponsorAddress: string;
