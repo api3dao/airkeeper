@@ -18,8 +18,8 @@ export const processSponsorWallet = async (
   const logs: node.LogsData<CheckedSubscription>[] = [];
 
   // Keep track of nonce outside of the loop in case there is an invalid subscription and its nonce is skipped
-
   let nextNonce = transactionCount;
+
   // Process each subscription in serial to keep nonces in order
   for (const subscription of subscriptions) {
     const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, apiValue } = subscription;
@@ -32,7 +32,8 @@ export const processSponsorWallet = async (
       voidSigner
     );
     logs.push([checkSubscriptionLogs, subscription]);
-    // Skip processing if if subscription is invalid
+
+    // Skip processing if the subscription is invalid
     if (!isValid) {
       continue;
     }
