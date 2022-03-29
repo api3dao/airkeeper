@@ -1,7 +1,8 @@
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
-import { go, GoResult, goSync } from '@api3/promise-utils';
+import { goSync } from '@api3/promise-utils';
+import { retry } from '@lifeomic/attempt';
 import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
@@ -165,93 +166,114 @@ const initializeState = (config: Config): State => {
   };
 };
 
+type CallApiResult = node.LogsData<{
+  templateId: string;
+  apiValue: ethers.BigNumber | null;
+  subscriptions: Id<Subscription>[];
+}>;
+
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
-  const responses: GoResult<
-    node.LogsData<{
-      templateId: string;
-      apiValue: ethers.BigNumber | null;
-      subscriptions: Id<Subscription>[];
-    }>
-  >[] = [];
-
-  let hasParentPromiseTimedout = false;
+  let hasApiCallWrapperTimeout = false;
+  const responses: CallApiResult[] = [];
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-    console.log('🚀 ~ file: psp.ts ~ line 190 ~ executeApiCalls ~ hasParentProcessTimedout', hasParentPromiseTimedout);
-    let hasChildPromiseTimedout = false;
-    const result = await go(
-      async () => {
-        const beforeMs = Date.now();
-        console.log(
-          '🚀 ~ file: psp.ts ~ line 196 ~ executeApiCalls ~ hasParentPromiseTimedout',
-          hasParentPromiseTimedout
-        );
-        if (hasParentPromiseTimedout) {
-          return [[], { templateId: template.id, apiValue: null, subscriptions }] as node.LogsData<{
-            templateId: string;
-            apiValue: ethers.BigNumber | null;
-            subscriptions: Id<Subscription>[];
-          }>;
-        }
+    const startMs = Date.now();
+    let hasApiCallTimeout = false;
+    try {
+      const result = await retry<CallApiResult>(
+        async () => {
+          try {
+            // console.log('🚀 ~ file: psp.ts ~ line 203 ~ apiValuePromises ~ hasApiCallTimeout', hasApiCallTimeout);
 
-        try {
-          const [logs, data] = await callApi(config, endpoint, apiCallParameters);
-          return [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
-            templateId: string;
-            apiValue: ethers.BigNumber | null;
-            subscriptions: Id<Subscription>[];
-          }>;
-        } catch (e) {
-          console.log(
-            '🚀 ~ file: psp.ts ~ line 201 ~ executeApiCalls ~ hasChildPromiseTimedout',
-            hasChildPromiseTimedout
-          );
-          if (hasParentPromiseTimedout || hasChildPromiseTimedout) {
-            return [[], { templateId: template.id, apiValue: null, subscriptions }] as node.LogsData<{
-              templateId: string;
-              apiValue: ethers.BigNumber | null;
-              subscriptions: Id<Subscription>[];
-            }>;
+            if (!hasApiCallWrapperTimeout && !hasApiCallTimeout) {
+              const [logs, data] = await callApi(config, endpoint, apiCallParameters);
+              return [logs, { templateId: template.id, apiValue: data, subscriptions }];
+            } else {
+              // console.log('🚀 ~ file: psp.ts ~ line 217 ~ apiValuePromises ~ else');
+              return [
+                [utils.logger.pend('ERROR', '🚀 ~ timedout')],
+                { templateId: template.id, apiValue: null, subscriptions },
+              ] as CallApiResult;
+            }
+          } catch (err) {
+            //console.log('🚀 ~ INNER ERROR->>>>>>>>>>>>>>>>', err);
+            if (hasApiCallTimeout || hasApiCallTimeout) {
+              return [
+                [utils.logger.pend('ERROR', '🚀 ~ timedout')],
+                { templateId: template.id, apiValue: null, subscriptions },
+              ] as CallApiResult;
+            }
+            throw err;
           }
-          throw e;
-        } finally {
-          console.log('🚀 elapsed time', Date.now() - beforeMs);
+        },
+        {
+          delay: 200,
+          maxAttempts: 0,
+          initialDelay: 0,
+          minDelay: 100,
+          maxDelay: 500,
+          factor: 2,
+          timeout: 1000,
+          jitter: true,
+          handleError: null,
+          handleTimeout: null,
+          beforeAttempt: null,
+          calculateDelay: null,
         }
-      },
-      { timeoutMs: 1000, retries: 5, retryDelayMs: 200, factor: 2, minDelay: 100, maxDelay: 500, randomBackoff: true }
-    );
+      );
 
-    console.log('🚀 ~ file: psp.ts ~ line 236 ~ apiValuePromises ~ result', result);
-
-    hasChildPromiseTimedout =
-      !result.success && result.error instanceof Error && result.error.message.includes('Operation timed out');
-
-    responses.push(result);
+      //console.log('🚀 ~ file: psp.ts ~ line 237 ~ apiValuePromises ~ result', result);
+      responses.push(result);
+      return result;
+    } catch (err) {
+      //console.log('🚀 ~ OUTER ERROR->>>>>>>>>>>>>>>>', err);
+      hasApiCallTimeout = (err as any).code === 'ATTEMPT_TIMEOUT';
+      // throw err;
+    } finally {
+      console.log('🚀 ~ ELAPSED TIME->>>>>>>>>>>>>>>>', Date.now() - startMs);
+    }
   });
 
   const beforeMs = Date.now();
-
-  // Execute all API calls in parallel with a timeout
-  const timeoutMs = 4000;
-  const result = await go(() => Promise.allSettled(apiValuePromises), { timeoutMs, retries: 0, retryDelayMs: 0 });
-  hasParentPromiseTimedout =
-    !result.success && result.error instanceof Error && result.error.message.includes('Operation timed out');
-  if (hasParentPromiseTimedout && !result.success) {
-    utils.logger.error(`Error executing API calls: ${result.error.message}`, baseLogOptions);
+  try {
+    await retry(
+      async () => {
+        // await new Promise((res) => setTimeout(res, 4001));
+        await Promise.all(apiValuePromises);
+      },
+      {
+        delay: 0,
+        maxAttempts: 0,
+        initialDelay: 0,
+        minDelay: 0,
+        maxDelay: 0,
+        factor: 0,
+        timeout: 4000,
+        jitter: false,
+        handleError: null,
+        handleTimeout: null,
+        beforeAttempt: null,
+        calculateDelay: null,
+      }
+    );
+  } catch (err) {
+    hasApiCallWrapperTimeout = (err as any).code === 'ATTEMPT_TIMEOUT';
+    // console.log('🚀🚀🚀🚀🚀🚀🚀🚀 ~ file: psp.ts ~ line 255 ~ apiValuePromises ~ catch', err);
+  } finally {
+    console.log('🚀🚀🚀🚀🚀🚀🚀🚀 ~ file: psp.ts ~ line 259 ~ apiValuePromises ~ finally', Date.now() - beforeMs);
   }
 
-  console.log('🚀 ~ elpased:', Date.now() - beforeMs);
+  console.log('🚀 ~ file: psp.ts ~ line 222 ~ executeApiCalls ~ responses', responses);
 
-  console.log('🚀 ~ file: psp.ts ~ line 252 ~ apiValuesBySubscriptionId ~ responses', responses);
   const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
-    if (!result.success) {
-      utils.logger.warn('Failed to fetch API value', baseLogOptions);
-      return acc;
-    }
+    // if (!result.success) {
+    //   utils.logger.warn('Failed to fetch API value', baseLogOptions);
+    //   return acc;
+    // }
 
-    const [logs, data] = result.data;
+    const [logs, data] = result;
 
     const templateLogOptions = buildLogOptions('additional', { templateId: data.templateId }, baseLogOptions);
 
@@ -269,10 +291,8 @@ const executeApiCalls = async (state: State): Promise<State> => {
       }, {}),
     };
   }, {});
-  console.log(
-    '🚀 ~ file: psp.ts ~ line 219 ~ apiValuesBySubscriptionId ~ apiValuesBySubscriptionId',
-    apiValuesBySubscriptionId
-  );
+
+  console.log('🚀 ~ file: psp.ts ~ line 242 ~ executeApiCalls ~ apiValuesBySubscriptionId', apiValuesBySubscriptionId);
   return { ...state, apiValuesBySubscriptionId };
 };
 
