@@ -1,8 +1,7 @@
 import * as abi from '@api3/airnode-abi';
-import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { goSync } from '@api3/promise-utils';
-import { retry } from '@lifeomic/attempt';
+import { AttemptOptions, retry } from '@lifeomic/attempt';
 import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
@@ -12,14 +11,15 @@ import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config'
 import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
 import { buildLogOptions } from '../logger';
 import {
+  CallApiResult,
+  CheckedSubscription,
   Config,
   EVMProviderState,
   GroupedSubscriptions,
   Id,
+  ProviderSponsorSubscriptions,
   ProviderState,
   State,
-  CheckedSubscription,
-  ProviderSponsorSubscriptions,
 } from '../types';
 import { Subscription } from '../validator';
 import { shortenAddress } from '../wallet';
@@ -166,40 +166,48 @@ const initializeState = (config: Config): State => {
   };
 };
 
-type CallApiResult = node.LogsData<{
-  templateId: string;
-  apiValue: ethers.BigNumber | null;
-  subscriptions: Id<Subscription>[];
-}>;
-
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
-  let hasApiCallWrapperTimeout = false;
+  const baseAttemptOptions: AttemptOptions<any> = {
+    delay: 0,
+    maxAttempts: 0,
+    initialDelay: 0,
+    minDelay: 0,
+    maxDelay: 0,
+    factor: 0,
+    timeout: 0,
+    jitter: false,
+    handleError: null,
+    handleTimeout: null,
+    beforeAttempt: null,
+    calculateDelay: null,
+  };
+
+  let hasApiCallWrapperTimedout = false;
   const responses: CallApiResult[] = [];
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
     const startMs = Date.now();
-    let hasApiCallTimeout = false;
+    let hasApiCallTimedout = false;
     try {
       const result = await retry<CallApiResult>(
         async () => {
           try {
             // console.log('🚀 ~ file: psp.ts ~ line 203 ~ apiValuePromises ~ hasApiCallTimeout', hasApiCallTimeout);
-
-            if (!hasApiCallWrapperTimeout && !hasApiCallTimeout) {
-              const [logs, data] = await callApi(config, endpoint, apiCallParameters);
-              return [logs, { templateId: template.id, apiValue: data, subscriptions }];
-            } else {
-              // console.log('🚀 ~ file: psp.ts ~ line 217 ~ apiValuePromises ~ else');
-              return [
-                [utils.logger.pend('ERROR', '🚀 ~ timedout')],
-                { templateId: template.id, apiValue: null, subscriptions },
-              ] as CallApiResult;
-            }
+            // if (!hasApiCallWrapperTimedout && !hasApiCallTimedout) {
+            const [logs, data] = await callApi(config, endpoint, apiCallParameters);
+            return [logs, { templateId: template.id, apiValue: data, subscriptions }];
+            // } else {
+            //   // console.log('🚀 ~ file: psp.ts ~ line 217 ~ apiValuePromises ~ else');
+            //   return [
+            //     [utils.logger.pend('ERROR', '🚀 ~ timedout')],
+            //     { templateId: template.id, apiValue: null, subscriptions },
+            //   ] as CallApiResult;
+            // }
           } catch (err) {
             //console.log('🚀 ~ INNER ERROR->>>>>>>>>>>>>>>>', err);
-            if (hasApiCallTimeout || hasApiCallTimeout) {
+            if (hasApiCallTimedout || hasApiCallWrapperTimedout) {
               return [
                 [utils.logger.pend('ERROR', '🚀 ~ timedout')],
                 { templateId: template.id, apiValue: null, subscriptions },
@@ -209,30 +217,25 @@ const executeApiCalls = async (state: State): Promise<State> => {
           }
         },
         {
+          ...baseAttemptOptions,
           delay: 200,
-          maxAttempts: 0,
-          initialDelay: 0,
           minDelay: 100,
           maxDelay: 500,
           factor: 2,
           timeout: 1000,
           jitter: true,
-          handleError: null,
-          handleTimeout: null,
-          beforeAttempt: null,
-          calculateDelay: null,
         }
       );
 
       //console.log('🚀 ~ file: psp.ts ~ line 237 ~ apiValuePromises ~ result', result);
       responses.push(result);
-      return result;
+      // return result;
     } catch (err) {
       //console.log('🚀 ~ OUTER ERROR->>>>>>>>>>>>>>>>', err);
-      hasApiCallTimeout = (err as any).code === 'ATTEMPT_TIMEOUT';
+      hasApiCallTimedout = (err as any).code === 'ATTEMPT_TIMEOUT';
       // throw err;
     } finally {
-      console.log('🚀 ~ ELAPSED TIME->>>>>>>>>>>>>>>>', Date.now() - startMs);
+      console.log('ELAPSED CHILD: ', Date.now() - startMs);
     }
   });
 
@@ -240,29 +243,16 @@ const executeApiCalls = async (state: State): Promise<State> => {
   try {
     await retry(
       async () => {
-        // await new Promise((res) => setTimeout(res, 4001));
+        await new Promise((res) => setTimeout(res, 4010));
         await Promise.all(apiValuePromises);
       },
-      {
-        delay: 0,
-        maxAttempts: 0,
-        initialDelay: 0,
-        minDelay: 0,
-        maxDelay: 0,
-        factor: 0,
-        timeout: 4000,
-        jitter: false,
-        handleError: null,
-        handleTimeout: null,
-        beforeAttempt: null,
-        calculateDelay: null,
-      }
+      { ...baseLogOptions, timeout: 4000 }
     );
   } catch (err) {
-    hasApiCallWrapperTimeout = (err as any).code === 'ATTEMPT_TIMEOUT';
-    // console.log('🚀🚀🚀🚀🚀🚀🚀🚀 ~ file: psp.ts ~ line 255 ~ apiValuePromises ~ catch', err);
+    hasApiCallWrapperTimedout = (err as any).code === 'ATTEMPT_TIMEOUT';
+    // console.log('🚀 ~ file: psp.ts ~ line 255 ~ apiValuePromises ~ catch', err);
   } finally {
-    console.log('🚀🚀🚀🚀🚀🚀🚀🚀 ~ file: psp.ts ~ line 259 ~ apiValuePromises ~ finally', Date.now() - beforeMs);
+    console.log('ELAPSED PARENT: ', Date.now() - beforeMs);
   }
 
   console.log('🚀 ~ file: psp.ts ~ line 222 ~ executeApiCalls ~ responses', responses);

@@ -84,3 +84,9 @@ export interface ProviderSponsorSubscriptions {
   providerState: ProviderState<EVMProviderState>;
   subscriptions: Id<CheckedSubscription>[];
 }
+
+export type CallApiResult = node.LogsData<{
+  templateId: string;
+  apiValue: ethers.BigNumber | null;
+  subscriptions: Id<Subscription>[];
+}>;
