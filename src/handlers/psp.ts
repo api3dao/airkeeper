@@ -275,7 +275,7 @@ const processSubscriptions = async (
       return;
     }
 
-    const sponsorWallet = walletData.sponsorWallet;
+    const { sponsorWallet, transactionCount } = walletData;
 
     const sponsorWalletLogOptions = buildLogOptions(
       'additional',
@@ -284,21 +284,16 @@ const processSubscriptions = async (
     );
     utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
 
-    // Get subscriptions for the current sponsorAddress and assign nonces
-    const subscriptionsWithNonce = subscriptions.map((subscription, idx) => ({
-      ...subscription,
-      nonce: walletData.transactionCount + idx,
-    }));
-
     utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
 
     const logs = await processSponsorWallet(
       airnodeWallet,
       contracts['DapiServer'],
       gasTarget,
-      subscriptionsWithNonce,
+      subscriptions,
       sponsorWallet,
-      voidSigner
+      voidSigner,
+      transactionCount
     );
 
     logs.forEach(([logs, data]) => {
