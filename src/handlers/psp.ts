@@ -1,3 +1,4 @@
+import AWS from 'aws-sdk';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
@@ -6,9 +7,10 @@ import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
+import { handler as processSubscriptionsHandler } from './process-subscriptions';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
+import { initializeProvider } from '../evm';
 import { buildLogOptions } from '../logger';
 import {
   Config,
@@ -18,10 +20,10 @@ import {
   ProviderState,
   State,
   CheckedSubscription,
+  ProviderSponsorSubscriptions,
 } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
-import { shortenAddress } from '../wallet';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -248,81 +250,52 @@ const initializeProviders = async (state: State): Promise<State> => {
   return { ...state, providerStates: validProviderStates };
 };
 
-const processSubscriptions = async (
-  providerSubscriptions: {
-    sponsorAddress: string;
-    providerState: ProviderState<EVMProviderState>;
-    subscriptions: Id<CheckedSubscription>[];
-  }[],
-  baseLogOptions: utils.LogOptions
-) => {
-  const providerPromises = providerSubscriptions.map(async (subscriptionGroup) => {
-    const { sponsorAddress, providerState, subscriptions } = subscriptionGroup;
-    const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
-      providerState;
+export const spawn = ({
+  providerSponsorSubscription,
+  baseLogOptions,
+  type,
+}: {
+  providerSponsorSubscription: ProviderSponsorSubscriptions;
+  baseLogOptions: utils.LogOptions;
+  type: 'local' | 'aws' | 'gcp';
+}) => {
+  // lambda.invoke is synchronous so we need to wrap this in a promise
+  switch (type) {
+    case 'local':
+      return processSubscriptionsHandler({ body: JSON.stringify({ providerSponsorSubscription, baseLogOptions }) });
+    case 'aws':
+      return new Promise((resolve, reject) => {
+        // Uses the current region by default
+        const lambda = new AWS.Lambda();
 
-    const providerLogOptions = buildLogOptions('meta', { chainId, providerName }, baseLogOptions);
+        // TODO: do we want to use the airnode format for FunctionName
+        // AWS doesn't allow uppercase letters in lambda function names
+        // const resolvedName = `airkeeper-${providerSponsorSubscription.sponsorAddress}-run`;
 
-    // Fetch sponsor wallet transaction counts to be able to assign nonces to subscriptions
-    const [transactionCountLogs, walletData] = await getSponsorWalletAndTransactionCount(
-      airnodeWallet,
-      provider,
-      currentBlock,
-      sponsorAddress
-    );
-
-    // Skip processing for the current sponsorAddress if the wallet functions fail
-    if (isNil(walletData)) {
-      const sponsorLogOptions = buildLogOptions('additional', { sponsor: sponsorAddress }, providerLogOptions);
-      utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
-      return;
-    }
-
-    const sponsorWallet = walletData.sponsorWallet;
-
-    const sponsorWalletLogOptions = buildLogOptions(
-      'additional',
-      { sponsorWallet: shortenAddress(sponsorWallet.address) },
-      providerLogOptions
-    );
-    utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
-
-    // Get subscriptions for the current sponsorAddress and assign nonces
-    const subscriptionsWithNonce = subscriptions.map((subscription, idx) => ({
-      ...subscription,
-      nonce: walletData.transactionCount + idx,
-    }));
-
-    utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
-
-    const logs = await processSponsorWallet(
-      airnodeWallet,
-      contracts['DapiServer'],
-      gasTarget,
-      subscriptionsWithNonce,
-      sponsorWallet,
-      voidSigner
-    );
-
-    logs.forEach(([logs, data]) => {
-      const subscriptionLogOptions = buildLogOptions(
-        'additional',
-        { subscriptionId: data.id },
-        sponsorWalletLogOptions
-      );
-      utils.logger.logPending(logs, subscriptionLogOptions);
-    });
-  });
-
-  await Promise.all(providerPromises);
+        const options = {
+          FunctionName: 'process-subscriptions',
+          Payload: JSON.stringify({ providerSponsorSubscription, baseLogOptions }),
+          // TODO: could use InvocationType: 'Event' if we don't need to wait for spawned lambdas to finish
+          // InvocationType: 'Event',
+        };
+        lambda.invoke(options, (err, data) => {
+          console.log('spawn', err, data);
+          if (err) {
+            reject(err);
+            return;
+          }
+          resolve(JSON.parse(JSON.parse(data.Payload as string).body));
+        });
+      });
+  }
 };
 
 const submitTransactions = async (state: State) => {
-  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
+  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates, config } = state;
 
   const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
-  const providerSubscriptions = providerStates.reduce(
+  const providerSponsorSubscriptions = providerStates.reduce(
     (
       acc: {
         sponsorAddress: string;
@@ -357,8 +330,16 @@ const submitTransactions = async (state: State) => {
     []
   );
 
-  // TODO: start new lambdas for each providerSubscriptions array element
-  await processSubscriptions(providerSubscriptions, baseLogOptions);
+  const providerSponsorPromises = providerSponsorSubscriptions.map(async (providerSponsorSubscription) =>
+    spawn({
+      providerSponsorSubscription,
+      baseLogOptions: baseLogOptions,
+      type: config.nodeSettings.cloudProvider.type,
+    })
+  );
+
+  //TODO: do we want to handle lambda promise rejections separately. e.g. Promise.allSettled().catch()
+  await Promise.all(providerSponsorPromises);
 };
 
 const updateBeacon = async (config: Config) => {

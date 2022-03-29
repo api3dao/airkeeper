@@ -4,25 +4,25 @@ import { go } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import { checkSubscriptionCondition } from './check-conditions';
 import { GAS_LIMIT, TIMEOUT_MS, RETRIES } from '../constants';
-import { ProcessableSubscription } from '../types';
+import { CheckedSubscription } from '../types';
 
 export const processSponsorWallet = async (
   airnodeWallet: ethers.Wallet,
   contract: ethers.Contract,
   gasTarget: node.GasTarget,
-  subscriptions: ProcessableSubscription[],
+  subscriptions: CheckedSubscription[],
   sponsorWallet: ethers.Wallet,
-  voidSigner: ethers.VoidSigner
-): Promise<node.LogsData<ProcessableSubscription>[]> => {
-  const logs: node.LogsData<ProcessableSubscription>[] = [];
-  const sortedSubscriptions = subscriptions.sort((a, b) => a.nonce - b.nonce);
+  voidSigner: ethers.VoidSigner,
+  transactionCount: number
+): Promise<node.LogsData<CheckedSubscription>[]> => {
+  const logs: node.LogsData<CheckedSubscription>[] = [];
 
   // Keep track of nonce outside of the loop in case there is an invalid subscription and its nonce is skipped
-  //TODO: improve nonce?
-  let nextNonce = sortedSubscriptions[0].nonce;
+
+  let nextNonce = transactionCount;
   // Process each subscription in serial to keep nonces in order
-  for (const subscription of sortedSubscriptions) {
-    const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, apiValue, nonce } = subscription;
+  for (const subscription of subscriptions) {
+    const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, apiValue } = subscription;
 
     // Check subscription
     const [checkSubscriptionLogs, isValid] = await checkSubscriptionCondition(
@@ -64,6 +64,7 @@ export const processSponsorWallet = async (
       logs.push([[log], subscription]);
       continue;
     }
+    const nonce = nextNonce++;
     const tx = await go<ethers.ContractTransaction, Error>(
       () =>
         contract
@@ -79,7 +80,7 @@ export const processSponsorWallet = async (
             {
               gasLimit: GAS_LIMIT,
               ...gasTarget,
-              nonce: nextNonce++,
+              nonce,
             }
           ),
       { timeoutMs: TIMEOUT_MS, retries: RETRIES }

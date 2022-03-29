@@ -8,6 +8,11 @@ provider:
   memorySize: 512
   logRetentionInDays: 14
   environment: ${file(load-secrets-env.js)}
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 'lambda:InvokeFunction'
+      Resource: '*'
 
 package:
   patterns:
@@ -24,3 +29,5 @@ functions:
     timeout: 60
     events:
       - schedule: rate(1 minute)
+  process-subscriptions:
+    handler: dist/src/handlers/process-subscriptions.handler

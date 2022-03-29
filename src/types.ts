@@ -74,16 +74,13 @@ export interface CheckedSubscription extends Id<Subscription> {
   apiValue: ethers.BigNumber;
 }
 
-export interface ProcessableSubscription extends Id<CheckedSubscription> {
-  nonce: number;
-}
-
 export interface SponsorWalletTransactionCount {
   sponsorWallet: ethers.Wallet;
   transactionCount: number;
 }
 
-export interface SponsorWalletWithSubscriptions {
-  subscriptions: ProcessableSubscription[];
-  sponsorWallet: ethers.Wallet;
+export interface ProviderSponsorSubscriptions {
+  sponsorAddress: string;
+  providerState: ProviderState<EVMProviderState>;
+  subscriptions: Id<CheckedSubscription>[];
 }
