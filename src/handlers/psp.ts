@@ -188,28 +188,17 @@ const executeApiCalls = async (state: State): Promise<State> => {
   const responses: CallApiResult[] = [];
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-    const startMs = Date.now();
     let hasApiCallTimedout = false;
     try {
       const result = await retry<CallApiResult>(
         async () => {
           try {
-            // console.log('🚀 ~ file: psp.ts ~ line 203 ~ apiValuePromises ~ hasApiCallTimeout', hasApiCallTimeout);
-            // if (!hasApiCallWrapperTimedout && !hasApiCallTimedout) {
             const [logs, data] = await callApi(config, endpoint, apiCallParameters);
             return [logs, { templateId: template.id, apiValue: data, subscriptions }];
-            // } else {
-            //   // console.log('🚀 ~ file: psp.ts ~ line 217 ~ apiValuePromises ~ else');
-            //   return [
-            //     [utils.logger.pend('ERROR', '🚀 ~ timedout')],
-            //     { templateId: template.id, apiValue: null, subscriptions },
-            //   ] as CallApiResult;
-            // }
           } catch (err) {
-            //console.log('🚀 ~ INNER ERROR->>>>>>>>>>>>>>>>', err);
             if (hasApiCallTimedout || hasApiCallWrapperTimedout) {
               return [
-                [utils.logger.pend('ERROR', '🚀 ~ timedout')],
+                [utils.logger.pend('ERROR', err instanceof Error ? err.message : '' + err)],
                 { templateId: template.id, apiValue: null, subscriptions },
               ] as CallApiResult;
             }
@@ -218,51 +207,28 @@ const executeApiCalls = async (state: State): Promise<State> => {
         },
         {
           ...baseAttemptOptions,
-          delay: 200,
-          minDelay: 100,
-          maxDelay: 500,
+          delay: 1_500,
+          minDelay: 1_000,
+          maxDelay: 5_000,
           factor: 2,
-          timeout: 1000,
+          timeout: 10_000,
           jitter: true,
         }
       );
 
-      //console.log('🚀 ~ file: psp.ts ~ line 237 ~ apiValuePromises ~ result', result);
       responses.push(result);
-      // return result;
     } catch (err) {
-      //console.log('🚀 ~ OUTER ERROR->>>>>>>>>>>>>>>>', err);
       hasApiCallTimedout = (err as any).code === 'ATTEMPT_TIMEOUT';
-      // throw err;
-    } finally {
-      console.log('ELAPSED CHILD: ', Date.now() - startMs);
     }
   });
 
-  const beforeMs = Date.now();
   try {
-    await retry(
-      async () => {
-        await new Promise((res) => setTimeout(res, 4010));
-        await Promise.all(apiValuePromises);
-      },
-      { ...baseLogOptions, timeout: 4000 }
-    );
+    await retry(async () => await Promise.all(apiValuePromises), { ...baseLogOptions, timeout: 40_000 });
   } catch (err) {
     hasApiCallWrapperTimedout = (err as any).code === 'ATTEMPT_TIMEOUT';
-    // console.log('🚀 ~ file: psp.ts ~ line 255 ~ apiValuePromises ~ catch', err);
-  } finally {
-    console.log('ELAPSED PARENT: ', Date.now() - beforeMs);
   }
 
-  console.log('🚀 ~ file: psp.ts ~ line 222 ~ executeApiCalls ~ responses', responses);
-
   const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
-    // if (!result.success) {
-    //   utils.logger.warn('Failed to fetch API value', baseLogOptions);
-    //   return acc;
-    // }
-
     const [logs, data] = result;
 
     const templateLogOptions = buildLogOptions('additional', { templateId: data.templateId }, baseLogOptions);
@@ -282,7 +248,6 @@ const executeApiCalls = async (state: State): Promise<State> => {
     };
   }, {});
 
-  console.log('🚀 ~ file: psp.ts ~ line 242 ~ executeApiCalls ~ apiValuesBySubscriptionId', apiValuesBySubscriptionId);
   return { ...state, apiValuesBySubscriptionId };
 };
 
@@ -438,7 +403,7 @@ const updateBeacon = async (config: Config) => {
   // **************************************************************************
   state = await executeApiCalls(state);
   utils.logger.debug('API requests executed...', state.baseLogOptions);
-  return state;
+
   // **************************************************************************
   // STEP 3. Initialize providers
   // **************************************************************************
