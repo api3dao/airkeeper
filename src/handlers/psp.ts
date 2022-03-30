@@ -1,7 +1,6 @@
 import * as abi from '@api3/airnode-abi';
 import * as utils from '@api3/airnode-utilities';
-import { goSync } from '@api3/promise-utils';
-import { AttemptOptions, retry } from '@lifeomic/attempt';
+import { go, goSync } from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
@@ -166,67 +165,62 @@ const initializeState = (config: Config): State => {
   };
 };
 
+const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
+const doRequestWithRetries = async (
+  fn: () => Promise<CallApiResult>,
+  minDelay = 1_000,
+  maxDelay = 5_000
+): Promise<CallApiResult> => {
+  try {
+    return await fn();
+  } catch (e) {
+    await wait(Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay));
+    return await doRequestWithRetries(fn, minDelay, maxDelay);
+  }
+};
+
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
-
-  const baseAttemptOptions: AttemptOptions<any> = {
-    delay: 0,
-    maxAttempts: 0,
-    initialDelay: 0,
-    minDelay: 0,
-    maxDelay: 0,
-    factor: 0,
-    timeout: 0,
-    jitter: false,
-    handleError: null,
-    handleTimeout: null,
-    beforeAttempt: null,
-    calculateDelay: null,
-  };
 
   let hasApiCallWrapperTimedout = false;
   const responses: CallApiResult[] = [];
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
+
     let hasApiCallTimedout = false;
-    try {
-      const result = await retry<CallApiResult>(
+    const result = await doRequestWithRetries(async () => {
+      if (hasApiCallWrapperTimedout) {
+        return [[], { templateId: template.id, apiValue: null, subscriptions }] as CallApiResult;
+      }
+      const result = await go(
         async () => {
           try {
-            const [logs, data] = await callApi(config, endpoint, apiCallParameters);
-            return [logs, { templateId: template.id, apiValue: data, subscriptions }];
+            return await callApi(config, endpoint, apiCallParameters);
           } catch (err) {
-            if (hasApiCallTimedout || hasApiCallWrapperTimedout) {
+            if (hasApiCallTimedout) {
               return [
-                [utils.logger.pend('ERROR', err instanceof Error ? err.message : '' + err)],
+                [utils.logger.pend('ERROR', '' + err)],
                 { templateId: template.id, apiValue: null, subscriptions },
               ] as CallApiResult;
             }
             throw err;
           }
         },
-        {
-          ...baseAttemptOptions,
-          delay: 1_500,
-          minDelay: 1_000,
-          maxDelay: 5_000,
-          factor: 2,
-          timeout: 10_000,
-          jitter: true,
-        }
+        { timeoutMs: 10_000, retries: 0 }
       );
-
-      responses.push(result);
-    } catch (err) {
-      hasApiCallTimedout = (err as any).code === 'ATTEMPT_TIMEOUT';
-    }
+      if (result.success) {
+        const [logs, data] = result.data;
+        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as CallApiResult;
+      } else {
+        hasApiCallTimedout = result.error.message.includes('Operation timed out');
+        throw result.error;
+      }
+    });
+    responses.push(result);
   });
 
-  try {
-    await retry(async () => await Promise.all(apiValuePromises), { ...baseLogOptions, timeout: 40_000 });
-  } catch (err) {
-    hasApiCallWrapperTimedout = (err as any).code === 'ATTEMPT_TIMEOUT';
-  }
+  const result = await go(async () => await Promise.all(apiValuePromises), { timeoutMs: 40_000, retries: 0 });
+  hasApiCallWrapperTimedout = !result.success && result.error.message.includes('Operation timed out');
 
   const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
     const [logs, data] = result;
