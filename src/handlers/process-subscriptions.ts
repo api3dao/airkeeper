@@ -1,13 +1,15 @@
-import { APIGatewayEvent } from 'aws-lambda';
+import { ethers } from 'ethers';
 import * as utils from '@api3/airnode-utilities';
+import { goSync } from '@api3/promise-utils';
 import isNil from 'lodash/isNil';
-import { getSponsorWalletAndTransactionCount, processSponsorWallet } from '../evm';
+import { loadAirnodeConfig } from '../config';
+import { getSponsorWalletAndTransactionCount, processSponsorWallet, initializeProvider } from '../evm';
 import { buildLogOptions } from '../logger';
 import { shortenAddress } from '../wallet';
-import { ProviderSponsorSubscriptions } from '../types';
+import { ProviderSponsorSubscriptions, ProviderSponsorSubscriptionsState, AWSHandlerResponse } from '../types';
 
 export const processSubscriptions = async (
-  providerSponsorSubscription: ProviderSponsorSubscriptions,
+  providerSponsorSubscription: ProviderSponsorSubscriptionsState,
   baseLogOptions: utils.LogOptions
 ) => {
   const { sponsorAddress, providerState, subscriptions } = providerSponsorSubscription;
@@ -41,7 +43,7 @@ export const processSubscriptions = async (
   utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
   utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
 
-  const logs = await processSponsorWallet(
+  const processSponsorWalletResult = await processSponsorWallet(
     airnodeWallet,
     contracts['DapiServer'],
     gasTarget,
@@ -51,20 +53,63 @@ export const processSubscriptions = async (
     transactionCount
   );
 
-  logs.forEach(([logs, data]) => {
+  processSponsorWalletResult.forEach(([logs, data]) => {
     const subscriptionLogOptions = buildLogOptions('additional', { subscriptionId: data.id }, sponsorWalletLogOptions);
     utils.logger.logPending(logs, subscriptionLogOptions);
   });
 };
 
-export const handler = async (event: APIGatewayEvent | { body: string }) => {
-  const payload: {
-    providerSponsorSubscription: ProviderSponsorSubscriptions;
-    baseLogOptions: utils.LogOptions;
-  } = JSON.parse(event.body!);
+export const handler = async ({
+  providerSponsorSubscription,
+  baseLogOptions,
+}: {
+  providerSponsorSubscription: ProviderSponsorSubscriptions;
+  baseLogOptions: utils.LogOptions;
+}): Promise<AWSHandlerResponse> => {
+  const airnodeConfig = goSync(loadAirnodeConfig);
+  if (!airnodeConfig.success) {
+    utils.logger.error(airnodeConfig.error.message);
+    throw airnodeConfig.error;
+  }
 
-  await processSubscriptions(payload.providerSponsorSubscription, payload.baseLogOptions);
+  const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeConfig.data.nodeSettings.airnodeWalletMnemonic);
 
-  //TODO fix return or remove if InvocationType: 'Event' is used
-  return payload;
+  // Initialize provider specific data
+  const [logs, evmProviderState] = await initializeProvider(
+    providerSponsorSubscription.providerGroup.chainConfig,
+    providerSponsorSubscription.providerGroup.providerUrl || ''
+  );
+  const providerLogOptions = buildLogOptions(
+    'meta',
+    {
+      chainId: providerSponsorSubscription.providerGroup.chainId,
+      providerName: providerSponsorSubscription.providerGroup.providerName,
+    },
+    baseLogOptions
+  );
+  utils.logger.logPending(logs, providerLogOptions);
+  if (isNil(evmProviderState)) {
+    const message = 'Failed to initialize provider';
+    utils.logger.warn(message, providerLogOptions);
+
+    return {
+      statusCode: 500,
+      ok: false,
+      message: `Failed to initialize provider: ${providerSponsorSubscription.providerGroup.providerName} for chain: ${providerSponsorSubscription.providerGroup.chainId}`,
+    };
+  }
+
+  await processSubscriptions(
+    {
+      ...providerSponsorSubscription,
+      providerState: { ...providerSponsorSubscription.providerGroup, airnodeWallet, ...evmProviderState },
+    },
+    baseLogOptions
+  );
+
+  return {
+    statusCode: 200,
+    ok: true,
+    message: `Processing subscriptions for sponsorAddress: ${providerSponsorSubscription.sponsorAddress} has finished`,
+  };
 };

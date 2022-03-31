@@ -10,17 +10,16 @@ import isNil from 'lodash/isNil';
 import { handler as processSubscriptionsHandler } from './process-subscriptions';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import { initializeProvider } from '../evm';
 import { buildLogOptions } from '../logger';
 import {
   Config,
-  EVMProviderState,
   GroupedSubscriptions,
   Id,
-  ProviderState,
   State,
   CheckedSubscription,
   ProviderSponsorSubscriptions,
+  GroupedProvider,
+  AWSHandlerResponse,
 } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
@@ -55,6 +54,27 @@ export const handler = async (_event: any = {}): Promise<any> => {
     data: { message: 'PSP beacon update execution has finished' },
   };
   return { statusCode: 200, body: JSON.stringify(response) };
+};
+
+const groupProviders = (config: Config) => {
+  const evmChains = config.chains.filter((chain) => chain.type === 'evm');
+  if (isEmpty(evmChains)) {
+    throw new Error('One or more evm compatible chains must be defined in the provided config');
+  }
+  const groupedProviders = evmChains.flatMap((chain) =>
+    Object.entries(chain.providers).map(([providerName, chainProvider]) => {
+      return {
+        chainId: chain.id,
+        providerName,
+        providerUrl: chainProvider.url,
+        chainConfig: chain,
+      };
+    })
+  );
+
+  const filteredGroupedProviders = groupedProviders.filter((p) => !isNil(p));
+
+  return filteredGroupedProviders;
 };
 
 const initializeState = (config: Config): State => {
@@ -158,12 +178,14 @@ const initializeState = (config: Config): State => {
     []
   );
 
+  const groupedProviders = groupProviders(config);
+
   return {
     config,
     baseLogOptions,
     groupedSubscriptions,
+    groupedProviders,
     apiValuesBySubscriptionId: {},
-    providerStates: [],
   };
 };
 
@@ -214,101 +236,80 @@ const executeApiCalls = async (state: State): Promise<State> => {
   return { ...state, apiValuesBySubscriptionId };
 };
 
-const initializeProviders = async (state: State): Promise<State> => {
-  const { config, baseLogOptions } = state;
-
-  const airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
-
-  const evmChains = config.chains.filter((chain) => chain.type === 'evm');
-  if (isEmpty(evmChains)) {
-    throw new Error('One or more evm compatible chains must be defined in the provided config');
-  }
-  const providerPromises = evmChains.flatMap((chain) =>
-    Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
-      const providerLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
-
-      // Initialize provider specific data
-      const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
-      utils.logger.logPending(logs, providerLogOptions);
-      if (isNil(evmProviderState)) {
-        utils.logger.warn('Failed to initialize provider', providerLogOptions);
-        return null;
-      }
-
-      return {
-        airnodeWallet,
-        chainId: chain.id,
-        providerName,
-        ...evmProviderState,
-      };
-    })
-  );
-
-  const providerStates = await Promise.all(providerPromises);
-  const validProviderStates = providerStates.filter((ps) => !isNil(ps)) as ProviderState<EVMProviderState>[];
-
-  return { ...state, providerStates: validProviderStates };
-};
-
 export const spawn = ({
   providerSponsorSubscription,
   baseLogOptions,
   type,
+  stage,
 }: {
   providerSponsorSubscription: ProviderSponsorSubscriptions;
   baseLogOptions: utils.LogOptions;
   type: 'local' | 'aws' | 'gcp';
+  stage: string;
 }) => {
   // lambda.invoke is synchronous so we need to wrap this in a promise
   switch (type) {
     case 'local':
-      return processSubscriptionsHandler({ body: JSON.stringify({ providerSponsorSubscription, baseLogOptions }) });
+      return new Promise((resolve, reject) => {
+        processSubscriptionsHandler({ providerSponsorSubscription, baseLogOptions }).then((data) => {
+          if (!data.ok) {
+            reject(data.message);
+          }
+          resolve(data.message);
+        });
+      });
     case 'aws':
       return new Promise((resolve, reject) => {
         // Uses the current region by default
         const lambda = new AWS.Lambda();
 
-        // TODO: do we want to use the airnode format for FunctionName
         // AWS doesn't allow uppercase letters in lambda function names
-        // const resolvedName = `airkeeper-${providerSponsorSubscription.sponsorAddress}-run`;
+        const resolvedName = `airkeeper-${stage}-process-subscriptions`;
 
         const options = {
-          FunctionName: 'process-subscriptions',
+          FunctionName: resolvedName,
           Payload: JSON.stringify({ providerSponsorSubscription, baseLogOptions }),
-          // TODO: could use InvocationType: 'Event' if we don't need to wait for spawned lambdas to finish
-          // InvocationType: 'Event',
         };
         lambda.invoke(options, (err, data) => {
-          console.log('spawn', err, data);
-          if (err) {
-            reject(err);
+          // Reject invoke and (unhandled) handler errors
+          if (err || data.FunctionError) {
+            reject(err || data.FunctionError);
             return;
           }
-          resolve(JSON.parse(JSON.parse(data.Payload as string).body));
+
+          const parsedData: AWSHandlerResponse = JSON.parse(data.Payload as string);
+
+          // Reject non-ok results
+          if (!parsedData.ok) {
+            reject(parsedData.message);
+            return;
+          }
+
+          resolve(parsedData.message);
         });
       });
   }
 };
 
 const submitTransactions = async (state: State) => {
-  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates, config } = state;
+  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, groupedProviders, config } = state;
 
   const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
-  const providerSponsorSubscriptions = providerStates.reduce(
+  const providerSponsorSubscriptions = groupedProviders.reduce(
     (
       acc: {
         sponsorAddress: string;
-        providerState: ProviderState<EVMProviderState>;
+        providerGroup: GroupedProvider;
         subscriptions: Id<CheckedSubscription>[];
       }[],
-      providerState
+      providerGroup
     ) => {
       // Filter subscription by chainId, double-check that subscription has an associated API value and add
       // it to the subscription object
       const chainSubscriptions = subscriptions.reduce(
         (acc: (Id<Subscription> & { apiValue: ethers.BigNumber })[], subscription) => {
-          if (subscription.chainId === providerState.chainId && apiValuesBySubscriptionId[subscription.id])
+          if (subscription.chainId === providerGroup.chainId && apiValuesBySubscriptionId[subscription.id])
             return [...acc, { ...subscription, apiValue: apiValuesBySubscriptionId[subscription.id] }];
           return acc;
         },
@@ -321,7 +322,7 @@ const submitTransactions = async (state: State) => {
       // Collect subscriptions for each provider + sponsor pair
       const subscriptionGroup = Object.entries(subscriptionsBySponsor).map(([sponsorAddress, subscriptions]) => ({
         sponsorAddress: sponsorAddress,
-        providerState: providerState,
+        providerGroup,
         subscriptions,
       }));
 
@@ -335,11 +336,29 @@ const submitTransactions = async (state: State) => {
       providerSponsorSubscription,
       baseLogOptions: baseLogOptions,
       type: config.nodeSettings.cloudProvider.type,
+      stage: config.nodeSettings.stage,
     })
   );
 
-  //TODO: do we want to handle lambda promise rejections separately. e.g. Promise.allSettled().catch()
-  await Promise.all(providerSponsorPromises);
+  const providerSponsorResults = await Promise.allSettled(providerSponsorPromises);
+
+  const groupedResults = providerSponsorResults.reduce(
+    (acc: { fulfilled: any[]; rejected: any[] }, result) => {
+      if (result.status === 'fulfilled') {
+        acc.fulfilled.push(result);
+      }
+      if (result.status === 'rejected') {
+        acc.rejected.push(result);
+      }
+      return acc;
+    },
+    { fulfilled: [], rejected: [] }
+  );
+
+  utils.logger.info(
+    `Processed subscriptions; success: ${groupedResults.fulfilled.length}, failure: ${groupedResults.rejected.length}`,
+    baseLogOptions
+  );
 };
 
 const updateBeacon = async (config: Config) => {
@@ -356,13 +375,7 @@ const updateBeacon = async (config: Config) => {
   utils.logger.debug('API requests executed...', state.baseLogOptions);
 
   // **************************************************************************
-  // STEP 3. Initialize providers
-  // **************************************************************************
-  state = await initializeProviders(state);
-  utils.logger.debug('Providers initialized...', state.baseLogOptions);
-
-  // **************************************************************************
-  // STEP 4. Initiate transactions for each provider, sponsor wallet pair
+  // STEP 3. Initiate transactions for each provider, sponsor wallet pair
   // **************************************************************************
   await submitTransactions(state);
   utils.logger.debug('Transactions submitted...', state.baseLogOptions);

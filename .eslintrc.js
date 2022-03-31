@@ -17,7 +17,7 @@ module.exports = {
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
     'plugin:@typescript-eslint/eslint-recommended',
-    // 'plugin:import/recommended', // This is causing a problem with importing types from aws-lambda package
+    'plugin:import/recommended',
     'plugin:import/typescript',
     'plugin:jest/recommended',
     '.eslintrc.fp.js',

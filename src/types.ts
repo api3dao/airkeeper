@@ -42,14 +42,19 @@ export interface BaseState {
 export interface State extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];
   apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber };
-  providerStates: ProviderState<EVMProviderState>[];
+  groupedProviders: GroupedProvider[];
 }
 
+export type GroupedProvider = {
+  chainId: string;
+  providerName: string;
+  providerUrl: string;
+  chainConfig: ChainConfig & AirkeeperChainConfig;
+};
+
 export type ProviderState<T extends {}> = T &
-  BaseState & {
+  GroupedProvider & {
     airnodeWallet: ethers.Wallet;
-    chainId: string;
-    providerName: string;
   };
 
 export interface EVMProviderState {
@@ -79,8 +84,21 @@ export interface SponsorWalletTransactionCount {
   transactionCount: number;
 }
 
-export interface ProviderSponsorSubscriptions {
+export interface SponsorSubscriptions {
   sponsorAddress: string;
-  providerState: ProviderState<EVMProviderState>;
   subscriptions: Id<CheckedSubscription>[];
+}
+
+export interface ProviderSponsorSubscriptions extends SponsorSubscriptions {
+  providerGroup: GroupedProvider;
+}
+
+export interface ProviderSponsorSubscriptionsState extends SponsorSubscriptions {
+  providerState: ProviderState<EVMProviderState>;
+}
+
+export interface AWSHandlerResponse {
+  statusCode: number;
+  ok: boolean;
+  message: string;
 }

@@ -2,8 +2,8 @@ service: airkeeper
 
 provider:
   name: aws
-  # region: ${opt:region}
-  # stage: ${opt:stage}
+  region: ${env:REGION}
+  stage: ${env:STAGE}
   runtime: nodejs14.x
   memorySize: 512
   logRetentionInDays: 14
@@ -12,7 +12,7 @@ provider:
     - Effect: 'Allow'
       Action:
         - 'lambda:InvokeFunction'
-      Resource: '*'
+      Resource: 'arn:aws:lambda:${self:provider.region}:${aws:accountId}:function:airkeeper-${self:provider.stage}-process-subscriptions'
 
 package:
   patterns:
@@ -31,3 +31,4 @@ functions:
       - schedule: rate(1 minute)
   process-subscriptions:
     handler: dist/src/handlers/process-subscriptions.handler
+    timeout: 15
