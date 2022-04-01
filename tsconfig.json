@@ -10,7 +10,7 @@
     "target": "es5",
     "skipLibCheck": true,
     "baseUrl": "./",
-    "outDir": "./dist/src"
+    "outDir": "./dist"
   },
   "include": ["./src/**/*.ts"],
   "exclude": ["node_modules"]

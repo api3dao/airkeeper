@@ -3,8 +3,8 @@
   "license": "MIT",
   "version": "1.0.0",
   "description": "A tool to update a beacon server value on a time interval",
-  "main": "./src/index",
-  "types": "./src/index",
+  "main": "./dist/index",
+  "types": "./dist/types",
   "engines": {
     "node": "^14.17.1"
   },
