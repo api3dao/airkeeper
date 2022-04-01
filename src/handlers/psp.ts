@@ -171,15 +171,16 @@ const executeApiCalls = async (state: State): Promise<State> => {
   const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
   const doRequestWithRetries = async (
     fn: () => Promise<CallApiResult>,
-    minDelay = 1_000,
-    maxDelay = 5_000
+    minDelay = 200,
+    maxDelay = 2000
   ): Promise<CallApiResult> => {
-    try {
-      return await fn();
-    } catch (e) {
-      await wait(Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay));
+    const goResult = await promise.go(fn());
+    if (!goResult.success) {
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
+      await wait(delay);
       return await doRequestWithRetries(fn, minDelay, maxDelay);
     }
+    return goResult.data;
   };
 
   let hasApiCallWrapperTimedOut = false;
@@ -188,11 +189,12 @@ const executeApiCalls = async (state: State): Promise<State> => {
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
 
-    let hasApiCallTimedOut = false;
     const result = await doRequestWithRetries(async () => {
       if (hasApiCallWrapperTimedOut) {
         return [[], { templateId: template.id, apiValue: null, subscriptions }] as CallApiResult;
       }
+
+      let hasApiCallTimedOut = false;
       const result = await promise.go(
         async () => {
           try {
