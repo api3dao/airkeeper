@@ -102,3 +102,9 @@ export interface AWSHandlerResponse {
   ok: boolean;
   message: string;
 }
+
+export interface WorkerParameters {
+  providerSponsorSubscriptions: ProviderSponsorSubscriptions;
+  baseLogOptions: utils.LogOptions;
+  stage: string;
+}

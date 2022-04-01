@@ -1,4 +1,3 @@
-import AWS from 'aws-sdk';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
@@ -7,20 +6,12 @@ import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
-import { handler as processSubscriptionsHandler } from './process-subscriptions';
+import { spawn } from '../workers';
+
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { buildLogOptions } from '../logger';
-import {
-  Config,
-  GroupedSubscriptions,
-  Id,
-  State,
-  CheckedSubscription,
-  ProviderSponsorSubscriptions,
-  GroupedProvider,
-  AWSHandlerResponse,
-} from '../types';
+import { Config, GroupedSubscriptions, Id, State, CheckedSubscription, GroupedProvider } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
 
@@ -236,67 +227,12 @@ const executeApiCalls = async (state: State): Promise<State> => {
   return { ...state, apiValuesBySubscriptionId };
 };
 
-export const spawn = ({
-  providerSponsorSubscription,
-  baseLogOptions,
-  type,
-  stage,
-}: {
-  providerSponsorSubscription: ProviderSponsorSubscriptions;
-  baseLogOptions: utils.LogOptions;
-  type: 'local' | 'aws' | 'gcp';
-  stage: string;
-}) => {
-  // lambda.invoke is synchronous so we need to wrap this in a promise
-  switch (type) {
-    case 'local':
-      return new Promise((resolve, reject) => {
-        processSubscriptionsHandler({ providerSponsorSubscription, baseLogOptions }).then((data) => {
-          if (!data.ok) {
-            reject(data.message);
-          }
-          resolve(data.message);
-        });
-      });
-    case 'aws':
-      return new Promise((resolve, reject) => {
-        // Uses the current region by default
-        const lambda = new AWS.Lambda();
-
-        // AWS doesn't allow uppercase letters in lambda function names
-        const resolvedName = `airkeeper-${stage}-process-subscriptions`;
-
-        const options = {
-          FunctionName: resolvedName,
-          Payload: JSON.stringify({ providerSponsorSubscription, baseLogOptions }),
-        };
-        lambda.invoke(options, (err, data) => {
-          // Reject invoke and (unhandled) handler errors
-          if (err || data.FunctionError) {
-            reject(err || data.FunctionError);
-            return;
-          }
-
-          const parsedData: AWSHandlerResponse = JSON.parse(data.Payload as string);
-
-          // Reject non-ok results
-          if (!parsedData.ok) {
-            reject(parsedData.message);
-            return;
-          }
-
-          resolve(parsedData.message);
-        });
-      });
-  }
-};
-
 const submitTransactions = async (state: State) => {
   const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, groupedProviders, config } = state;
 
   const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
-  const providerSponsorSubscriptions = groupedProviders.reduce(
+  const providerSponsorSubscriptionsArray = groupedProviders.reduce(
     (
       acc: {
         sponsorAddress: string;
@@ -331,9 +267,9 @@ const submitTransactions = async (state: State) => {
     []
   );
 
-  const providerSponsorPromises = providerSponsorSubscriptions.map(async (providerSponsorSubscription) =>
+  const providerSponsorPromises = providerSponsorSubscriptionsArray.map(async (providerSponsorSubscriptions) =>
     spawn({
-      providerSponsorSubscription,
+      providerSponsorSubscriptions,
       baseLogOptions: baseLogOptions,
       type: config.nodeSettings.cloudProvider.type,
       stage: config.nodeSettings.stage,
@@ -343,7 +279,13 @@ const submitTransactions = async (state: State) => {
   const providerSponsorResults = await Promise.allSettled(providerSponsorPromises);
 
   const groupedResults = providerSponsorResults.reduce(
-    (acc: { fulfilled: any[]; rejected: any[] }, result) => {
+    (
+      acc: {
+        fulfilled: PromiseFulfilledResult<string>[];
+        rejected: PromiseRejectedResult[];
+      },
+      result
+    ) => {
       if (result.status === 'fulfilled') {
         acc.fulfilled.push(result);
       }

@@ -9,10 +9,10 @@ import { shortenAddress } from '../wallet';
 import { ProviderSponsorSubscriptions, ProviderSponsorSubscriptionsState, AWSHandlerResponse } from '../types';
 
 export const processSubscriptions = async (
-  providerSponsorSubscription: ProviderSponsorSubscriptionsState,
+  providerSponsorSubscriptions: ProviderSponsorSubscriptionsState,
   baseLogOptions: utils.LogOptions
 ) => {
-  const { sponsorAddress, providerState, subscriptions } = providerSponsorSubscription;
+  const { sponsorAddress, providerState, subscriptions } = providerSponsorSubscriptions;
   const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
     providerState;
 
@@ -60,10 +60,10 @@ export const processSubscriptions = async (
 };
 
 export const handler = async ({
-  providerSponsorSubscription,
+  providerSponsorSubscriptions,
   baseLogOptions,
 }: {
-  providerSponsorSubscription: ProviderSponsorSubscriptions;
+  providerSponsorSubscriptions: ProviderSponsorSubscriptions;
   baseLogOptions: utils.LogOptions;
 }): Promise<AWSHandlerResponse> => {
   const airnodeConfig = goSync(loadAirnodeConfig);
@@ -76,14 +76,14 @@ export const handler = async ({
 
   // Initialize provider specific data
   const [logs, evmProviderState] = await initializeProvider(
-    providerSponsorSubscription.providerGroup.chainConfig,
-    providerSponsorSubscription.providerGroup.providerUrl || ''
+    providerSponsorSubscriptions.providerGroup.chainConfig,
+    providerSponsorSubscriptions.providerGroup.providerUrl || ''
   );
   const providerLogOptions = buildLogOptions(
     'meta',
     {
-      chainId: providerSponsorSubscription.providerGroup.chainId,
-      providerName: providerSponsorSubscription.providerGroup.providerName,
+      chainId: providerSponsorSubscriptions.providerGroup.chainId,
+      providerName: providerSponsorSubscriptions.providerGroup.providerName,
     },
     baseLogOptions
   );
@@ -95,14 +95,14 @@ export const handler = async ({
     return {
       statusCode: 500,
       ok: false,
-      message: `Failed to initialize provider: ${providerSponsorSubscription.providerGroup.providerName} for chain: ${providerSponsorSubscription.providerGroup.chainId}`,
+      message: `Failed to initialize provider: ${providerSponsorSubscriptions.providerGroup.providerName} for chain: ${providerSponsorSubscriptions.providerGroup.chainId}`,
     };
   }
 
   await processSubscriptions(
     {
-      ...providerSponsorSubscription,
-      providerState: { ...providerSponsorSubscription.providerGroup, airnodeWallet, ...evmProviderState },
+      ...providerSponsorSubscriptions,
+      providerState: { ...providerSponsorSubscriptions.providerGroup, airnodeWallet, ...evmProviderState },
     },
     baseLogOptions
   );
@@ -110,6 +110,6 @@ export const handler = async ({
   return {
     statusCode: 200,
     ok: true,
-    message: `Processing subscriptions for sponsorAddress: ${providerSponsorSubscription.sponsorAddress} has finished`,
+    message: `Processing subscriptions for sponsorAddress: ${providerSponsorSubscriptions.sponsorAddress} has finished`,
   };
 };
