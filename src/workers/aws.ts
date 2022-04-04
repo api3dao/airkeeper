@@ -9,7 +9,7 @@ export const spawn = async ({
   // lambda.invoke is synchronous so we need to wrap this in a promise
   new Promise((resolve, reject) => {
     // Uses the current region by default
-    const lambda = new AWS.Lambda({ endpoint: 'http://localhost:3002' });
+    const lambda = new AWS.Lambda();
 
     // AWS doesn't allow uppercase letters in lambda function names
     const resolvedName = `airkeeper-${stage}-process-subscriptions`;
@@ -19,7 +19,6 @@ export const spawn = async ({
       Payload: JSON.stringify({ providerSponsorSubscriptions, baseLogOptions }),
     };
     lambda.invoke(options, (err, data) => {
-      console.log('spawn', err, data);
       // Reject invoke and (unhandled) handler errors
       if (err || data.FunctionError) {
         reject(err || data.FunctionError);

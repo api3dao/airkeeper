@@ -65,12 +65,6 @@ describe('initializeProvider', () => {
     );
     expect(data).toEqual(
       expect.objectContaining({
-        provider: expect.any(ethers.providers.JsonRpcProvider),
-        contracts: expect.objectContaining({
-          RrpBeaconServer: expect.any(ethers.Contract),
-          DapiServer: expect.any(ethers.Contract),
-        }),
-        voidSigner: expect.any(ethers.VoidSigner),
         currentBlock,
         gasTarget,
       })

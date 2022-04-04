@@ -12,7 +12,7 @@ provider:
     - Effect: 'Allow'
       Action:
         - 'lambda:InvokeFunction'
-      Resource: 'arn:aws:lambda:${self:provider.region}:${aws:accountId}:function:airkeeper-${self:provider.stage}-process-subscriptions'
+      Resource: 'arn:aws:lambda:${self:provider.region}:${aws:accountId}:function:${self:service}-${self:provider.stage}-process-subscriptions'
 
 package:
   patterns:
@@ -26,6 +26,8 @@ functions:
       - schedule: rate(1 minute)
   psp-beacon-update:
     handler: dist/src/handlers/psp.handler
+    environment:
+      CLOUD_PROVIDER: ${self:provider.name}
     timeout: 60
     events:
       - schedule: rate(1 minute)
