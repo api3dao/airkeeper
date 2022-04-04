@@ -115,9 +115,12 @@ export const handler = async ({
     baseLogOptions
   );
 
+  utils.logger.info(
+    `Processing subscriptions for sponsorAddress: ${providerSponsorSubscriptions.sponsorAddress} has finished`,
+    baseLogOptions
+  );
+
   return {
-    statusCode: 200,
     ok: true,
-    message: `Processing subscriptions for sponsorAddress: ${providerSponsorSubscriptions.sponsorAddress} has finished`,
   };
 };

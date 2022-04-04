@@ -13,15 +13,15 @@ export const spawn = ({
   baseLogOptions: utils.LogOptions;
   type: 'local' | 'aws' | 'gcp';
   stage: string;
-}): Promise<string> => {
+}): Promise<any> => {
   switch (type) {
     case 'local':
       return new Promise((resolve, reject) => {
         processSubscriptionsHandler({ providerSponsorSubscriptions, baseLogOptions }).then((data) => {
           if (!data.ok) {
-            reject(data.message);
+            reject(data);
           }
-          resolve(data.message);
+          resolve(data);
         });
       });
     case 'aws':

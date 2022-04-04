@@ -290,10 +290,6 @@ const submitTransactions = async (state: State) => {
   const providerSponsorResults = await Promise.allSettled(providerSponsorPromises);
 
   providerSponsorResults.forEach((result) => {
-    if (result.status === 'fulfilled') {
-      utils.logger.info(result.value, baseLogOptions);
-    }
-
     if (result.status === 'rejected') {
       utils.logger.error(JSON.stringify(result.reason), baseLogOptions);
     }

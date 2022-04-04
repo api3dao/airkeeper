@@ -96,9 +96,7 @@ export interface ProviderSponsorProcessSubscriptionsState extends SponsorSubscri
 }
 
 export interface AWSHandlerResponse {
-  statusCode: number;
   ok: boolean;
-  message: string;
 }
 
 export interface WorkerParameters {
