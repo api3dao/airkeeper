@@ -21,6 +21,7 @@ describe('callApi', () => {
     airkeeperConfig
   );
   const airnodeAddress = airkeeperConfig.airnodeAddress;
+  const airnodeXpub = airkeeperConfig.airnodeXpub;
   if (airkeeperConfig.airnodeAddress && airkeeperConfig.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
@@ -33,14 +34,23 @@ describe('callApi', () => {
     const spy = jest.spyOn(adapter, 'buildAndExecuteRequest') as any;
 
     const apiResponse = { data: { success: true, result: '723.392028' } };
-    spy.mockResolvedValueOnce(apiResponse);
+    spy.mockResolvedValue(apiResponse);
 
-    const [logs, res] = await callApi(config, endpoint, apiCallParameters);
+    let [logs, res] = await callApi(config, endpoint, apiCallParameters);
 
-    expect(logs).toHaveLength(0);
+    expect(logs).toHaveLength(1);
+    expect(logs).toEqual(expect.arrayContaining([{ level: 'DEBUG', message: 'API value: 723392028' }]));
     expect(res).toBeDefined();
     expect(res).toEqual(ethers.BigNumber.from(723392028));
     expect(spy).toHaveBeenCalledTimes(1);
+
+    [logs, res] = await callApi({ ...config, airnodeXpub }, endpoint, apiCallParameters);
+
+    expect(logs).toHaveLength(1);
+    expect(logs).toEqual(expect.arrayContaining([{ level: 'DEBUG', message: 'API value: 723392028' }]));
+    expect(res).toBeDefined();
+    expect(res).toEqual(ethers.BigNumber.from(723392028));
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it("returns null if reserved parameter '_type' is missing", async () => {

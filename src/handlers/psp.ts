@@ -1,7 +1,6 @@
 import * as abi from '@api3/airnode-abi';
-import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
-import { go, goSync } from '@api3/promise-utils';
+import * as promise from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
@@ -11,20 +10,28 @@ import { initializeProvider } from '../evm';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { buildLogOptions } from '../logger';
-import { Config, EVMBaseState, GroupedSubscriptions, Id, ProviderState, State, CheckedSubscription } from '../types';
-import { TIMEOUT_MS, RETRIES } from '../constants';
+import {
+  CallApiResult,
+  CheckedSubscription,
+  Config,
+  EVMBaseState,
+  GroupedSubscriptions,
+  Id,
+  ProviderState,
+  State,
+} from '../types';
 import { Subscription } from '../validator';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
-  const airnodeConfig = goSync(loadAirnodeConfig);
+  const airnodeConfig = promise.goSync(loadAirnodeConfig);
   if (!airnodeConfig.success) {
     utils.logger.error(airnodeConfig.error.message);
     throw airnodeConfig.error;
   }
   // This file will be merged with config.json from above
-  const airkeeperConfig = goSync(loadAirkeeperConfig);
+  const airkeeperConfig = promise.goSync(loadAirkeeperConfig);
   if (!airkeeperConfig.success) {
     utils.logger.error(airkeeperConfig.error.message);
     throw airkeeperConfig.error;
@@ -194,29 +201,72 @@ const initializeProviders = async (state: State): Promise<State> => {
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
-  const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
+  const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  const doRequestWithRetries = async (
+    fn: () => Promise<CallApiResult>,
+    minDelay = 200,
+    maxDelay = 2000
+  ): Promise<CallApiResult> => {
+    const goResult = await promise.go(fn());
+    if (!goResult.success) {
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
+      await wait(delay);
+      return await doRequestWithRetries(fn, minDelay, maxDelay);
+    }
+    return goResult.data;
+  };
+
+  let hasApiCallWrapperTimedOut = false;
+  const responses: CallApiResult[] = [];
+  const errorLogs: utils.PendingLog[] = [];
+  const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-    return go(
-      async () => {
-        const [logs, data] = await callApi(config, endpoint, apiCallParameters);
-        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
-          templateId: string;
-          apiValue: ethers.BigNumber | null;
-          subscriptions: Id<Subscription>[];
-        }>;
-      },
-      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
-    );
+
+    const result = await doRequestWithRetries(async () => {
+      if (hasApiCallWrapperTimedOut) {
+        return [[], { templateId: template.id, apiValue: null, subscriptions }] as CallApiResult;
+      }
+
+      let hasApiCallTimedOut = false;
+      const result = await promise.go(
+        async () => {
+          try {
+            return await callApi(config, endpoint, apiCallParameters);
+          } catch (err) {
+            if (hasApiCallTimedOut) {
+              return [
+                [utils.logger.pend('ERROR', err instanceof Error ? err.message : String(err))],
+                { templateId: template.id, apiValue: null, subscriptions },
+              ] as CallApiResult;
+            }
+            throw err;
+          }
+        },
+        { timeoutMs: 10_000, retries: 0 }
+      );
+      if (result.success) {
+        const [logs, data] = result.data;
+        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as CallApiResult;
+      } else {
+        errorLogs.push(
+          utils.logger.pend('DEBUG', `Retrying API call for templateId ${template.id}: ${result.error.message}`)
+        );
+        hasApiCallTimedOut = result.error.message.includes('Operation timed out');
+        throw result.error;
+      }
+    });
+    responses.push(result);
   });
-  const responses = await Promise.all(apiValuePromises);
+
+  const result = await promise.go(async () => await Promise.all(apiValuePromises), { timeoutMs: 40_000, retries: 0 });
+  utils.logger.logPending(errorLogs, baseLogOptions);
+  if (!result.success) {
+    hasApiCallWrapperTimedOut = result.error.message.includes('Operation timed out');
+    utils.logger.error(`An error has occurred while calling APIs: ${result.error.message}`, baseLogOptions);
+  }
 
   const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
-    if (!result.success) {
-      utils.logger.warn('Failed to fetch API value', baseLogOptions);
-      return acc;
-    }
-
-    const [logs, data] = result.data;
+    const [logs, data] = result;
 
     const templateLogOptions = buildLogOptions('additional', { templateId: data.templateId }, baseLogOptions);
 

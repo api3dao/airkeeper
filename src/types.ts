@@ -104,3 +104,8 @@ export interface WorkerParameters {
   baseLogOptions: utils.LogOptions;
   stage: string;
 }
+export type CallApiResult = node.LogsData<{
+  templateId: string;
+  apiValue: ethers.BigNumber | null;
+  subscriptions: Id<Subscription>[];
+}>;
