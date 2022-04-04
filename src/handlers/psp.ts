@@ -295,7 +295,7 @@ const submitTransactions = async (state: State) => {
     }
 
     if (result.status === 'rejected') {
-      utils.logger.error(result.reason, baseLogOptions);
+      utils.logger.error(JSON.stringify(result.reason), baseLogOptions);
     }
   });
 };
