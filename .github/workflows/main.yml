@@ -70,6 +70,8 @@ jobs:
           cache: 'yarn'
       - name: Install Dependencies
         run: yarn install --frozen-lockfile
+      - name: Build
+        run: yarn build
       - name: Start background services
         run: yarn run dev:background
       - name: Test
@@ -94,7 +96,7 @@ jobs:
   build-complete:
     name: All tests passed
     runs-on: ubuntu-latest
-    needs: [documentation, docker-build, unit-tests]
+    needs: [documentation, docker-build, unit-tests, e2e-tests]
     steps:
       - run: exit 0
       - name: Slack Notification
