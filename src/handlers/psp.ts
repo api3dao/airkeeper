@@ -332,7 +332,7 @@ const submitTransactions = async (state: State) => {
     spawn({
       providerSponsorSubscriptions,
       baseLogOptions: baseLogOptions,
-      type: process.env.CLOUD_PROVIDER as 'local' | 'aws' | 'gcp',
+      type: process.env.CLOUD_PROVIDER as 'local' | 'aws',
       stage: process.env.STAGE!,
     })
   );

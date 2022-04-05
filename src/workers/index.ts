@@ -11,22 +11,15 @@ export const spawn = ({
 }: {
   providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
   baseLogOptions: utils.LogOptions;
-  type: 'local' | 'aws' | 'gcp';
+  type: 'local' | 'aws';
   stage: string;
 }): Promise<any> => {
   switch (type) {
     case 'local':
-      return new Promise((resolve, reject) => {
-        processSubscriptionsHandler({ providerSponsorSubscriptions, baseLogOptions }).then((data) => {
-          if (!data.ok) {
-            reject(data);
-          }
-          resolve(data);
-        });
-      });
+      return new Promise((resolve, reject) =>
+        processSubscriptionsHandler({ providerSponsorSubscriptions, baseLogOptions }).then(resolve).catch(reject)
+      );
     case 'aws':
       return aws.spawn({ providerSponsorSubscriptions, baseLogOptions, stage });
-    case 'gcp':
-      return new Promise((_, reject) => reject('GCP is not supported'));
   }
 };

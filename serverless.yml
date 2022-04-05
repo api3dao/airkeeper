@@ -27,7 +27,8 @@ functions:
   psp-beacon-update:
     handler: dist/src/handlers/psp.handler
     environment:
-      CLOUD_PROVIDER: '${param:provider, self:provider.name}'
+      CLOUD_PROVIDER: ${param:provider, self:provider.name}
+      STAGE: ${self:provider.stage}
     timeout: 60
     events:
       - schedule: rate(1 minute)

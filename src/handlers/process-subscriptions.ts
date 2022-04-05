@@ -11,7 +11,8 @@ import { shortenAddress } from '../wallet';
 import {
   ProviderSponsorProcessSubscriptionsState,
   ProviderSponsorSubscriptionsState,
-  AWSHandlerResponse,
+  ProviderState,
+  EVMBaseState,
 } from '../types';
 
 export const processSubscriptions = async (
@@ -65,24 +66,9 @@ export const processSubscriptions = async (
   });
 };
 
-export const handler = async ({
-  providerSponsorSubscriptions,
-  baseLogOptions,
-}: {
-  providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
-  baseLogOptions: utils.LogOptions;
-}): Promise<AWSHandlerResponse> => {
-  const airnodeConfig = goSync(loadAirnodeConfig);
-  if (!airnodeConfig.success) {
-    utils.logger.error(airnodeConfig.error.message);
-    throw airnodeConfig.error;
-  }
-
-  const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeConfig.data.nodeSettings.airnodeWalletMnemonic);
-  const provider = node.evm.buildEVMProvider(
-    providerSponsorSubscriptions.providerState.providerUrl,
-    providerSponsorSubscriptions.providerState.chainId
-  );
+const reinitializeProvider = async (airnodeWalletMnemonic: string, providerState: ProviderState<EVMBaseState>) => {
+  const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeWalletMnemonic);
+  const provider = node.evm.buildEVMProvider(providerState.providerUrl, providerState.chainId);
   const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
     ethers.utils.FormatTypes.minimal
   );
@@ -96,7 +82,7 @@ export const handler = async ({
     RrpBeaconServer: rrpBeaconServerAbi,
     DapiServer: dapiServerAbi,
   };
-  const contracts = Object.entries(providerSponsorSubscriptions.providerState.chainConfig.contracts).reduce(
+  const contracts = Object.entries(providerState.chainConfig.contracts).reduce(
     (acc, [contractName, contractAddress]) => {
       if (isNil(abis[contractName])) {
         return acc;
@@ -107,10 +93,31 @@ export const handler = async ({
   );
   const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
+  return { airnodeWallet, contracts, voidSigner, provider };
+};
+
+export const handler = async ({
+  providerSponsorSubscriptions,
+  baseLogOptions,
+}: {
+  providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
+  baseLogOptions: utils.LogOptions;
+}) => {
+  const airnodeConfig = goSync(loadAirnodeConfig);
+  if (!airnodeConfig.success) {
+    utils.logger.error(airnodeConfig.error.message);
+    throw airnodeConfig.error;
+  }
+
+  const reinitializedProviderState = await reinitializeProvider(
+    airnodeConfig.data.nodeSettings.airnodeWalletMnemonic,
+    providerSponsorSubscriptions.providerState
+  );
+
   await processSubscriptions(
     {
       ...providerSponsorSubscriptions,
-      providerState: { ...providerSponsorSubscriptions.providerState, airnodeWallet, contracts, voidSigner, provider },
+      providerState: { ...providerSponsorSubscriptions.providerState, ...reinitializedProviderState },
     },
     baseLogOptions
   );
@@ -119,8 +126,4 @@ export const handler = async ({
     `Processing subscriptions for sponsorAddress: ${providerSponsorSubscriptions.sponsorAddress} has finished`,
     baseLogOptions
   );
-
-  return {
-    ok: true,
-  };
 };
