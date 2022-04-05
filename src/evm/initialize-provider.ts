@@ -1,39 +1,14 @@
 import * as node from '@api3/airnode-node';
-import * as protocol from '@api3/airnode-protocol';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
-import { ethers } from 'ethers';
-import isNil from 'lodash/isNil';
-import { ChainConfig, EVMProviderState } from '../types';
+import { ChainConfig, EVMBaseState } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
-
-const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
-  ethers.utils.FormatTypes.minimal
-);
-
-export const dapiServerAbi = [
-  'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
-  'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
-];
-
-const abis: { [contractName: string]: string | string[] } = {
-  RrpBeaconServer: rrpBeaconServerAbi,
-  DapiServer: dapiServerAbi,
-};
 
 export const initializeProvider = async (
   chain: ChainConfig,
   providerUrl: string
-): Promise<node.LogsData<EVMProviderState | null>> => {
+): Promise<node.LogsData<EVMBaseState | null>> => {
   const provider = node.evm.buildEVMProvider(providerUrl, chain.id);
-
-  const contracts = Object.entries(chain.contracts).reduce((acc, [contractName, contractAddress]) => {
-    if (isNil(abis[contractName])) {
-      return acc;
-    }
-    return { ...acc, [contractName]: new ethers.Contract(contractAddress, abis[contractName], provider) };
-  }, {});
-  const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
   // Fetch current block number
   const currentBlock = await go(() => provider.getBlockNumber(), { timeoutMs: TIMEOUT_MS, retries: RETRIES });
@@ -69,9 +44,6 @@ export const initializeProvider = async (
   return [
     [currentBlockLog, ...gasPriceLogs, gasTargetLog],
     {
-      provider,
-      contracts,
-      voidSigner,
       currentBlock: currentBlock.data,
       gasTarget,
     },

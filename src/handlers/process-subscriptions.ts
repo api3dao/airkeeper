@@ -1,18 +1,24 @@
 import { ethers } from 'ethers';
 import * as utils from '@api3/airnode-utilities';
+import * as protocol from '@api3/airnode-protocol';
+import * as node from '@api3/airnode-node';
 import { goSync } from '@api3/promise-utils';
 import isNil from 'lodash/isNil';
 import { loadAirnodeConfig } from '../config';
-import { getSponsorWalletAndTransactionCount, processSponsorWallet, initializeProvider } from '../evm';
+import { getSponsorWalletAndTransactionCount, processSponsorWallet } from '../evm';
 import { buildLogOptions } from '../logger';
 import { shortenAddress } from '../wallet';
-import { ProviderSponsorSubscriptions, ProviderSponsorSubscriptionsState, AWSHandlerResponse } from '../types';
+import {
+  ProviderSponsorProcessSubscriptionsState,
+  ProviderSponsorSubscriptionsState,
+  AWSHandlerResponse,
+} from '../types';
 
 export const processSubscriptions = async (
-  providerSponsorSubscription: ProviderSponsorSubscriptionsState,
+  providerSponsorSubscriptions: ProviderSponsorProcessSubscriptionsState,
   baseLogOptions: utils.LogOptions
 ) => {
-  const { sponsorAddress, providerState, subscriptions } = providerSponsorSubscription;
+  const { sponsorAddress, providerState, subscriptions } = providerSponsorSubscriptions;
   const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
     providerState;
 
@@ -60,10 +66,10 @@ export const processSubscriptions = async (
 };
 
 export const handler = async ({
-  providerSponsorSubscription,
+  providerSponsorSubscriptions,
   baseLogOptions,
 }: {
-  providerSponsorSubscription: ProviderSponsorSubscriptions;
+  providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
   baseLogOptions: utils.LogOptions;
 }): Promise<AWSHandlerResponse> => {
   const airnodeConfig = goSync(loadAirnodeConfig);
@@ -73,43 +79,48 @@ export const handler = async ({
   }
 
   const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeConfig.data.nodeSettings.airnodeWalletMnemonic);
-
-  // Initialize provider specific data
-  const [logs, evmProviderState] = await initializeProvider(
-    providerSponsorSubscription.providerGroup.chainConfig,
-    providerSponsorSubscription.providerGroup.providerUrl || ''
+  const provider = node.evm.buildEVMProvider(
+    providerSponsorSubscriptions.providerState.providerUrl,
+    providerSponsorSubscriptions.providerState.chainId
   );
-  const providerLogOptions = buildLogOptions(
-    'meta',
-    {
-      chainId: providerSponsorSubscription.providerGroup.chainId,
-      providerName: providerSponsorSubscription.providerGroup.providerName,
+  const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
+    ethers.utils.FormatTypes.minimal
+  );
+
+  const dapiServerAbi = [
+    'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
+    'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
+  ];
+
+  const abis: { [contractName: string]: string | string[] } = {
+    RrpBeaconServer: rrpBeaconServerAbi,
+    DapiServer: dapiServerAbi,
+  };
+  const contracts = Object.entries(providerSponsorSubscriptions.providerState.chainConfig.contracts).reduce(
+    (acc, [contractName, contractAddress]) => {
+      if (isNil(abis[contractName])) {
+        return acc;
+      }
+      return { ...acc, [contractName]: new ethers.Contract(contractAddress, abis[contractName], provider) };
     },
-    baseLogOptions
+    {}
   );
-  utils.logger.logPending(logs, providerLogOptions);
-  if (isNil(evmProviderState)) {
-    const message = 'Failed to initialize provider';
-    utils.logger.warn(message, providerLogOptions);
-
-    return {
-      statusCode: 500,
-      ok: false,
-      message: `Failed to initialize provider: ${providerSponsorSubscription.providerGroup.providerName} for chain: ${providerSponsorSubscription.providerGroup.chainId}`,
-    };
-  }
+  const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
 
   await processSubscriptions(
     {
-      ...providerSponsorSubscription,
-      providerState: { ...providerSponsorSubscription.providerGroup, airnodeWallet, ...evmProviderState },
+      ...providerSponsorSubscriptions,
+      providerState: { ...providerSponsorSubscriptions.providerState, airnodeWallet, contracts, voidSigner, provider },
     },
+    baseLogOptions
+  );
+
+  utils.logger.info(
+    `Processing subscriptions for sponsorAddress: ${providerSponsorSubscriptions.sponsorAddress} has finished`,
     baseLogOptions
   );
 
   return {
-    statusCode: 200,
     ok: true,
-    message: `Processing subscriptions for sponsorAddress: ${providerSponsorSubscription.sponsorAddress} has finished`,
   };
 };

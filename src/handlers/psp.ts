@@ -1,39 +1,37 @@
-import AWS from 'aws-sdk';
 import * as abi from '@api3/airnode-abi';
-import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
-import { go, goSync } from '@api3/promise-utils';
+import * as promise from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
-import { handler as processSubscriptionsHandler } from './process-subscriptions';
+import { spawn } from '../workers';
+import { initializeProvider } from '../evm';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { buildLogOptions } from '../logger';
 import {
+  CallApiResult,
+  CheckedSubscription,
   Config,
+  EVMBaseState,
   GroupedSubscriptions,
   Id,
+  ProviderState,
   State,
-  CheckedSubscription,
-  ProviderSponsorSubscriptions,
-  GroupedProvider,
-  AWSHandlerResponse,
 } from '../types';
-import { TIMEOUT_MS, RETRIES } from '../constants';
 import { Subscription } from '../validator';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
 
-  const airnodeConfig = goSync(loadAirnodeConfig);
+  const airnodeConfig = promise.goSync(loadAirnodeConfig);
   if (!airnodeConfig.success) {
     utils.logger.error(airnodeConfig.error.message);
     throw airnodeConfig.error;
   }
   // This file will be merged with config.json from above
-  const airkeeperConfig = goSync(loadAirkeeperConfig);
+  const airkeeperConfig = promise.goSync(loadAirkeeperConfig);
   if (!airkeeperConfig.success) {
     utils.logger.error(airkeeperConfig.error.message);
     throw airkeeperConfig.error;
@@ -54,27 +52,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
     data: { message: 'PSP beacon update execution has finished' },
   };
   return { statusCode: 200, body: JSON.stringify(response) };
-};
-
-const groupProviders = (config: Config) => {
-  const evmChains = config.chains.filter((chain) => chain.type === 'evm');
-  if (isEmpty(evmChains)) {
-    throw new Error('One or more evm compatible chains must be defined in the provided config');
-  }
-  const groupedProviders = evmChains.flatMap((chain) =>
-    Object.entries(chain.providers).map(([providerName, chainProvider]) => {
-      return {
-        chainId: chain.id,
-        providerName,
-        providerUrl: chainProvider.url,
-        chainConfig: chain,
-      };
-    })
-  );
-
-  const filteredGroupedProviders = groupedProviders.filter((p) => !isNil(p));
-
-  return filteredGroupedProviders;
 };
 
 const initializeState = (config: Config): State => {
@@ -177,44 +154,119 @@ const initializeState = (config: Config): State => {
     },
     []
   );
-
-  const groupedProviders = groupProviders(config);
-
   return {
     config,
     baseLogOptions,
     groupedSubscriptions,
-    groupedProviders,
     apiValuesBySubscriptionId: {},
+    providerStates: [],
   };
+};
+
+const initializeProviders = async (state: State): Promise<State> => {
+  const { config, baseLogOptions } = state;
+
+  const evmChains = config.chains.filter((chain) => chain.type === 'evm');
+  if (isEmpty(evmChains)) {
+    throw new Error('One or more evm compatible chains must be defined in the provided config');
+  }
+  const providerPromises = evmChains.flatMap((chain) =>
+    Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
+      const providerLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
+
+      // Initialize provider specific data
+      const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
+      utils.logger.logPending(logs, providerLogOptions);
+      if (isNil(evmProviderState)) {
+        utils.logger.warn('Failed to initialize provider', providerLogOptions);
+        return null;
+      }
+
+      return {
+        chainId: chain.id,
+        providerName,
+        providerUrl: chainProvider.url,
+        chainConfig: chain,
+        ...evmProviderState,
+      };
+    })
+  );
+
+  const providerStates = await Promise.all(providerPromises);
+  const validProviderStates = providerStates.filter((ps) => !isNil(ps)) as ProviderState<EVMBaseState>[];
+
+  return { ...state, providerStates: validProviderStates };
 };
 
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
 
-  const apiValuePromises = groupedSubscriptions.map(({ subscriptions, template, endpoint }) => {
+  const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
+  const doRequestWithRetries = async (
+    fn: () => Promise<CallApiResult>,
+    minDelay = 200,
+    maxDelay = 2000
+  ): Promise<CallApiResult> => {
+    const goResult = await promise.go(fn());
+    if (!goResult.success) {
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
+      await wait(delay);
+      return await doRequestWithRetries(fn, minDelay, maxDelay);
+    }
+    return goResult.data;
+  };
+
+  let hasApiCallWrapperTimedOut = false;
+  const responses: CallApiResult[] = [];
+  const errorLogs: utils.PendingLog[] = [];
+  const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
-    return go(
-      async () => {
-        const [logs, data] = await callApi(config, endpoint, apiCallParameters);
-        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as node.LogsData<{
-          templateId: string;
-          apiValue: ethers.BigNumber | null;
-          subscriptions: Id<Subscription>[];
-        }>;
-      },
-      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
-    );
+
+    const result = await doRequestWithRetries(async () => {
+      if (hasApiCallWrapperTimedOut) {
+        return [[], { templateId: template.id, apiValue: null, subscriptions }] as CallApiResult;
+      }
+
+      let hasApiCallTimedOut = false;
+      const result = await promise.go(
+        async () => {
+          try {
+            return await callApi(config, endpoint, apiCallParameters);
+          } catch (err) {
+            if (hasApiCallTimedOut) {
+              return [
+                [utils.logger.pend('ERROR', err instanceof Error ? err.message : String(err))],
+                { templateId: template.id, apiValue: null, subscriptions },
+              ] as CallApiResult;
+            }
+            throw err;
+          }
+        },
+        { timeoutMs: 10_000, retries: 0 }
+      );
+      if (result.success) {
+        const [logs, data] = result.data;
+        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as CallApiResult;
+      } else {
+        errorLogs.push(
+          utils.logger.pend('DEBUG', `Retrying API call for templateId ${template.id}: ${result.error.message}`)
+        );
+        hasApiCallTimedOut = result.error.message.includes('Operation timed out');
+        throw result.error;
+      }
+    });
+    responses.push(result);
   });
-  const responses = await Promise.all(apiValuePromises);
+
+  const result = await promise.go(async () => await Promise.all(apiValuePromises), { timeoutMs: 40_000, retries: 0 });
+  utils.logger.logPending(errorLogs, baseLogOptions);
+  if (!result.success) {
+    hasApiCallWrapperTimedOut = result.error.message.includes('Operation timed out');
+    utils.logger.error(`An error has occurred while calling APIs: ${result.error.message}`, baseLogOptions);
+  }
 
   const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
-    if (!result.success) {
-      utils.logger.warn('Failed to fetch API value', baseLogOptions);
-      return acc;
-    }
-
-    const [logs, data] = result.data;
+    const [logs, data] = result;
 
     const templateLogOptions = buildLogOptions('additional', { templateId: data.templateId }, baseLogOptions);
 
@@ -236,80 +288,25 @@ const executeApiCalls = async (state: State): Promise<State> => {
   return { ...state, apiValuesBySubscriptionId };
 };
 
-export const spawn = ({
-  providerSponsorSubscription,
-  baseLogOptions,
-  type,
-  stage,
-}: {
-  providerSponsorSubscription: ProviderSponsorSubscriptions;
-  baseLogOptions: utils.LogOptions;
-  type: 'local' | 'aws' | 'gcp';
-  stage: string;
-}) => {
-  // lambda.invoke is synchronous so we need to wrap this in a promise
-  switch (type) {
-    case 'local':
-      return new Promise((resolve, reject) => {
-        processSubscriptionsHandler({ providerSponsorSubscription, baseLogOptions }).then((data) => {
-          if (!data.ok) {
-            reject(data.message);
-          }
-          resolve(data.message);
-        });
-      });
-    case 'aws':
-      return new Promise((resolve, reject) => {
-        // Uses the current region by default
-        const lambda = new AWS.Lambda();
-
-        // AWS doesn't allow uppercase letters in lambda function names
-        const resolvedName = `airkeeper-${stage}-process-subscriptions`;
-
-        const options = {
-          FunctionName: resolvedName,
-          Payload: JSON.stringify({ providerSponsorSubscription, baseLogOptions }),
-        };
-        lambda.invoke(options, (err, data) => {
-          // Reject invoke and (unhandled) handler errors
-          if (err || data.FunctionError) {
-            reject(err || data.FunctionError);
-            return;
-          }
-
-          const parsedData: AWSHandlerResponse = JSON.parse(data.Payload as string);
-
-          // Reject non-ok results
-          if (!parsedData.ok) {
-            reject(parsedData.message);
-            return;
-          }
-
-          resolve(parsedData.message);
-        });
-      });
-  }
-};
-
 const submitTransactions = async (state: State) => {
-  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, groupedProviders, config } = state;
+  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
 
   const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
-  const providerSponsorSubscriptions = groupedProviders.reduce(
+  const providerSponsorSubscriptionsArray = providerStates.reduce(
     (
       acc: {
         sponsorAddress: string;
-        providerGroup: GroupedProvider;
+        providerState: ProviderState<EVMBaseState>;
         subscriptions: Id<CheckedSubscription>[];
       }[],
-      providerGroup
+      providerState
     ) => {
       // Filter subscription by chainId, double-check that subscription has an associated API value and add
       // it to the subscription object
       const chainSubscriptions = subscriptions.reduce(
         (acc: (Id<Subscription> & { apiValue: ethers.BigNumber })[], subscription) => {
-          if (subscription.chainId === providerGroup.chainId && apiValuesBySubscriptionId[subscription.id])
+          if (subscription.chainId === providerState.chainId && apiValuesBySubscriptionId[subscription.id])
             return [...acc, { ...subscription, apiValue: apiValuesBySubscriptionId[subscription.id] }];
           return acc;
         },
@@ -322,7 +319,7 @@ const submitTransactions = async (state: State) => {
       // Collect subscriptions for each provider + sponsor pair
       const subscriptionGroup = Object.entries(subscriptionsBySponsor).map(([sponsorAddress, subscriptions]) => ({
         sponsorAddress: sponsorAddress,
-        providerGroup,
+        providerState,
         subscriptions,
       }));
 
@@ -331,34 +328,22 @@ const submitTransactions = async (state: State) => {
     []
   );
 
-  const providerSponsorPromises = providerSponsorSubscriptions.map(async (providerSponsorSubscription) =>
+  const providerSponsorPromises = providerSponsorSubscriptionsArray.map(async (providerSponsorSubscriptions) =>
     spawn({
-      providerSponsorSubscription,
+      providerSponsorSubscriptions,
       baseLogOptions: baseLogOptions,
-      type: config.nodeSettings.cloudProvider.type,
-      stage: config.nodeSettings.stage,
+      type: process.env.CLOUD_PROVIDER as 'local' | 'aws' | 'gcp',
+      stage: process.env.STAGE!,
     })
   );
 
   const providerSponsorResults = await Promise.allSettled(providerSponsorPromises);
 
-  const groupedResults = providerSponsorResults.reduce(
-    (acc: { fulfilled: any[]; rejected: any[] }, result) => {
-      if (result.status === 'fulfilled') {
-        acc.fulfilled.push(result);
-      }
-      if (result.status === 'rejected') {
-        acc.rejected.push(result);
-      }
-      return acc;
-    },
-    { fulfilled: [], rejected: [] }
-  );
-
-  utils.logger.info(
-    `Processed subscriptions; success: ${groupedResults.fulfilled.length}, failure: ${groupedResults.rejected.length}`,
-    baseLogOptions
-  );
+  providerSponsorResults.forEach((result) => {
+    if (result.status === 'rejected') {
+      utils.logger.error(JSON.stringify(result.reason), baseLogOptions);
+    }
+  });
 };
 
 const updateBeacon = async (config: Config) => {
@@ -369,13 +354,19 @@ const updateBeacon = async (config: Config) => {
   utils.logger.debug('Initial state created...', state.baseLogOptions);
 
   // **************************************************************************
-  // STEP 2: Make API calls
+  // STEP 2. Initialize providers
+  // **************************************************************************
+  state = await initializeProviders(state);
+  utils.logger.debug('Providers initialized...', state.baseLogOptions);
+
+  // **************************************************************************
+  // STEP 3: Make API calls
   // **************************************************************************
   state = await executeApiCalls(state);
   utils.logger.debug('API requests executed...', state.baseLogOptions);
 
   // **************************************************************************
-  // STEP 3. Initiate transactions for each provider, sponsor wallet pair
+  // STEP 4. Initiate transactions for each provider, sponsor wallet pair
   // **************************************************************************
   await submitTransactions(state);
   utils.logger.debug('Transactions submitted...', state.baseLogOptions);

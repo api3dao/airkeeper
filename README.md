@@ -111,12 +111,13 @@ yarn install
 Follow these steps to run Airkeeper locally:
 
 1. Open a new terminal and start a new local ethereum node.
+1. Open a new terminal and start the local 'Currency Converter API' server.
 1. Deploy all required contracts (RrpBeaconServer, DapiServer, etc) and set everything up (whitelisting, sponsorship,
    etc).
 1. Switch to the Airkeeper root directory and run `yarn install`.
 1. Add appropriate values to the `config.json` and `airkeeper.json` files.
-1. Finally, run `yarn sls:invoke-local:psp` to invoke the `psp.beaconUpdate` handler function or run
-   `yarn sls:invoke-local:rrp` to invoke the `rrp.beaconUpdate` handler function.
+1. Finally, run `yarn sls:invoke-local:psp-beacon-update` to invoke the `psp.beaconUpdate` handler function or run
+   `yarn sls:invoke-local:rrp-beacon-update` to invoke the `rrp.beaconUpdate` handler function.
 
 ### Running Airkeeper on AWS Lambda
 
@@ -160,11 +161,11 @@ The `scripts` directory contains scripts that can be used to test the lambda fun
 
 ### Local PSP beacon update
 
-First you need to start a local node and grab private keys of funded test accounts to add them to each account in the
-psp-beacon-local.json config file.
+First you need to start a local ethereum node and grab private keys of funded test accounts to add them to each account
+in the psp-beacon-local.json config file. Then you need to start the local 'Currency Converter API' server.
 
 After that you can run the following command:
 
 - `yarn run setup:psp-local`: Deploys the DapiServer contract and registers a single subscription. Use the values
-  displayed in the console to fill in the `airkeeper.json` file. Then you can run `yarn sls:invoke-local:psp` to update
-  the beacon using PSP.
+  displayed in the console to fill in the `airkeeper.json` file. Then you can run
+  `yarn sls:invoke-local:psp-beacon-update` to update the beacon using PSP.

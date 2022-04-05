@@ -3,10 +3,11 @@
   "license": "MIT",
   "version": "1.0.0",
   "description": "A tool to update a beacon server value on a time interval",
+  "main": "./src/index",
+  "types": "./src/index",
   "engines": {
     "node": "^14.17.1"
   },
-  "main": "./dist/src/start.js",
   "files": [
     "dist",
     "serverless.yml",
@@ -35,7 +36,7 @@
     "sls:invoke:rrp-beacon-update": "sls invoke --function rrp-beacon-update",
     "sls:invoke-local:rrp-beacon-update": "yarn build && sls invoke local --function rrp-beacon-update",
     "sls:invoke:psp-beacon-update": "sls invoke --function psp-beacon-update",
-    "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update",
+    "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update --param='provider=local'",
     "setup:psp-local": "tsc && node scripts/psp-beacon-local-setup.js",
     "test": "jest --selectProjects unit",
     "test:e2e": "jest --selectProjects e2e",

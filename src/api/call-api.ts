@@ -30,6 +30,8 @@ export const callApi = async (
   }
 
   const parsedData = JSON.parse(apiCallResponse.value);
-  const apiValue = ethers.BigNumber.from(parsedData.values[0].toString());
-  return [logs, apiValue];
+  const [apiValue] = parsedData.values;
+  const messageApiValue = `API value: ${apiValue}`;
+  const logApiValue = utils.logger.pend('DEBUG', messageApiValue);
+  return [[...logs, logApiValue], ethers.BigNumber.from(apiValue)];
 };
