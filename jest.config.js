@@ -5,6 +5,7 @@
  */
 // eslint-disable-next-line functional/immutable-data
 module.exports = {
+  projects: ['<rootDir>/jest-e2e.config.js', '<rootDir>/jest-unit.config.js'],
   // All imported modules in your tests should be mocked automatically
   // automock: false,
 

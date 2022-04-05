@@ -25,3 +25,10 @@ aws.env
 
 # Temporarily add airnode for unpublished changes
 airnode
+
+# Hardhat files
+cache
+
+# Ignore log files
+logs
+*.log
