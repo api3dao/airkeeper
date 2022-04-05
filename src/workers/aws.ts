@@ -1,7 +1,7 @@
 import AWS from 'aws-sdk';
-import { WorkerParameters, AWSHandlerResponse } from '../types';
+import { WorkerParameters } from '../types';
 
-export const spawn = async ({ providerSponsorSubscriptions, baseLogOptions, stage }: WorkerParameters): Promise<any> =>
+export const spawn = async ({ providerSponsorSubscriptions, baseLogOptions, stage }: WorkerParameters): Promise<void> =>
   // lambda.invoke is synchronous so we need to wrap this in a promise
   new Promise((resolve, reject) => {
     // Uses the current region by default
@@ -21,14 +21,6 @@ export const spawn = async ({ providerSponsorSubscriptions, baseLogOptions, stag
         return;
       }
 
-      const parsedData: AWSHandlerResponse = JSON.parse(data.Payload as string);
-
-      // Reject non-ok results
-      if (!parsedData.ok) {
-        reject(parsedData);
-        return;
-      }
-
-      resolve(parsedData);
+      resolve();
     });
   });

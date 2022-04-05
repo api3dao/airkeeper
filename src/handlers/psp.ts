@@ -6,7 +6,7 @@ import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import { spawn } from '../workers';
-import { initializeProvider } from '../evm';
+import { initializeEvmState } from '../evm';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
 import { buildLogOptions } from '../logger';
@@ -163,22 +163,22 @@ const initializeState = (config: Config): State => {
   };
 };
 
-const initializeProviders = async (state: State): Promise<State> => {
+const initializeEvmStates = async (state: State): Promise<State> => {
   const { config, baseLogOptions } = state;
 
   const evmChains = config.chains.filter((chain) => chain.type === 'evm');
   if (isEmpty(evmChains)) {
     throw new Error('One or more evm compatible chains must be defined in the provided config');
   }
-  const providerPromises = evmChains.flatMap((chain) =>
+  const evmPromises = evmChains.flatMap((chain) =>
     Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
-      const providerLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
+      const evmLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
 
       // Initialize provider specific data
-      const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
-      utils.logger.logPending(logs, providerLogOptions);
-      if (isNil(evmProviderState)) {
-        utils.logger.warn('Failed to initialize provider', providerLogOptions);
+      const [logs, evmState] = await initializeEvmState(chain, chainProvider.url || '');
+      utils.logger.logPending(logs, evmLogOptions);
+      if (isNil(evmState)) {
+        utils.logger.warn('Failed to initialize EVM state', evmLogOptions);
         return null;
       }
 
@@ -187,15 +187,15 @@ const initializeProviders = async (state: State): Promise<State> => {
         providerName,
         providerUrl: chainProvider.url,
         chainConfig: chain,
-        ...evmProviderState,
+        ...evmState,
       };
     })
   );
 
-  const providerStates = await Promise.all(providerPromises);
-  const validProviderStates = providerStates.filter((ps) => !isNil(ps)) as ProviderState<EVMBaseState>[];
+  const evmStates = await Promise.all(evmPromises);
+  const validEvmStates = evmStates.filter((ps) => !isNil(ps)) as ProviderState<EVMBaseState>[];
 
-  return { ...state, providerStates: validProviderStates };
+  return { ...state, providerStates: validEvmStates };
 };
 
 const executeApiCalls = async (state: State): Promise<State> => {
@@ -332,7 +332,7 @@ const submitTransactions = async (state: State) => {
     spawn({
       providerSponsorSubscriptions,
       baseLogOptions: baseLogOptions,
-      type: process.env.CLOUD_PROVIDER as 'local' | 'aws' | 'gcp',
+      type: process.env.CLOUD_PROVIDER as 'local' | 'aws',
       stage: process.env.STAGE!,
     })
   );
@@ -356,8 +356,8 @@ const updateBeacon = async (config: Config) => {
   // **************************************************************************
   // STEP 2. Initialize providers
   // **************************************************************************
-  state = await initializeProviders(state);
-  utils.logger.debug('Providers initialized...', state.baseLogOptions);
+  state = await initializeEvmStates(state);
+  utils.logger.debug('Evm states initialized...', state.baseLogOptions);
 
   // **************************************************************************
   // STEP 3: Make API calls

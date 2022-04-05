@@ -1,9 +1,9 @@
 import { ethers } from 'ethers';
-import { initializeProvider } from './initialize-provider';
+import { initializeEvmState, initializeProvider } from './initialize-provider';
 import { BASE_FEE_MULTIPLIER, PRIORITY_FEE_IN_WEI } from '../constants';
 import { ChainConfig } from '../types';
 
-describe('initializeProvider', () => {
+describe('initializeEvmState', () => {
   beforeEach(() => jest.restoreAllMocks());
 
   const providerUrl = 'http://localhost:8545';
@@ -33,7 +33,7 @@ describe('initializeProvider', () => {
 
     const { gasTarget, blockSpy, gasPriceSpy } = createAndMockGasTarget(txType);
 
-    const [logs, data] = await initializeProvider(
+    const [logs, data] = await initializeEvmState(
       {
         ...chain,
         options: {
@@ -71,6 +71,32 @@ describe('initializeProvider', () => {
     );
   });
 
+  it('should initialize provider and airnode wallet', async () => {
+    const airnodeWalletMnemonic = 'achieve climb couple wait accident symbol spy blouse reduce foil echo label';
+    const currentBlock = Math.floor(Date.now() / 1000);
+    const { gasTarget } = createAndMockGasTarget('eip1559');
+
+    const data = await initializeProvider(airnodeWalletMnemonic, {
+      providerName: 'local',
+      providerUrl: 'http://localhost:8545',
+      chainId: '31337',
+      chainConfig: chain,
+      currentBlock,
+      gasTarget,
+    });
+    expect(data).toEqual(
+      expect.objectContaining({
+        airnodeWallet: expect.any(ethers.Wallet),
+        provider: expect.any(ethers.providers.JsonRpcProvider),
+        contracts: expect.objectContaining({
+          RrpBeaconServer: expect.any(ethers.Contract),
+          DapiServer: expect.any(ethers.Contract),
+        }),
+        voidSigner: expect.any(ethers.VoidSigner),
+      })
+    );
+  });
+
   it('returns null with error log if current block cannot be fetched', async () => {
     const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
     const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
@@ -78,7 +104,7 @@ describe('initializeProvider', () => {
 
     const { blockSpy, gasPriceSpy } = createAndMockGasTarget('eip1559');
 
-    const [logs, data] = await initializeProvider(chain, providerUrl);
+    const [logs, data] = await initializeEvmState(chain, providerUrl);
 
     expect(blockSpy).not.toHaveBeenCalled();
     expect(gasPriceSpy).not.toHaveBeenCalled();
@@ -105,7 +131,7 @@ describe('initializeProvider', () => {
     const blockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
     blockSpy.mockRejectedValueOnce(new Error(errorMessage));
 
-    const [logs, data] = await initializeProvider(chain, providerUrl);
+    const [logs, data] = await initializeEvmState(chain, providerUrl);
 
     expect(getBlockNumberSpy).toHaveBeenCalled();
     expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Failed to fetch gas price' }]));

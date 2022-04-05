@@ -95,10 +95,6 @@ export interface ProviderSponsorProcessSubscriptionsState extends SponsorSubscri
   providerState: ProviderState<EVMProviderState & { airnodeWallet: ethers.Wallet }>;
 }
 
-export interface AWSHandlerResponse {
-  ok: boolean;
-}
-
 export interface WorkerParameters {
   providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
   baseLogOptions: utils.LogOptions;
