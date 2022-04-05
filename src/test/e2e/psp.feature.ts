@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ethers } from 'ethers';
-import { handler as pspHandler } from '../../handlers/psp';
+import * as psp from '../../handlers/psp';
 import { buildAirnodeConfig, buildAirkeeperConfig } from '../config/config';
 // import * as abi from '@api3/airnode-abi';
 // import * as node from '@api3/airnode-node';
@@ -9,7 +9,9 @@ import * as loadConfig from '../../config';
 // import { PROTOCOL_ID_PSP } from '../../constants';
 
 describe('PSP', () => {
-  const config = {
+  const airnodeConfig = buildAirnodeConfig();
+  const airkeeperConfig = buildAirkeeperConfig();
+  const localConfig = {
     airnodeMnemonic: 'achieve climb couple wait accident symbol spy blouse reduce foil echo label',
     privateKeys: {
       deployer: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
@@ -34,10 +36,10 @@ describe('PSP', () => {
   const provider = new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545');
 
   const roles = {
-    deployer: new ethers.Wallet(config.privateKeys.deployer).connect(provider),
-    manager: new ethers.Wallet(config.privateKeys.manager).connect(provider),
-    sponsor: new ethers.Wallet(config.privateKeys.sponsor).connect(provider),
-    randomPerson: new ethers.Wallet(config.privateKeys.randomPerson).connect(provider),
+    deployer: new ethers.Wallet(localConfig.privateKeys.deployer).connect(provider),
+    manager: new ethers.Wallet(localConfig.privateKeys.manager).connect(provider),
+    sponsor: new ethers.Wallet(localConfig.privateKeys.sponsor).connect(provider),
+    randomPerson: new ethers.Wallet(localConfig.privateKeys.randomPerson).connect(provider),
   };
 
   const dapiServerAdminRoleDescription = 'DapiServer admin';
@@ -81,10 +83,38 @@ describe('PSP', () => {
       airnodeProtocol.address
     );
   });
-  it('updates the beacon', async () => {
-    jest.spyOn(loadConfig, 'loadAirnodeConfig').mockImplementationOnce(() => buildAirnodeConfig() as any);
-    jest.spyOn(loadConfig, 'loadAirkeeperConfig').mockImplementationOnce(() => buildAirkeeperConfig() as any);
-    const res = await pspHandler();
+  it('updates the beacon successfully', async () => {
+    jest.spyOn(loadConfig, 'loadAirnodeConfig').mockImplementationOnce(() => airnodeConfig as any);
+    jest.spyOn(loadConfig, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    const res = await psp.handler();
+
+    expect(dapiServer).toBeDefined();
+    expect(res).toEqual({
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
+    });
+  });
+  it('updates the beacon successfully with one invalid provider present', async () => {
+    jest.spyOn(loadConfig, 'loadAirnodeConfig').mockImplementationOnce(
+      () =>
+        ({
+          ...airnodeConfig,
+          chains: [
+            ...airnodeConfig.chains,
+            {
+              ...airnodeConfig.chains[0],
+              providers: {
+                ...airnodeConfig.chains[0].providers,
+                invalidProvider: {
+                  url: 'http://invalid',
+                },
+              },
+            },
+          ],
+        } as any)
+    );
+    jest.spyOn(loadConfig, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    const res = await psp.handler();
 
     expect(dapiServer).toBeDefined();
     expect(res).toEqual({

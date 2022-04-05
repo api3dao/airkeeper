@@ -39,7 +39,7 @@
     "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update --param='provider=local'",
     "setup:psp-local": "tsc && node scripts/psp-beacon-local-setup.js",
     "test": "jest --selectProjects unit",
-    "test:e2e": "jest --selectProjects e2e",
+    "test:e2e": "SILENCE_LOGGER=true jest --selectProjects e2e",
     "prepare": "husky install"
   },
   "dependencies": {
