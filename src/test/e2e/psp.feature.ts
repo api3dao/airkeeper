@@ -10,11 +10,6 @@ import { buildAirnodeConfig, buildAirkeeperConfig, buildLocalConfig } from '../c
 import { PROTOCOL_ID_PSP } from '../../constants';
 
 describe('PSP', () => {
-  beforeEach(() => {
-    jest.restoreAllMocks();
-    jest.setTimeout(30_000);
-  });
-
   process.env = Object.assign(process.env, {
     CLOUD_PROVIDER: 'local',
     STAGE: 'dev',
@@ -45,6 +40,8 @@ describe('PSP', () => {
   let dapiServer: ethers.Contract;
 
   beforeEach(async () => {
+    jest.restoreAllMocks();
+    jest.setTimeout(30_000);
     // Deploy contracts
     accessControlRegistryAbi = JSON.parse(
       fs.readFileSync(path.resolve('./scripts/artifacts/AccessControlRegistry.json')).toString()
