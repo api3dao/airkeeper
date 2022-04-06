@@ -71,6 +71,47 @@ describe('initializeEvmState', () => {
     );
   });
 
+  it('returns null with error log if current block cannot be fetched', async () => {
+    const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
+    const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
+    getBlockNumberSpy.mockRejectedValue(new Error(errorMessage));
+
+    const { blockSpy, gasPriceSpy } = createAndMockGasTarget('eip1559');
+
+    const [logs, data] = await initializeEvmState(chain, providerUrl);
+
+    expect(blockSpy).not.toHaveBeenCalled();
+    expect(gasPriceSpy).not.toHaveBeenCalled();
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          error: expect.objectContaining({ message: expect.stringContaining('could not detect network') }),
+          level: 'ERROR',
+          message: 'Failed to fetch the blockNumber',
+        }),
+      ])
+    );
+    expect(data).toEqual(null);
+  });
+
+  it('returns null with error log if gas target cannot be fetched', async () => {
+    const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
+    const currentBlock = Math.floor(Date.now() / 1000);
+    getBlockNumberSpy.mockResolvedValue(currentBlock);
+
+    const gasPriceSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getGasPrice');
+    const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
+    gasPriceSpy.mockRejectedValue(new Error(errorMessage));
+    const blockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
+    blockSpy.mockRejectedValue(new Error(errorMessage));
+
+    const [logs, data] = await initializeEvmState(chain, providerUrl);
+
+    expect(getBlockNumberSpy).toHaveBeenCalled();
+    expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Failed to fetch gas price' }]));
+    expect(data).toEqual(null);
+  });
+
   it('should initialize provider and airnode wallet', async () => {
     const airnodeWalletMnemonic = 'achieve climb couple wait accident symbol spy blouse reduce foil echo label';
     const currentBlock = Math.floor(Date.now() / 1000);
@@ -95,47 +136,6 @@ describe('initializeEvmState', () => {
         voidSigner: expect.any(ethers.VoidSigner),
       })
     );
-  });
-
-  it('returns null with error log if current block cannot be fetched', async () => {
-    const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
-    const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
-    getBlockNumberSpy.mockRejectedValueOnce(new Error(errorMessage));
-
-    const { blockSpy, gasPriceSpy } = createAndMockGasTarget('eip1559');
-
-    const [logs, data] = await initializeEvmState(chain, providerUrl);
-
-    expect(blockSpy).not.toHaveBeenCalled();
-    expect(gasPriceSpy).not.toHaveBeenCalled();
-    expect(logs).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          error: expect.objectContaining({ message: expect.stringContaining('could not detect network') }),
-          level: 'ERROR',
-          message: 'Failed to fetch the blockNumber',
-        }),
-      ])
-    );
-    expect(data).toEqual(null);
-  });
-
-  it('returns null with error log if gas target cannot be fetched', async () => {
-    const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
-    const currentBlock = Math.floor(Date.now() / 1000);
-    getBlockNumberSpy.mockResolvedValueOnce(currentBlock);
-
-    const gasPriceSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getGasPrice');
-    const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
-    gasPriceSpy.mockRejectedValueOnce(new Error(errorMessage));
-    const blockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
-    blockSpy.mockRejectedValueOnce(new Error(errorMessage));
-
-    const [logs, data] = await initializeEvmState(chain, providerUrl);
-
-    expect(getBlockNumberSpy).toHaveBeenCalled();
-    expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Failed to fetch gas price' }]));
-    expect(data).toEqual(null);
   });
 });
 
