@@ -5,11 +5,17 @@ import { ethers } from 'ethers';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as psp from '../../handlers/psp';
+import * as config from '../../config';
 import { buildAirnodeConfig, buildAirkeeperConfig, buildLocalConfig } from '../config/config';
 import { PROTOCOL_ID_PSP } from '../../constants';
 
 describe('PSP', () => {
   beforeEach(() => jest.restoreAllMocks());
+
+  process.env = Object.assign(process.env, {
+    CLOUD_PROVIDER: 'local',
+    STAGE: 'dev',
+  });
 
   const airnodeConfig = buildAirnodeConfig();
   const airkeeperConfig = buildAirkeeperConfig();
@@ -115,27 +121,11 @@ describe('PSP', () => {
         airnodeWallet.address,
         roles.sponsor.address
       );
-    // const beaconUpdateSubscriptionId = ethers.utils.keccak256(
-    //   ethers.utils.defaultAbiCoder.encode(
-    //     ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-    //     [
-    //       (await provider.getNetwork()).chainId,
-    //       airnodeWallet.address,
-    //       templateId,
-    //       '0x',
-    //       encodedBeaconUpdateSubscriptionConditions,
-    //       airnodeWallet.address,
-    //       roles.sponsor.address,
-    //       dapiServer.address, // Should this be the sponsorWallet.address instead?
-    //       dapiServer.interface.getSighash('fulfillPspBeaconUpdate'),
-    //     ]
-    //   )
-    // );
   });
 
   it('updates the beacon successfully', async () => {
-    mockReadFileSync('config.json', JSON.stringify(airnodeConfig));
-    mockReadFileSync('airkeeper.json', JSON.stringify(airkeeperConfig));
+    jest.spyOn(config, 'loadAirnodeConfig').mockImplementation(() => airnodeConfig as any);
+    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementation(() => airkeeperConfig as any);
     const res = await psp.handler();
 
     expect(dapiServer).toBeDefined();
