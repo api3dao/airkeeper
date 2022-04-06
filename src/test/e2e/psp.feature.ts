@@ -10,7 +10,10 @@ import { buildAirnodeConfig, buildAirkeeperConfig, buildLocalConfig } from '../c
 import { PROTOCOL_ID_PSP } from '../../constants';
 
 describe('PSP', () => {
-  beforeEach(() => jest.restoreAllMocks());
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    jest.setTimeout(30_000);
+  });
 
   process.env = Object.assign(process.env, {
     CLOUD_PROVIDER: 'local',
