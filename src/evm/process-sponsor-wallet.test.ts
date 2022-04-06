@@ -173,7 +173,7 @@ describe('processSponsorWallet', () => {
     );
   });
 
-  it('returns processed subscriptions with logs up until error occurs while getting function fragment from contract interface', async () => {
+  it('returns processed subscriptions with logs and skips subscriptions with errors while getting function fragment from contract interface', async () => {
     const getFunctionMockOnceSpy = jest
       .fn()
       .mockImplementationOnce(getFunctionMock)
@@ -241,7 +241,7 @@ describe('processSponsorWallet', () => {
     );
   });
 
-  it('returns processed subscriptions with logs up until error occurs during contract call', async () => {
+  it('returns processed subscriptions with logs and skips subscriptions with errors during contract call', async () => {
     const fulfillPspBeaconUpdateOnceSpy = jest
       .fn()
       .mockImplementationOnce(fulfillPspBeaconUpdateMock)
@@ -287,6 +287,66 @@ describe('processSponsorWallet', () => {
               error: expect.any(Error),
               level: 'ERROR',
               message: `Failed to submit transaction using wallet ${sponsorWallet.address} with nonce ${subscription2.nonce}`,
+            },
+          ],
+          subscription2,
+        ],
+        [
+          [
+            {
+              level: 'INFO',
+              message: expect.stringMatching(/Tx submitted: 0x[A-Fa-f0-9]{64}/),
+            },
+          ],
+          subscription3,
+        ],
+      ])
+    );
+  });
+
+  it('returns processed subscriptions with logs and skips subscriptions where conditions check does not pass', async () => {
+    const conditionPspBeaconUpdateOnceSpy = jest
+      .fn()
+      .mockImplementationOnce(conditionPspBeaconUpdateMock)
+      .mockImplementationOnce(() => Promise.resolve([false]))
+      .mockImplementationOnce(conditionPspBeaconUpdateMock);
+
+    const logsData = await processSponsorWallet(
+      airnodeWallet,
+      {
+        ...dapiServerMock,
+        functions: {
+          fulfillPspBeaconUpdate: fulfillPspBeaconUpdateSpy,
+          conditionPspBeaconUpdate: conditionPspBeaconUpdateOnceSpy,
+        },
+      } as any,
+      gasTarget,
+      subscriptions,
+      sponsorWallet,
+      voidSigner,
+      transactionCount
+    );
+
+    expect(getFunctionSpy).toHaveBeenCalledTimes(5);
+    expect(conditionPspBeaconUpdateSpy).not.toHaveBeenCalled();
+    expect(fulfillPspBeaconUpdateSpy).toHaveBeenCalledTimes(2);
+    expect(conditionPspBeaconUpdateOnceSpy).toHaveBeenCalledTimes(3);
+    expect(logsData).toEqual(
+      expect.arrayContaining([
+        [
+          [
+            {
+              level: 'INFO',
+              message: expect.stringMatching(/Tx submitted: 0x[A-Fa-f0-9]{64}/),
+            },
+          ],
+          subscription1,
+        ],
+        [
+          [
+            {
+              level: 'WARN',
+              message: `Conditions not met. Skipping update...`,
             },
           ],
           subscription2,
