@@ -1,37 +1,20 @@
 import fs from 'fs';
 import path from 'path';
+import { mockReadFileSync } from '../mock-utils';
 import { ethers } from 'ethers';
 import * as psp from '../../handlers/psp';
-import { buildAirnodeConfig, buildAirkeeperConfig } from '../config/config';
+import { buildAirnodeConfig, buildAirkeeperConfig, buildLocalConfig } from '../config/config';
 // import * as abi from '@api3/airnode-abi';
 // import * as node from '@api3/airnode-node';
-import * as loadConfig from '../../config';
+// import * as loadConfig from '../../config';
 // import { PROTOCOL_ID_PSP } from '../../constants';
 
 describe('PSP', () => {
+  beforeEach(() => jest.restoreAllMocks());
+
   const airnodeConfig = buildAirnodeConfig();
   const airkeeperConfig = buildAirkeeperConfig();
-  const localConfig = {
-    airnodeMnemonic: 'achieve climb couple wait accident symbol spy blouse reduce foil echo label',
-    privateKeys: {
-      deployer: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
-      manager: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
-      sponsor: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
-      randomPerson: '0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a',
-    },
-    endpoint: {
-      oisTitle: 'Currency Converter API',
-      endpointName: 'convertToUSD',
-    },
-    templateParameters: [
-      { type: 'string32', name: 'to', value: 'USD' },
-      { type: 'string32', name: '_type', value: 'int256' },
-      { type: 'string32', name: '_path', value: 'result' },
-      { type: 'string32', name: '_times', value: '1000000' },
-      { type: 'string32', name: 'from', value: 'ETH' },
-    ],
-    threshold: 10,
-  };
+  const localConfig = buildLocalConfig();
 
   const provider = new ethers.providers.JsonRpcProvider('http://127.0.0.1:8545');
 
@@ -83,9 +66,13 @@ describe('PSP', () => {
       airnodeProtocol.address
     );
   });
+
   it('updates the beacon successfully', async () => {
-    jest.spyOn(loadConfig, 'loadAirnodeConfig').mockImplementationOnce(() => airnodeConfig as any);
-    jest.spyOn(loadConfig, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    // jest.spyOn(loadConfig, 'loadAirnodeConfig').mockImplementationOnce(() => airnodeConfig as any);
+    // jest.spyOn(loadConfig, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    mockReadFileSync('config.json', JSON.stringify(airnodeConfig));
+    // jest.requireActual('fs');
+    mockReadFileSync('airkeeper.json', JSON.stringify(airkeeperConfig));
     const res = await psp.handler();
 
     expect(dapiServer).toBeDefined();
@@ -94,26 +81,46 @@ describe('PSP', () => {
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
     });
   });
+
   it('updates the beacon successfully with one invalid provider present', async () => {
-    jest.spyOn(loadConfig, 'loadAirnodeConfig').mockImplementationOnce(
-      () =>
-        ({
-          ...airnodeConfig,
-          chains: [
-            ...airnodeConfig.chains,
-            {
-              ...airnodeConfig.chains[0],
-              providers: {
-                ...airnodeConfig.chains[0].providers,
-                invalidProvider: {
-                  url: 'http://invalid',
-                },
+    // jest.spyOn(loadConfig, 'loadAirnodeConfig').mockImplementationOnce(
+    //   () =>
+    //     ({
+    //       ...airnodeConfig,
+    //       chains: [
+    //         ...airnodeConfig.chains,
+    //         {
+    //           ...airnodeConfig.chains[0],
+    //           providers: {
+    //             ...airnodeConfig.chains[0].providers,
+    //             invalidProvider: {
+    //               url: 'http://invalid',
+    //             },
+    //           },
+    //         },
+    //       ],
+    //     } as any)
+    // );
+    // jest.spyOn(loadConfig, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    mockReadFileSync(
+      'config.json',
+      JSON.stringify({
+        ...airnodeConfig,
+        chains: [
+          ...airnodeConfig.chains,
+          {
+            ...airnodeConfig.chains[0],
+            providers: {
+              ...airnodeConfig.chains[0].providers,
+              invalidProvider: {
+                url: 'http://invalid',
               },
             },
-          ],
-        } as any)
+          },
+        ],
+      })
     );
-    jest.spyOn(loadConfig, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    mockReadFileSync('airkeeper.json', JSON.stringify(airkeeperConfig));
     const res = await psp.handler();
 
     expect(dapiServer).toBeDefined();
@@ -121,5 +128,24 @@ describe('PSP', () => {
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
     });
+  });
+
+  it('throws on invalid airnode config', async () => {
+    mockReadFileSync(
+      'config.json',
+      JSON.stringify({
+        ...airnodeConfig,
+
+        chains: [],
+      })
+    );
+    mockReadFileSync('airkeeper.json', JSON.stringify(airkeeperConfig));
+    await expect(psp.handler).rejects.toThrow();
+  });
+
+  it('throws on invalid airkeeper config', async () => {
+    mockReadFileSync('config.json', JSON.stringify(airnodeConfig));
+    mockReadFileSync('airkeeper.json', JSON.stringify({ ...airkeeperConfig, airnodeAddress: null }));
+    await expect(psp.handler).rejects.toThrow();
   });
 });
