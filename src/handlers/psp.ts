@@ -5,23 +5,22 @@ import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
+import { spawn } from '../workers';
+import { initializeEvmState } from '../evm';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
-import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
 import { buildLogOptions } from '../logger';
 import {
   CallApiResult,
   CheckedSubscription,
   Config,
-  EVMProviderState,
+  EVMBaseState,
   GroupedSubscriptions,
   Id,
-  ProviderSponsorSubscriptions,
   ProviderState,
   State,
 } from '../types';
 import { Subscription } from '../validator';
-import { shortenAddress } from '../wallet';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
@@ -155,7 +154,6 @@ const initializeState = (config: Config): State => {
     },
     []
   );
-
   return {
     config,
     baseLogOptions,
@@ -163,6 +161,41 @@ const initializeState = (config: Config): State => {
     apiValuesBySubscriptionId: {},
     providerStates: [],
   };
+};
+
+const initializeEvmStates = async (state: State): Promise<State> => {
+  const { config, baseLogOptions } = state;
+
+  const evmChains = config.chains.filter((chain) => chain.type === 'evm');
+  if (isEmpty(evmChains)) {
+    throw new Error('One or more evm compatible chains must be defined in the provided config');
+  }
+  const evmPromises = evmChains.flatMap((chain) =>
+    Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
+      const evmLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
+
+      // Initialize provider specific data
+      const [logs, evmState] = await initializeEvmState(chain, chainProvider.url || '');
+      utils.logger.logPending(logs, evmLogOptions);
+      if (isNil(evmState)) {
+        utils.logger.warn('Failed to initialize EVM state', evmLogOptions);
+        return null;
+      }
+
+      return {
+        chainId: chain.id,
+        providerName,
+        providerUrl: chainProvider.url,
+        chainConfig: chain,
+        ...evmState,
+      };
+    })
+  );
+
+  const evmStates = await Promise.all(evmPromises);
+  const validEvmStates = evmStates.filter((ps) => !isNil(ps)) as ProviderState<EVMBaseState>[];
+
+  return { ...state, providerStates: validEvmStates };
 };
 
 const executeApiCalls = async (state: State): Promise<State> => {
@@ -255,112 +288,16 @@ const executeApiCalls = async (state: State): Promise<State> => {
   return { ...state, apiValuesBySubscriptionId };
 };
 
-const initializeProviders = async (state: State): Promise<State> => {
-  const { config, baseLogOptions } = state;
-
-  const airnodeWallet = ethers.Wallet.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
-
-  const evmChains = config.chains.filter((chain) => chain.type === 'evm');
-  if (isEmpty(evmChains)) {
-    throw new Error('One or more evm compatible chains must be defined in the provided config');
-  }
-  const providerPromises = evmChains.flatMap((chain) =>
-    Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
-      const providerLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
-
-      // Initialize provider specific data
-      const [logs, evmProviderState] = await initializeProvider(chain, chainProvider.url || '');
-      utils.logger.logPending(logs, providerLogOptions);
-      if (isNil(evmProviderState)) {
-        utils.logger.warn('Failed to initialize provider', providerLogOptions);
-        return null;
-      }
-
-      return {
-        airnodeWallet,
-        chainId: chain.id,
-        providerName,
-        ...evmProviderState,
-      };
-    })
-  );
-
-  const providerStates = await Promise.all(providerPromises);
-  const validProviderStates = providerStates.filter((ps) => !isNil(ps)) as ProviderState<EVMProviderState>[];
-
-  return { ...state, providerStates: validProviderStates };
-};
-
-const processSubscriptions = async (
-  providerSponsorSubscriptions: ProviderSponsorSubscriptions[],
-  baseLogOptions: utils.LogOptions
-) => {
-  const providerSponsorPromises = providerSponsorSubscriptions.map(async (subscriptionGroup) => {
-    const { sponsorAddress, providerState, subscriptions } = subscriptionGroup;
-    const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
-      providerState;
-
-    const providerLogOptions = buildLogOptions('meta', { chainId, providerName }, baseLogOptions);
-
-    // Fetch sponsor wallet transaction counts to be able to assign nonces to subscriptions
-    const [transactionCountLogs, walletData] = await getSponsorWalletAndTransactionCount(
-      airnodeWallet,
-      provider,
-      currentBlock,
-      sponsorAddress
-    );
-
-    // Skip processing for the current sponsorAddress if the wallet functions fail
-    if (isNil(walletData)) {
-      const sponsorLogOptions = buildLogOptions('additional', { sponsor: sponsorAddress }, providerLogOptions);
-      utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
-      return;
-    }
-
-    const { sponsorWallet, transactionCount } = walletData;
-
-    const sponsorWalletLogOptions = buildLogOptions(
-      'additional',
-      { sponsorWallet: shortenAddress(sponsorWallet.address) },
-      providerLogOptions
-    );
-    utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
-
-    utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
-
-    const logs = await processSponsorWallet(
-      airnodeWallet,
-      contracts['DapiServer'],
-      gasTarget,
-      subscriptions,
-      sponsorWallet,
-      voidSigner,
-      transactionCount
-    );
-
-    logs.forEach(([logs, data]) => {
-      const subscriptionLogOptions = buildLogOptions(
-        'additional',
-        { subscriptionId: data.id },
-        sponsorWalletLogOptions
-      );
-      utils.logger.logPending(logs, subscriptionLogOptions);
-    });
-  });
-
-  await Promise.all(providerSponsorPromises);
-};
-
 const submitTransactions = async (state: State) => {
   const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
 
   const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
-  const providerSponsorSubscriptions = providerStates.reduce(
+  const providerSponsorSubscriptionsArray = providerStates.reduce(
     (
       acc: {
         sponsorAddress: string;
-        providerState: ProviderState<EVMProviderState>;
+        providerState: ProviderState<EVMBaseState>;
         subscriptions: Id<CheckedSubscription>[];
       }[],
       providerState
@@ -382,7 +319,7 @@ const submitTransactions = async (state: State) => {
       // Collect subscriptions for each provider + sponsor pair
       const subscriptionGroup = Object.entries(subscriptionsBySponsor).map(([sponsorAddress, subscriptions]) => ({
         sponsorAddress: sponsorAddress,
-        providerState: providerState,
+        providerState,
         subscriptions,
       }));
 
@@ -391,8 +328,22 @@ const submitTransactions = async (state: State) => {
     []
   );
 
-  // TODO: start new lambdas for each providerSubscriptions array element
-  await processSubscriptions(providerSponsorSubscriptions, baseLogOptions);
+  const providerSponsorPromises = providerSponsorSubscriptionsArray.map(async (providerSponsorSubscriptions) =>
+    spawn({
+      providerSponsorSubscriptions,
+      baseLogOptions: baseLogOptions,
+      type: process.env.CLOUD_PROVIDER as 'local' | 'aws',
+      stage: process.env.STAGE!,
+    })
+  );
+
+  const providerSponsorResults = await Promise.allSettled(providerSponsorPromises);
+
+  providerSponsorResults.forEach((result) => {
+    if (result.status === 'rejected') {
+      utils.logger.error(JSON.stringify(result.reason), baseLogOptions);
+    }
+  });
 };
 
 const updateBeacon = async (config: Config) => {
@@ -403,16 +354,16 @@ const updateBeacon = async (config: Config) => {
   utils.logger.debug('Initial state created...', state.baseLogOptions);
 
   // **************************************************************************
-  // STEP 2: Make API calls
+  // STEP 2. Initialize providers
+  // **************************************************************************
+  state = await initializeEvmStates(state);
+  utils.logger.debug('Evm states initialized...', state.baseLogOptions);
+
+  // **************************************************************************
+  // STEP 3: Make API calls
   // **************************************************************************
   state = await executeApiCalls(state);
   utils.logger.debug('API requests executed...', state.baseLogOptions);
-
-  // **************************************************************************
-  // STEP 3. Initialize providers
-  // **************************************************************************
-  state = await initializeProviders(state);
-  utils.logger.debug('Providers initialized...', state.baseLogOptions);
 
   // **************************************************************************
   // STEP 4. Initiate transactions for each provider, sponsor wallet pair

@@ -29,7 +29,7 @@
     "sls:invoke:rrp-beacon-update": "sls invoke --function rrp-beacon-update",
     "sls:invoke-local:rrp-beacon-update": "yarn build && sls invoke local --function rrp-beacon-update",
     "sls:invoke:psp-beacon-update": "sls invoke --function psp-beacon-update",
-    "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update",
+    "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update --param='provider=local'",
     "setup:psp-local": "tsc && node scripts/psp-beacon-local-setup.js",
     "test": "jest",
     "prepare": "husky install"
@@ -41,6 +41,7 @@
     "@api3/airnode-protocol": "^0.5.0",
     "@api3/airnode-utilities": "^0.5.0",
     "@api3/promise-utils": "^0.1.0",
+    "aws-sdk": "^2.1101.0",
     "dotenv-safe": "^8.2.0",
     "ethers": "^5.6.0",
     "lodash": "^4.17.21",

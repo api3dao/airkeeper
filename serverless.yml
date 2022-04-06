@@ -2,12 +2,17 @@ service: airkeeper
 
 provider:
   name: aws
-  # region: ${opt:region}
-  # stage: ${opt:stage}
+  region: ${env:REGION, 'us-east-1'}
+  stage: ${env:STAGE, 'dev'}
   runtime: nodejs14.x
   memorySize: 512
   logRetentionInDays: 14
   environment: ${file(load-secrets-env.js)}
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 'lambda:InvokeFunction'
+      Resource: 'arn:aws:lambda:${self:provider.region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-process-subscriptions'
 
 package:
   patterns:
@@ -21,6 +26,12 @@ functions:
       - schedule: rate(1 minute)
   psp-beacon-update:
     handler: dist/src/handlers/psp.handler
+    environment:
+      CLOUD_PROVIDER: ${param:provider, self:provider.name}
+      STAGE: ${self:provider.stage}
     timeout: 60
     events:
       - schedule: rate(1 minute)
+  process-subscriptions:
+    handler: dist/src/handlers/process-subscriptions.handler
+    timeout: 15

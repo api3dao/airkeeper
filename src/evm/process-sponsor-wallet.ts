@@ -19,6 +19,7 @@ export const processSponsorWallet = async (
 
   // Keep track of nonce outside of the loop in case there is an invalid subscription and its nonce is skipped
   let nextNonce = transactionCount;
+
   // Process each subscription in serial to keep nonces in order
   for (const subscription of subscriptions) {
     const { id: subscriptionId, relayer, sponsor, fulfillFunctionId, apiValue } = subscription;

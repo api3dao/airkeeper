@@ -42,22 +42,25 @@ export interface BaseState {
 export interface State extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];
   apiValuesBySubscriptionId: { [subscriptionId: string]: ethers.BigNumber };
-  providerStates: ProviderState<EVMProviderState>[];
+  providerStates: ProviderState<EVMBaseState>[];
 }
 
-export type ProviderState<T extends {}> = T &
-  BaseState & {
-    airnodeWallet: ethers.Wallet;
-    chainId: string;
-    providerName: string;
-  };
+export type ProviderState<T extends {}> = T & {
+  chainId: string;
+  providerName: string;
+  providerUrl: string;
+  chainConfig: ChainConfig & AirkeeperChainConfig;
+};
 
-export interface EVMProviderState {
+export interface EVMBaseState {
+  currentBlock: number;
+  gasTarget: node.GasTarget;
+}
+
+export interface EVMProviderState extends EVMBaseState {
   provider: ethers.providers.Provider;
   contracts: { [name: string]: ethers.Contract };
   voidSigner: ethers.VoidSigner;
-  currentBlock: number;
-  gasTarget: node.GasTarget;
 }
 
 export type Id<T> = T & {
@@ -79,12 +82,24 @@ export interface SponsorWalletTransactionCount {
   transactionCount: number;
 }
 
-export interface ProviderSponsorSubscriptions {
+export interface SponsorSubscriptions {
   sponsorAddress: string;
-  providerState: ProviderState<EVMProviderState>;
   subscriptions: Id<CheckedSubscription>[];
 }
 
+export interface ProviderSponsorSubscriptionsState extends SponsorSubscriptions {
+  providerState: ProviderState<EVMBaseState>;
+}
+
+export interface ProviderSponsorProcessSubscriptionsState extends SponsorSubscriptions {
+  providerState: ProviderState<EVMProviderState & { airnodeWallet: ethers.Wallet }>;
+}
+
+export interface WorkerParameters {
+  providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
+  baseLogOptions: utils.LogOptions;
+  stage: string;
+}
 export type CallApiResult = node.LogsData<{
   templateId: string;
   apiValue: ethers.BigNumber | null;
