@@ -9,6 +9,8 @@ import * as config from '../../config';
 import { buildAirnodeConfig, buildAirkeeperConfig, buildLocalConfig } from '../config/config';
 import { PROTOCOL_ID_PSP } from '../../constants';
 
+jest.setTimeout(30_000);
+
 describe('PSP', () => {
   process.env = Object.assign(process.env, {
     CLOUD_PROVIDER: 'local',
@@ -41,7 +43,6 @@ describe('PSP', () => {
 
   beforeEach(async () => {
     jest.restoreAllMocks();
-    jest.setTimeout(30_000);
     // Deploy contracts
     accessControlRegistryAbi = JSON.parse(
       fs.readFileSync(path.resolve('./scripts/artifacts/AccessControlRegistry.json')).toString()
@@ -124,8 +125,11 @@ describe('PSP', () => {
   });
 
   it('updates the beacon successfully', async () => {
-    jest.spyOn(config, 'loadAirnodeConfig').mockImplementation(() => airnodeConfig as any);
-    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementation(() => airkeeperConfig as any);
+    jest
+      .spyOn(config, 'loadAirnodeConfig')
+      .mockImplementationOnce(() => airnodeConfig as any)
+      .mockImplementationOnce(() => airnodeConfig as any);
+    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
     const res = await psp.handler();
 
     expect(dapiServer).toBeDefined();
