@@ -44,7 +44,7 @@ export const checkSubscriptionCondition = async (
         .connect(voidSigner)
         .functions[conditionFunction.name](subscription.id, encodedFulfillmentData, conditionParameters),
     {
-      timeoutMs: TIMEOUT_MS,
+      attemptTimeoutMs: TIMEOUT_MS,
       retries: RETRIES,
     }
   );

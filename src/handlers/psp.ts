@@ -200,90 +200,58 @@ const initializeEvmStates = async (state: State): Promise<State> => {
 
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
-
-  const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
-  const doRequestWithRetries = async (
-    fn: () => Promise<CallApiResult>,
-    minDelay = 200,
-    maxDelay = 2000
-  ): Promise<CallApiResult> => {
-    const goResult = await promise.go(fn());
-    if (!goResult.success) {
-      const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1) + minDelay);
-      await wait(delay);
-      return await doRequestWithRetries(fn, minDelay, maxDelay);
-    }
-    return goResult.data;
-  };
-
-  let hasApiCallWrapperTimedOut = false;
-  const responses: CallApiResult[] = [];
-  const errorLogs: utils.PendingLog[] = [];
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.templateParameters);
 
-    const result = await doRequestWithRetries(async () => {
-      if (hasApiCallWrapperTimedOut) {
-        return [[], { templateId: template.id, apiValue: null, subscriptions }] as CallApiResult;
-      }
-
-      let hasApiCallTimedOut = false;
-      const result = await promise.go(
-        async () => {
-          try {
-            return await callApi(config, endpoint, apiCallParameters);
-          } catch (err) {
-            if (hasApiCallTimedOut) {
-              return [
-                [utils.logger.pend('ERROR', err instanceof Error ? err.message : String(err))],
-                { templateId: template.id, apiValue: null, subscriptions },
-              ] as CallApiResult;
-            }
-            throw err;
-          }
-        },
-        { timeoutMs: 10_000, retries: 0 }
-      );
-      if (result.success) {
-        const [logs, data] = result.data;
-        return [logs, { templateId: template.id, apiValue: data, subscriptions }] as CallApiResult;
-      } else {
-        errorLogs.push(
-          utils.logger.pend('DEBUG', `Retrying API call for templateId ${template.id}: ${result.error.message}`)
-        );
-        hasApiCallTimedOut = result.error.message.includes('Operation timed out');
-        throw result.error;
-      }
+    const infiniteRetries = 100_000;
+    const goResult = await promise.go(() => callApi(config, endpoint, apiCallParameters), {
+      attemptTimeoutMs: 10_000,
+      retries: infiniteRetries,
+      totalTimeoutMs: 40_000,
+      delay: {
+        type: 'random',
+        minDelayMs: 200,
+        maxDelayMs: 2000,
+      },
     });
-    responses.push(result);
+
+    if (goResult.success) {
+      const [logs, data] = goResult.data;
+      return [logs, { templateId: template.id, apiValue: data, subscriptions }] as CallApiResult;
+    } else {
+      return [
+        [utils.logger.pend('DEBUG', `Retrying API call for templateId ${template.id}: ${goResult.error.message}`)],
+        { templateId: template.id, apiValue: null, subscriptions },
+      ] as CallApiResult;
+    }
   });
 
-  const result = await promise.go(async () => await Promise.all(apiValuePromises), { timeoutMs: 40_000, retries: 0 });
-  utils.logger.logPending(errorLogs, baseLogOptions);
-  if (!result.success) {
-    hasApiCallWrapperTimedOut = result.error.message.includes('Operation timed out');
-    utils.logger.error(`An error has occurred while calling APIs: ${result.error.message}`, baseLogOptions);
-  }
+  const callApiResults = await Promise.all(apiValuePromises);
+  const successfullCalls = callApiResults.filter((call) => call[1].apiValue !== null);
+  const failedCalls = callApiResults.filter((call) => call[1].apiValue === null);
 
-  const apiValuesBySubscriptionId = responses.reduce((acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
-    const [logs, data] = result;
+  utils.logger.logPending(
+    successfullCalls.flatMap((call) => call[0]),
+    baseLogOptions
+  );
+  utils.logger.logPending(
+    failedCalls.flatMap((call) => call[0]),
+    baseLogOptions
+  );
 
-    const templateLogOptions = buildLogOptions('additional', { templateId: data.templateId }, baseLogOptions);
+  const apiValuesBySubscriptionId = successfullCalls.reduce(
+    (acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
+      const [_logs, data] = result;
 
-    utils.logger.logPending(logs, templateLogOptions);
-
-    if (isNil(data.apiValue)) {
-      utils.logger.warn('Failed to fetch API value. Skipping update...', templateLogOptions);
-      return acc;
-    }
-
-    return {
-      ...acc,
-      ...data.subscriptions.reduce((acc2, { id }) => {
-        return { ...acc2, [id]: data.apiValue };
-      }, {}),
-    };
-  }, {});
+      return {
+        ...acc,
+        ...data.subscriptions.reduce((acc2, { id }) => {
+          return { ...acc2, [id]: data.apiValue };
+        }, {}),
+      };
+    },
+    {}
+  );
 
   return { ...state, apiValuesBySubscriptionId };
 };
