@@ -6,6 +6,7 @@ import * as hre from 'hardhat';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as psp from '../../handlers/psp';
+import * as api from '../../api/call-api';
 import * as config from '../../config';
 import { buildAirnodeConfig, buildAirkeeperConfig, buildLocalConfig } from '../config/config';
 import { PROTOCOL_ID_PSP } from '../../constants';
@@ -141,6 +142,31 @@ describe('PSP', () => {
       .mockImplementationOnce(() => airnodeConfig as any)
       .mockImplementationOnce(() => airnodeConfig as any);
     jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    const res = await psp.handler();
+
+    const beaconId = await dapiServer.subscriptionIdToBeaconId(
+      '0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e'
+    );
+    const voidSigner = new hre.ethers.VoidSigner(hre.ethers.constants.AddressZero, provider);
+    const dapiServerResponse = await dapiServer.connect(voidSigner).readWithDataPointId(beaconId);
+
+    expect(dapiServerResponse[0].toNumber()).toEqual(723.39202 * 1000000);
+    expect(res).toEqual({
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
+    });
+  });
+
+  it('updates the beacon successfully after retrying a failed api call', async () => {
+    jest
+      .spyOn(config, 'loadAirnodeConfig')
+      .mockImplementationOnce(() => airnodeConfig as any)
+      .mockImplementationOnce(() => airnodeConfig as any);
+    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+
+    const callApiSpy = jest.spyOn(api, 'callApi');
+    callApiSpy.mockRejectedValueOnce(new Error('Api call failed'));
+
     const res = await psp.handler();
 
     const beaconId = await dapiServer.subscriptionIdToBeaconId(
