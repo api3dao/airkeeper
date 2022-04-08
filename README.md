@@ -169,3 +169,37 @@ After that you can run the following command:
 - `yarn run setup:psp-local`: Deploys the DapiServer contract and registers a single subscription. Use the values
   displayed in the console to fill in the `airkeeper.json` file. Then you can run
   `yarn sls:invoke-local:psp-beacon-update` to update the beacon using PSP.
+
+## Testing
+
+### Unit Tests
+
+Unit tests can then be run with:
+
+```sh
+yarn run test
+```
+
+### E2E Tests
+
+E2E tests are defined in the `src/test/e2e/` folder and are identified by the `feature.ts` extension.
+
+In order to run E2E tests, you will need to have both an Ethereum node and the "dummy" web API running. The simplest way
+to accomplish this is by running:
+
+```sh
+# Start an Ethereum node and mock API
+yarn run dev:eth-node
+yarn run dev:api
+
+# OR
+
+# Start both an Ethereum node and the "dummy" web API as background processes
+yarn run dev:background
+```
+
+E2E tests can then be run with:
+
+```sh
+yarn run test:e2e
+```
