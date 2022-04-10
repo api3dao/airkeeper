@@ -92,6 +92,7 @@ export const processSponsorWallet = async (
       logs.push([[log], subscription]);
       continue;
     }
+
     const message = `Tx submitted: ${tx.data.hash}`;
     const log = utils.logger.pend('INFO', message);
     logs.push([[log], subscription]);
