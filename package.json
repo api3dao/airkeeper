@@ -32,7 +32,6 @@
     "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update --param='provider=local'",
     "setup:psp-local": "tsc && node scripts/psp-beacon-local-setup.js",
     "test": "jest",
-    "test:debug": "jest \"process-sponsor-wallet.test.ts\"",
     "prepare": "husky install"
   },
   "dependencies": {
