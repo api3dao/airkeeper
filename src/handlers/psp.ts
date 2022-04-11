@@ -227,19 +227,12 @@ const executeApiCalls = async (state: State): Promise<State> => {
   });
 
   const callApiResults = await Promise.all(apiValuePromises);
-  const successfullCalls = callApiResults.filter((call) => call[1].apiValue !== null);
-  const failedCalls = callApiResults.filter((call) => call[1].apiValue === null);
+  const successfulCalls = callApiResults.filter((call) => call[1].apiValue !== null);
 
-  utils.logger.logPending(
-    successfullCalls.flatMap((call) => call[0]),
-    baseLogOptions
-  );
-  utils.logger.logPending(
-    failedCalls.flatMap((call) => call[0]),
-    baseLogOptions
-  );
+  const logs = callApiResults.flatMap((call) => call[0]);
+  utils.logger.logPending(logs, baseLogOptions);
 
-  const apiValuesBySubscriptionId = successfullCalls.reduce(
+  const apiValuesBySubscriptionId = successfulCalls.reduce(
     (acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
       const [_logs, data] = result;
 

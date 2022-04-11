@@ -1,5 +1,6 @@
 import * as node from '@api3/airnode-node';
 import { ethers } from 'ethers';
+import { success } from '@api3/promise-utils';
 import { processSponsorWallet } from './process-sponsor-wallet';
 import { GAS_LIMIT, PROTOCOL_ID_PSP } from '../constants';
 
