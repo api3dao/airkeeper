@@ -44,7 +44,7 @@ export const initializeEvmState = async (
   const provider = node.evm.buildEVMProvider(providerUrl, chain.id);
 
   // Fetch current block number
-  const currentBlock = await go(() => provider.getBlockNumber(), { timeoutMs: TIMEOUT_MS, retries: RETRIES });
+  const currentBlock = await go(() => provider.getBlockNumber(), { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES });
   if (!currentBlock.success) {
     const message = 'Failed to fetch the blockNumber';
     const log = utils.logger.pend('ERROR', message, currentBlock.error);

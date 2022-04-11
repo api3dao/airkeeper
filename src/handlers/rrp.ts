@@ -98,7 +98,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         return [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>;
       },
-      { timeoutMs: TIMEOUT_MS, retries: RETRIES }
+      { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
     )
   );
   const responses = await Promise.all(apiValuePromises);
@@ -150,7 +150,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         // Fetch current block number from chain via provider
         const currentBlock = await go(() => provider.getBlockNumber(), {
-          timeoutMs: TIMEOUT_MS,
+          attemptTimeoutMs: TIMEOUT_MS,
           retries: RETRIES,
         });
         if (!currentBlock.success) {
@@ -193,7 +193,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
           const keeperSponsorWalletTransactionCount = await go(
             () => provider.getTransactionCount(keeperSponsorWallet.address, currentBlock.data),
-            { timeoutMs: TIMEOUT_MS, retries: RETRIES }
+            { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
           );
           if (!keeperSponsorWalletTransactionCount.success) {
             utils.logger.error('failed to fetch the keeperSponsorWallet transaction count', {
@@ -275,7 +275,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             // address(0) is considered whitelisted
             const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
             const beaconResponse = await go(() => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId), {
-              timeoutMs: TIMEOUT_MS,
+              attemptTimeoutMs: TIMEOUT_MS,
               retries: RETRIES,
             });
             if (!beaconResponse.success) {
@@ -336,7 +336,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             );
             const requestedBeaconUpdateEvents = await go(
               () => rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter, blockHistoryLimit * -1, currentBlock.data),
-              { timeoutMs: TIMEOUT_MS, retries: RETRIES }
+              { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!requestedBeaconUpdateEvents.success) {
               utils.logger.error('failed to fetch RequestedBeaconUpdate events', {
@@ -350,7 +350,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             const updatedBeaconFilter = rrpBeaconServer.filters.UpdatedBeacon(beaconId);
             const updatedBeaconEvents = await go(
               () => rrpBeaconServer.queryFilter(updatedBeaconFilter, blockHistoryLimit * -1, currentBlock.data),
-              { timeoutMs: TIMEOUT_MS, retries: RETRIES }
+              { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!updatedBeaconEvents.success) {
               utils.logger.error('failed to fetch UpdatedBeacon events', {
@@ -368,7 +368,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               // Check if RequestedBeaconUpdate event is awaiting fulfillment by calling AirnodeRrp.requestIsAwaitingFulfillment with requestId and check if beacon value is fresh enough and skip if it is
               const requestIsAwaitingFulfillment = await go(
                 () => airnodeRrp.requestIsAwaitingFulfillment(pendingRequestedBeaconUpdateEvent.args!['requestId']),
-                { timeoutMs: TIMEOUT_MS, retries: RETRIES }
+                { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
               );
               if (!requestIsAwaitingFulfillment.success) {
                 utils.logger.error('failed to check if request is awaiting fulfillment', {
@@ -428,7 +428,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
                     encodedParameters,
                     overrides
                   ),
-              { timeoutMs: TIMEOUT_MS, retries: RETRIES }
+              { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!tx.success) {
               utils.logger.error(
