@@ -18,6 +18,11 @@ app.get('/convert', (req, res) => {
     return;
   }
 
+  if (from === 'BTC' && to === 'USD') {
+    res.status(200).send({ success: true, result: '41091.12345' });
+    return;
+  }
+
   res.status(404).send({ success: false, error: 'Unknown price pair' });
 });
 
