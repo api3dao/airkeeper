@@ -88,12 +88,10 @@
     yargs "^17.0.1"
     zod "^3.11.6"
 
-"@api3/promise-utils@^0.1.0":
-  version "0.1.0"
-  resolved "https://registry.yarnpkg.com/@api3/promise-utils/-/promise-utils-0.1.0.tgz#bc0678a5d19b32274192656dc787a131e22d82dc"
-  integrity sha512-hel2yq9p9d5Yki9nf+9S7XNDzko+FVzYUps5JGwl6XvV5eBaEUDkEeTG5ulyUORzJdplfT+KyE1zxwIMG/ZfhQ==
-  dependencies:
-    "@lifeomic/attempt" "^3.0.2"
+"@api3/promise-utils@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@api3/promise-utils/-/promise-utils-0.2.0.tgz#3484aa945af5695da046b0aaf482af6aafeed327"
+  integrity sha512-pIkB9rh/rrOhwJtnWUoq/v6LNfNQygn9TE8DRL+FJOlcOUgocCR6hxjpiEnrP2noU+2KmNJxCvx+E/L7Nhs/uQ==
 
 "@babel/code-frame@^7.0.0", "@babel/code-frame@^7.12.13", "@babel/code-frame@^7.16.7":
   version "7.16.7"
@@ -1044,7 +1042,7 @@
   resolved "https://registry.yarnpkg.com/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz#8ace5259254426ccef57f3175bc64ed7095ed919"
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
-"@lifeomic/attempt@^3.0.0", "@lifeomic/attempt@^3.0.2":
+"@lifeomic/attempt@^3.0.0":
   version "3.0.2"
   resolved "https://registry.yarnpkg.com/@lifeomic/attempt/-/attempt-3.0.2.tgz#6920d6fa76e911c2d27e5a7c9a5f42aff2292733"
   integrity sha512-JHRfM7fUit2UroC0xRnuzMGegSTbfvz6X/1PgcIvahXC+A7UsKa8XfR1YrBsvoSu669iMTeNkDb26pSkGOzXKw==
