@@ -182,7 +182,7 @@ yarn run test
 
 ### E2E Tests
 
-E2E tests are defined in the `src/test/e2e/` folder and are identified by the `feature.ts` extension.
+E2E tests are defined in the `test/e2e/` folder and are identified by the `feature.ts` extension.
 
 In order to run E2E tests, you will need to have both an Ethereum node and the "dummy" web API running. The simplest way
 to accomplish this is by running:

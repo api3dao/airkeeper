@@ -3,11 +3,11 @@ module.exports = {
   apps: [
     {
       name: 'web-api',
-      script: 'ts-node src/test/server/server.ts',
+      script: 'ts-node test/server/server.ts',
     },
     {
       name: 'ethereum-node',
-      script: 'hardhat node --config src/test/hardhat.config.ts',
+      script: 'hardhat node --config test/hardhat.config.ts',
     },
   ],
 };
