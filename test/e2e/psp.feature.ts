@@ -56,8 +56,8 @@ describe('PSP', () => {
   let dapiServer: Contract;
 
   beforeEach(async () => {
-    //Reset the local hardhat network state for each test to keep the deployed Airnode and DapiServer contract addresses
-    //the same as the config files
+    // Reset the local hardhat network state for each test to keep the deployed Airnode and DapiServer contract addresses
+    // the same as the config files
     await hre.network.provider.send('hardhat_reset');
 
     jest.restoreAllMocks();
