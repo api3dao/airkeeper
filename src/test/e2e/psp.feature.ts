@@ -305,11 +305,11 @@ describe('PSP', () => {
     jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => ({
       ...airkeeperConfig,
       subscriptions: {
-        '0x6efac1aca63fe97cbb96498d49e600397eb118956bc84a600e08f6eaa95a882e': {
-          ...Object.values(airkeeperConfig.subscriptions)[0],
-          fulfillFunctionId: '0xinvalid',
-        },
         ...airkeeperConfig.subscriptions,
+        [subscriptionIdBTC]: {
+          ...airkeeperConfig.subscriptions[subscriptionIdBTC],
+          fulfillFunctionId: '0x206b48fa', // invalid fulfillFunctionId
+        },
       },
     }));
 
@@ -326,7 +326,7 @@ describe('PSP', () => {
     const dapiServerResponseBTC = await dapiServer.connect(voidSigner).readWithDataPointId(beaconIdBTC);
 
     expect(dapiServerResponseETH[0].toNumber()).toEqual(723.39202 * 1000000);
-    expect(dapiServerResponseBTC[0].toNumber()).toEqual(41091.12345 * 1000000);
+    expect(dapiServerResponseBTC[0].toNumber()).toEqual(0);
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
