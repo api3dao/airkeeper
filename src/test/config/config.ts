@@ -256,6 +256,7 @@ export const buildAirkeeperConfig = () => ({
   },
 });
 
+// Config for ETH subscription
 export const buildLocalConfig = () => ({
   airnodeMnemonic: 'achieve climb couple wait accident symbol spy blouse reduce foil echo label',
   privateKeys: {
@@ -278,6 +279,7 @@ export const buildLocalConfig = () => ({
   threshold: 10,
 });
 
+// Config for BTC subscription
 export const buildLocalConfig2 = () => ({
   airnodeMnemonic: 'achieve climb couple wait accident symbol spy blouse reduce foil echo label',
   privateKeys: {
