@@ -25,7 +25,7 @@ aws.env
 
 # Temporarily add airnode for unpublished changes
 airnode
-hardhat.config.ts
+/hardhat.config.ts
 
 # Hardhat files
 cache
