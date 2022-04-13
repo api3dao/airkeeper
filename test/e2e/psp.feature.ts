@@ -16,7 +16,6 @@ import { PROTOCOL_ID_PSP } from '../../src/constants';
 jest.setTimeout(30_000);
 
 const dapiServerAdminRoleDescription = 'DapiServer admin';
-const subscriptionIdETH = '0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e';
 const subscriptionIdBTC = '0xb4c3cea3b78c384eb4409df1497bb2f1fd872f1928a218f8907c38fe0d66ffea';
 const provider = new hre.ethers.providers.JsonRpcProvider('http://127.0.0.1:8545');
 
@@ -36,9 +35,11 @@ const roles = {
   randomPerson: new hre.ethers.Wallet(localConfigETH.privateKeys.randomPerson).connect(provider),
 };
 
-const readBeaconValue = async (subscriptionId: string, dapiServer: Contract) => {
+const readBeaconValue = async (airnodeAddress: string, templateId: string, dapiServer: Contract) => {
   const voidSigner = new hre.ethers.VoidSigner(hre.ethers.constants.AddressZero, provider);
-  const beaconId = await dapiServer.subscriptionIdToBeaconId(subscriptionId);
+  const beaconId = hre.ethers.utils.keccak256(
+    hre.ethers.utils.solidityPack(['address', 'bytes32'], [airnodeAddress, templateId])
+  );
   const dapiServerResponse = await dapiServer.connect(voidSigner).readWithDataPointId(beaconId);
 
   return dapiServerResponse[0].toNumber();
@@ -54,6 +55,8 @@ describe('PSP', () => {
   let dapiServerAbi;
   let dapiServerFactory: ContractFactory;
   let dapiServer: Contract;
+  let templateIdETH: string;
+  let templateIdBTC: string;
 
   beforeEach(async () => {
     // Reset the local hardhat network state for each test to keep the deployed Airnode and DapiServer contract addresses
@@ -109,22 +112,22 @@ describe('PSP', () => {
 
     // Setup ETH Subscription
     // Templates
-    const endpointId = hre.ethers.utils.keccak256(
+    const endpointIdETH = hre.ethers.utils.keccak256(
       hre.ethers.utils.defaultAbiCoder.encode(
         ['string', 'string'],
         [localConfigETH.endpoint.oisTitle, localConfigETH.endpoint.endpointName]
       )
     );
-    const parameters = abi.encode(localConfigETH.templateParameters);
-    const templateId = hre.ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [endpointId, parameters]);
+    const parametersETH = abi.encode(localConfigETH.templateParameters);
+    templateIdETH = hre.ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [endpointIdETH, parametersETH]);
 
     // Subscriptions
-    const threshold = (await dapiServer.HUNDRED_PERCENT()).div(localConfigETH.threshold); // Update threshold %
-    const beaconUpdateSubscriptionConditionParameters = hre.ethers.utils.defaultAbiCoder.encode(
+    const thresholdETH = (await dapiServer.HUNDRED_PERCENT()).div(localConfigETH.threshold); // Update threshold %
+    const beaconUpdateSubscriptionConditionParametersETH = hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [threshold]
+      [thresholdETH]
     );
-    const beaconUpdateSubscriptionConditions = [
+    const beaconUpdateSubscriptionConditionsETH = [
       {
         type: 'bytes32',
         name: '_conditionFunctionId',
@@ -133,15 +136,15 @@ describe('PSP', () => {
           [dapiServer.interface.getSighash('conditionPspBeaconUpdate')]
         ),
       },
-      { type: 'bytes', name: '_conditionParameters', value: beaconUpdateSubscriptionConditionParameters },
+      { type: 'bytes', name: '_conditionParameters', value: beaconUpdateSubscriptionConditionParametersETH },
     ];
-    const encodedBeaconUpdateSubscriptionConditions = abi.encode(beaconUpdateSubscriptionConditions);
+    const encodedBeaconUpdateSubscriptionConditionsETH = abi.encode(beaconUpdateSubscriptionConditionsETH);
     await dapiServer
       .connect(roles.randomPerson)
       .registerBeaconUpdateSubscription(
         airnodeWallet.address,
-        templateId,
-        encodedBeaconUpdateSubscriptionConditions,
+        templateIdETH,
+        encodedBeaconUpdateSubscriptionConditionsETH,
         airnodeWallet.address,
         roles.sponsor.address
       );
@@ -149,22 +152,22 @@ describe('PSP', () => {
     // Setup BTC Subscription
     const localConfigBTC = buildLocalConfigBTC();
     // Templates
-    const endpointId2 = hre.ethers.utils.keccak256(
+    const endpointIdBTC = hre.ethers.utils.keccak256(
       hre.ethers.utils.defaultAbiCoder.encode(
         ['string', 'string'],
         [localConfigBTC.endpoint.oisTitle, localConfigBTC.endpoint.endpointName]
       )
     );
-    const parameters2 = abi.encode(localConfigBTC.templateParameters);
-    const templateId2 = hre.ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [endpointId2, parameters2]);
+    const parametersBTC = abi.encode(localConfigBTC.templateParameters);
+    templateIdBTC = hre.ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [endpointIdBTC, parametersBTC]);
 
     // Subscriptions
-    const threshold2 = (await dapiServer.HUNDRED_PERCENT()).div(localConfigBTC.threshold); // Update threshold %
+    const thresholdBTC = (await dapiServer.HUNDRED_PERCENT()).div(localConfigBTC.threshold); // Update threshold %
     const beaconUpdateSubscriptionConditionParameters2 = hre.ethers.utils.defaultAbiCoder.encode(
       ['uint256'],
-      [threshold2]
+      [thresholdBTC]
     );
-    const beaconUpdateSubscriptionConditions2 = [
+    const beaconUpdateSubscriptionConditionsBTC = [
       {
         type: 'bytes32',
         name: '_conditionFunctionId',
@@ -175,13 +178,13 @@ describe('PSP', () => {
       },
       { type: 'bytes', name: '_conditionParameters', value: beaconUpdateSubscriptionConditionParameters2 },
     ];
-    const encodedBeaconUpdateSubscriptionConditions2 = abi.encode(beaconUpdateSubscriptionConditions2);
+    const encodedBeaconUpdateSubscriptionConditionsBTC = abi.encode(beaconUpdateSubscriptionConditionsBTC);
     await dapiServer
       .connect(roles.randomPerson)
       .registerBeaconUpdateSubscription(
         airnodeWallet.address,
-        templateId2,
-        encodedBeaconUpdateSubscriptionConditions2,
+        templateIdBTC,
+        encodedBeaconUpdateSubscriptionConditionsBTC,
         airnodeWallet.address,
         roles.sponsor.address
       );
@@ -195,8 +198,8 @@ describe('PSP', () => {
     jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
     const res = await psp.handler();
 
-    const beaconValueETH = await readBeaconValue(subscriptionIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(subscriptionIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
     expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
@@ -218,8 +221,8 @@ describe('PSP', () => {
 
     const res = await psp.handler();
 
-    const beaconValueETH = await readBeaconValue(subscriptionIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(subscriptionIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
     expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
@@ -252,8 +255,8 @@ describe('PSP', () => {
 
     const res = await psp.handler();
 
-    const beaconValueETH = await readBeaconValue(subscriptionIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(subscriptionIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
     expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
@@ -281,8 +284,8 @@ describe('PSP', () => {
 
     const res = await psp.handler();
 
-    const beaconValueETH = await readBeaconValue(subscriptionIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(subscriptionIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
     expect(beaconValueBTC).toEqual(0);
