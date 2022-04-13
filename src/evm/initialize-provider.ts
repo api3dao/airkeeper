@@ -4,6 +4,7 @@ import * as protocol from '@api3/airnode-protocol';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
+import { DapiServer__factory as DapiServerFactory } from '@api3/airnode-protocol-v1';
 import { ChainConfig, EVMBaseState, ProviderState } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 
@@ -13,11 +14,7 @@ export const initializeProvider = async (airnodeWalletMnemonic: string, provider
   const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
     ethers.utils.FormatTypes.minimal
   );
-
-  const dapiServerAbi = [
-    'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
-    'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
-  ];
+  const dapiServerAbi = new ethers.utils.Interface(DapiServerFactory.abi).format(ethers.utils.FormatTypes.minimal);
 
   const abis: { [contractName: string]: string | string[] } = {
     RrpBeaconServer: rrpBeaconServerAbi,
