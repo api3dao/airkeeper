@@ -11,14 +11,10 @@ import { TIMEOUT_MS, RETRIES } from '../constants';
 export const initializeProvider = async (airnodeWalletMnemonic: string, providerState: ProviderState<EVMBaseState>) => {
   const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeWalletMnemonic);
   const provider = node.evm.buildEVMProvider(providerState.providerUrl, providerState.chainId);
-  const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
-    ethers.utils.FormatTypes.minimal
-  );
-  const dapiServerAbi = new ethers.utils.Interface(DapiServerFactory.abi).format(ethers.utils.FormatTypes.minimal);
 
-  const abis: { [contractName: string]: string | string[] } = {
-    RrpBeaconServer: rrpBeaconServerAbi,
-    DapiServer: dapiServerAbi,
+  const abis: { [contractName: string]: ethers.ContractInterface } = {
+    RrpBeaconServer: protocol.RrpBeaconServerFactory.abi,
+    DapiServer: DapiServerFactory.abi,
   };
   const contracts = Object.entries(providerState.chainConfig.contracts).reduce(
     (acc, [contractName, contractAddress]) => {

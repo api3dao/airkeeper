@@ -45,8 +45,7 @@ const readBeaconValue = async (airnodeAddress: string, templateId: string, dapiS
   );
 
   try {
-    const dapiServerResponse = await dapiServer.connect(voidSigner).readDataFeedValueWithId(beaconId);
-    return dapiServerResponse.toNumber();
+    return await dapiServer.connect(voidSigner).readDataFeedValueWithId(beaconId);
   } catch (e) {
     return null;
   }
@@ -203,8 +202,8 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
-    expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
+    expect(beaconValueBTC).toEqual(hre.ethers.BigNumber.from(41091.12345 * 1_000_000));
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
@@ -226,8 +225,8 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
-    expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
+    expect(beaconValueBTC).toEqual(hre.ethers.BigNumber.from(41091.12345 * 1_000_000));
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
@@ -260,8 +259,8 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
-    expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
+    expect(beaconValueBTC).toEqual(hre.ethers.BigNumber.from(41091.12345 * 1_000_000));
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
@@ -289,7 +288,7 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(null);
     expect(res).toEqual({
       statusCode: 200,
