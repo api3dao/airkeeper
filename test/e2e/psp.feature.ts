@@ -1,10 +1,13 @@
-import fs from 'fs';
-import path from 'path';
 import { mockReadFileSync } from '../mock-utils';
 import { ContractFactory, Contract } from 'ethers';
 import * as hre from 'hardhat';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import {
+  AccessControlRegistry__factory as AccessControlRegistryFactory,
+  AirnodeProtocol__factory as AirnodeProtocolFactory,
+  DapiServer__factory as DapiServerFactory,
+} from '@api3/airnode-protocol-v1';
 import * as psp from '../../src/handlers/psp';
 import * as api from '../../src/api/call-api';
 import * as config from '../../src/config';
@@ -40,19 +43,19 @@ const readBeaconValue = async (airnodeAddress: string, templateId: string, dapiS
   const beaconId = hre.ethers.utils.keccak256(
     hre.ethers.utils.solidityPack(['address', 'bytes32'], [airnodeAddress, templateId])
   );
-  const dapiServerResponse = await dapiServer.connect(voidSigner).readWithDataPointId(beaconId);
 
-  return dapiServerResponse[0].toNumber();
+  try {
+    return await dapiServer.connect(voidSigner).readDataFeedValueWithId(beaconId);
+  } catch (e) {
+    return null;
+  }
 };
 
 describe('PSP', () => {
-  let accessControlRegistryAbi;
   let accessControlRegistryFactory: ContractFactory;
   let accessControlRegistry: Contract;
-  let airnodeProtocolAbi;
   let airnodeProtocolFactory: ContractFactory;
   let airnodeProtocol: Contract;
-  let dapiServerAbi;
   let dapiServerFactory: ContractFactory;
   let dapiServer: Contract;
   let templateIdETH: string;
@@ -66,27 +69,25 @@ describe('PSP', () => {
     jest.restoreAllMocks();
 
     // Deploy contracts
-    accessControlRegistryAbi = JSON.parse(
-      fs.readFileSync(path.resolve('./scripts/artifacts/AccessControlRegistry.json')).toString()
-    );
     accessControlRegistryFactory = new hre.ethers.ContractFactory(
-      accessControlRegistryAbi.abi,
-      accessControlRegistryAbi.bytecode,
+      AccessControlRegistryFactory.abi,
+      AccessControlRegistryFactory.bytecode,
       roles.deployer
     );
     accessControlRegistry = await accessControlRegistryFactory.deploy();
-    airnodeProtocolAbi = JSON.parse(
-      fs.readFileSync(path.resolve('./scripts/artifacts/AirnodeProtocol.json')).toString()
-    );
+
     airnodeProtocolFactory = new hre.ethers.ContractFactory(
-      airnodeProtocolAbi.abi,
-      airnodeProtocolAbi.bytecode,
+      AirnodeProtocolFactory.abi,
+      AirnodeProtocolFactory.bytecode,
       roles.deployer
     );
     airnodeProtocol = await airnodeProtocolFactory.deploy();
 
-    dapiServerAbi = JSON.parse(fs.readFileSync(path.resolve('./scripts/artifacts/DapiServer.json')).toString());
-    dapiServerFactory = new hre.ethers.ContractFactory(dapiServerAbi.abi, dapiServerAbi.bytecode, roles.deployer);
+    dapiServerFactory = new hre.ethers.ContractFactory(
+      DapiServerFactory.abi,
+      DapiServerFactory.bytecode,
+      roles.deployer
+    );
     dapiServer = await dapiServerFactory.deploy(
       accessControlRegistry.address,
       dapiServerAdminRoleDescription,
@@ -201,8 +202,8 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
-    expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
+    expect(beaconValueBTC).toEqual(hre.ethers.BigNumber.from(41091.12345 * 1_000_000));
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
@@ -224,8 +225,8 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
-    expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
+    expect(beaconValueBTC).toEqual(hre.ethers.BigNumber.from(41091.12345 * 1_000_000));
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
@@ -258,8 +259,8 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
-    expect(beaconValueBTC).toEqual(41091.12345 * 1_000_000);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
+    expect(beaconValueBTC).toEqual(hre.ethers.BigNumber.from(41091.12345 * 1_000_000));
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
@@ -287,8 +288,8 @@ describe('PSP', () => {
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
-    expect(beaconValueETH).toEqual(723.39202 * 1_000_000);
-    expect(beaconValueBTC).toEqual(0);
+    expect(beaconValueETH).toEqual(hre.ethers.BigNumber.from(723.39202 * 1_000_000));
+    expect(beaconValueBTC).toEqual(null);
     expect(res).toEqual({
       statusCode: 200,
       body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),

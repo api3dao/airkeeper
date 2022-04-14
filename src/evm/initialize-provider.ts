@@ -4,24 +4,17 @@ import * as protocol from '@api3/airnode-protocol';
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
+import { DapiServer__factory as DapiServerFactory } from '@api3/airnode-protocol-v1';
 import { ChainConfig, EVMBaseState, ProviderState } from '../types';
 import { TIMEOUT_MS, RETRIES } from '../constants';
 
 export const initializeProvider = async (airnodeWalletMnemonic: string, providerState: ProviderState<EVMBaseState>) => {
   const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeWalletMnemonic);
   const provider = node.evm.buildEVMProvider(providerState.providerUrl, providerState.chainId);
-  const rrpBeaconServerAbi = new ethers.utils.Interface(protocol.RrpBeaconServerFactory.abi).format(
-    ethers.utils.FormatTypes.minimal
-  );
 
-  const dapiServerAbi = [
-    'function conditionPspBeaconUpdate(bytes32,bytes,bytes) view returns (bool)',
-    'function fulfillPspBeaconUpdate(bytes32,address,address,address,uint256,bytes,bytes)',
-  ];
-
-  const abis: { [contractName: string]: string | string[] } = {
-    RrpBeaconServer: rrpBeaconServerAbi,
-    DapiServer: dapiServerAbi,
+  const abis: { [contractName: string]: ethers.ContractInterface } = {
+    RrpBeaconServer: protocol.RrpBeaconServerFactory.abi,
+    DapiServer: DapiServerFactory.abi,
   };
   const contracts = Object.entries(providerState.chainConfig.contracts).reduce(
     (acc, [contractName, contractAddress]) => {
