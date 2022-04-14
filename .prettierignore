@@ -1,8 +1,12 @@
 # Ignore artifacts:
 **/.build/**
 **/dist/**
+**/cache/**
 **/.serverless/**
 **/coverage/**
 
 **/config/*.json
 **/node_modules/**
+
+# Temporarily add airnode
+airnode
