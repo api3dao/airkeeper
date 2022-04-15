@@ -20,12 +20,12 @@ package:
 
 functions:
   rrp-beacon-update:
-    handler: dist/src/handlers/rrp.handler
+    handler: dist/handlers/rrp.handler
     timeout: 60
     events:
       - schedule: rate(1 minute)
   psp-beacon-update:
-    handler: dist/src/handlers/psp.handler
+    handler: dist/handlers/psp.handler
     environment:
       CLOUD_PROVIDER: ${param:provider, self:provider.name}
       STAGE: ${self:provider.stage}
@@ -33,5 +33,5 @@ functions:
     events:
       - schedule: rate(1 minute)
   process-subscriptions:
-    handler: dist/src/handlers/process-subscriptions.handler
+    handler: dist/handlers/process-subscriptions.handler
     timeout: 15
