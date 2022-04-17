@@ -3,6 +3,11 @@ const path = require('path');
 const ethers = require('ethers');
 const abi = require('@api3/airnode-abi');
 const { evm } = require('@api3/airnode-node');
+const {
+  AccessControlRegistry__factory: AccessControlRegistryFactory,
+  AirnodeProtocol__factory: AirnodeProtocolFactory,
+  DapiServer__factory: DapiServerFactory,
+} = require('@api3/airnode-protocol-v1');
 const { PROTOCOL_ID_PSP } = require('../dist/constants');
 
 async function main() {
@@ -20,27 +25,24 @@ async function main() {
   const dapiServerAdminRoleDescription = 'DapiServer admin';
 
   // Deploy
-  const accessControlRegistryAbi = JSON.parse(
-    fs.readFileSync(path.resolve('./scripts/artifacts/AccessControlRegistry.json')).toString()
-  );
   const accessControlRegistryFactory = new ethers.ContractFactory(
-    accessControlRegistryAbi.abi,
-    accessControlRegistryAbi.bytecode,
+    AccessControlRegistryFactory.abi,
+    AccessControlRegistryFactory.bytecode,
     roles.deployer
   );
   const accessControlRegistry = await accessControlRegistryFactory.deploy();
-  const airnodeProtocolAbi = JSON.parse(
-    fs.readFileSync(path.resolve('./scripts/artifacts/AirnodeProtocol.json')).toString()
-  );
   const airnodeProtocolFactory = new ethers.ContractFactory(
-    airnodeProtocolAbi.abi,
-    airnodeProtocolAbi.bytecode,
+    AirnodeProtocolFactory.abi,
+    AirnodeProtocolFactory.bytecode,
     roles.deployer
   );
   const airnodeProtocol = await airnodeProtocolFactory.deploy();
   console.log('📒 ~ airnodeProtocol', airnodeProtocol.address);
-  const dapiServerAbi = JSON.parse(fs.readFileSync(path.resolve('./scripts/artifacts/DapiServer.json')).toString());
-  const dapiServerFactory = new ethers.ContractFactory(dapiServerAbi.abi, dapiServerAbi.bytecode, roles.deployer);
+  const dapiServerFactory = new ethers.ContractFactory(
+    DapiServerFactory.abi,
+    DapiServerFactory.bytecode,
+    roles.deployer
+  );
   const dapiServer = await dapiServerFactory.deploy(
     accessControlRegistry.address,
     dapiServerAdminRoleDescription,
