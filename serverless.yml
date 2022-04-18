@@ -2,8 +2,8 @@ service: airkeeper
 
 provider:
   name: aws
-  region: ${env:REGION, 'us-east-1'}
-  stage: ${env:STAGE, 'dev'}
+  region: ${opt:region, env:REGION, 'us-east-1'}
+  stage: ${opt:stage, env:STAGE, 'dev'}
   runtime: nodejs14.x
   memorySize: 512
   logRetentionInDays: 14
@@ -12,7 +12,7 @@ provider:
     - Effect: 'Allow'
       Action:
         - 'lambda:InvokeFunction'
-      Resource: 'arn:aws:lambda:${self:provider.region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-process-subscriptions'
+      Resource: !Sub 'arn:aws:lambda:${self:provider.region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-process-subscriptions'
 
 package:
   patterns:
