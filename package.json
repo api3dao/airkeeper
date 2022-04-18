@@ -1,10 +1,19 @@
 {
-  "name": "airkeeper",
+  "name": "@api3/airkeeper",
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "0.0.5",
   "description": "A tool to update a beacon server value on a time interval",
-  "main": "./src/index",
-  "types": "./src/index",
+  "main": "./dist/index",
+  "types": "./dist/types",
+  "private": false,
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/api3dao/airkeeper.git"
+  },
   "engines": {
     "node": "^14.17.1"
   },
@@ -14,7 +23,7 @@
     "*.js"
   ],
   "scripts": {
-    "postinstall": "git clone https://github.com/api3dao/airnode.git airnode; cd airnode && git checkout 994d895f37ca871f57224ac1603ea58e79ef071e && yarn run bootstrap && yarn build && cd ..; cp -a airnode/node_modules/@api3/airnode-node/. node_modules/@api3/airnode-node; cp -a test/hardhat.config.ts ./; rm -rf airnode",
+    "postinstall": "rm -f hardhat.config.ts; rm -rf airnode; git clone https://github.com/api3dao/airnode.git airnode; cd airnode && git checkout 994d895f37ca871f57224ac1603ea58e79ef071e && yarn run bootstrap && yarn build && cd ..; cp -a airnode/node_modules/@api3/airnode-node/. node_modules/@api3/airnode-node; cp -a test/hardhat.config.ts ./; rm -rf airnode",
     "build": "yarn clean && yarn compile:build",
     "clean": "rimraf -rf ./dist *.tgz",
     "compile": "tsc -p tsconfig.json",
@@ -26,6 +35,7 @@
     "dev:eth-node": "hardhat node --config test/hardhat.config.ts",
     "dev:api": "ts-node test/server/server.ts",
     "dev:background": "yarn run dev:clean && pm2 start ecosystem.config.js",
+    "docker": "docker build -t api/airkeeper .",
     "lint": "yarn run prettier:check && yarn run lint:eslint",
     "lint:eslint": "eslint . --ext .js,.ts",
     "prettier:check": "prettier --check \"./**/*.{js,sol,ts,md,yml,json}\"",

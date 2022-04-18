@@ -8,7 +8,7 @@ const {
   AirnodeProtocol__factory: AirnodeProtocolFactory,
   DapiServer__factory: DapiServerFactory,
 } = require('@api3/airnode-protocol-v1');
-const { PROTOCOL_ID_PSP } = require('../dist/src/constants');
+const { PROTOCOL_ID_PSP } = require('../dist/constants');
 
 async function main() {
   const config = JSON.parse(fs.readFileSync(path.resolve('./scripts/config/psp-beacon-local.json')).toString());

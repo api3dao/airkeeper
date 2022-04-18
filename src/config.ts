@@ -7,12 +7,12 @@ import { AirkeeperConfig, validateConfig } from './validator';
 
 export const loadAirnodeConfig = () => {
   // This file must be the same as the one used by the @api3/airnode-node
-  const nodeConfigPath = path.resolve(__dirname, '..', '..', 'config', `config.json`);
+  const nodeConfigPath = path.resolve(__dirname, '..', 'config', `config.json`);
   return node.config.loadConfig(nodeConfigPath, process.env);
 };
 
 export const loadAirkeeperConfig = () => {
-  const configPath = path.resolve(__dirname, '..', '..', 'config', `airkeeper.json`);
+  const configPath = path.resolve(__dirname, '..', 'config', `airkeeper.json`);
   const airkeeperConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
   const validationOutput = validateConfig(airkeeperConfig);
