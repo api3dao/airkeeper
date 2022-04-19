@@ -60,7 +60,12 @@ docker build . -t api3/airkeeper
 
 ### Deployment
 
-The `deploy` command will create a new AWS lambda function set and a new AWS cloud scheduler.
+The `deploy` command will create a new AWS lambda function set and a new AWS cloud scheduler. The serverless `stage` and
+`region` variables are set with the following priority order:
+
+1. CLI options
+2. `aws.env` file
+3. default values `stage`: 'dev' and `region`: 'us-east-1'
 
 ```sh
 docker run -it --rm \

@@ -31,7 +31,9 @@ RUN git clone --single-branch --branch ${branch} ${repository} ${buildDir}
 # Production dependencies
 FROM source${build} AS deps
 
-RUN yarn install --production --no-optional --ignore-scripts
+RUN yarn install
+# TODO add back after Airnode 0.6 is released 
+# --production --no-optional --ignore-scripts
 
 FROM source${build} AS build
 
@@ -52,7 +54,7 @@ LABEL application=${name} \
 COPY --from=deps ${buildDir}/node_modules ./node_modules
 COPY --from=build ${packageDir} .
 
-    # Create Airkeeper user
+# Create Airkeeper user
 RUN adduser -h ${appDir} -s /bin/false -S -D -H ${name} && \
     chown -R ${name} ${appDir} && \
     # Install serverless
