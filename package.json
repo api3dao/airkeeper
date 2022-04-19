@@ -1,7 +1,7 @@
 {
   "name": "@api3/airkeeper",
   "license": "MIT",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "A tool to update a beacon server value on a time interval",
   "main": "./dist/index",
   "types": "./dist/types",
