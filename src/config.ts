@@ -1,51 +1,68 @@
 import fs from 'fs';
-import path from 'path';
-import isNil from 'lodash/isNil';
-import merge from 'lodash/merge';
-import * as node from '@api3/airnode-node';
-import * as nodeValidator from '@api3/airnode-validator';
-import { AirkeeperConfig, validateConfig } from './validator';
+import template from 'lodash/template';
+import { z } from 'zod';
+import { configSchema } from './validator';
 
-export const loadAirnodeConfig = () => {
-  // This file must be the same as the one used by the @api3/airnode-node
-  const configPath = path.resolve(__dirname, '..', 'config', `config.json`);
-  const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  const config = nodeValidator.unsafeParseConfigWithSecrets(rawConfig, process.env);
-  const parsedConfigRes = nodeValidator.parseConfig(config);
+type Secrets = Record<string, string | undefined>;
+
+export const readConfig = (configPath: string): unknown => {
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  } catch (err) {
+    throw new Error(`Failed to parse config file. ${err}`);
+  }
+};
+
+export const loadConfig = (configPath: string, secrets: Record<string, string | undefined>) => {
+  const rawConfig = readConfig(configPath);
+  const parsedConfigRes = parseConfigWithSecrets(rawConfig, secrets);
   if (!parsedConfigRes.success) {
-    throw new Error(`Invalid Airnode configuration file: ${parsedConfigRes.error}`);
+    throw new Error(`Invalid Airkeeper configuration file: ${parsedConfigRes.error}`);
   }
 
-  return parsedConfigRes.data;
+  const config = parsedConfigRes.data;
+  return config;
 };
 
-export const loadAirkeeperConfig = () => {
-  const configPath = path.resolve(__dirname, '..', 'config', `airkeeper.json`);
-  const airkeeperConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  const validationOutput = validateConfig(airkeeperConfig);
-  if (!validationOutput.success) {
-    throw new Error(`Invalid Airkeeper configuration file: ${JSON.stringify(validationOutput.error, null, 2)}`);
+export const parseConfigWithSecrets = (config: unknown, secrets: unknown) => {
+  const parseSecretsRes = parseSecrets(secrets);
+  if (!parseSecretsRes.success) return parseSecretsRes;
+
+  return parseConfig(interpolateSecrets(config, parseSecretsRes.data));
+};
+
+export const parseSecrets = (secrets: unknown) => {
+  const secretsSchema = z.record(z.string());
+
+  const result = secretsSchema.safeParse(secrets);
+  return result;
+};
+
+export const parseConfig = (config: unknown) => {
+  const parseConfigRes = configSchema.safeParse(config);
+  return parseConfigRes;
+};
+
+// Regular expression that does not match anything, ensuring no escaping or interpolation happens
+// https://github.com/lodash/lodash/blob/4.17.15/lodash.js#L199
+const NO_MATCH_REGEXP = /($^)/;
+// Regular expression matching ES template literal delimiter (${}) with escaping
+// https://github.com/lodash/lodash/blob/4.17.15/lodash.js#L175
+const ES_MATCH_REGEXP = /\$\{([^\\}]*(?:\\.[^\\}]*)*)\}/g;
+
+export const interpolateSecrets = (config: unknown, secrets: Secrets) => {
+  // TODO: Replace with go utils
+  try {
+    const interpolated = JSON.parse(
+      template(JSON.stringify(config), {
+        escape: NO_MATCH_REGEXP,
+        evaluate: NO_MATCH_REGEXP,
+        interpolate: ES_MATCH_REGEXP,
+      })(secrets)
+    );
+
+    return interpolated;
+  } catch (err) {
+    throw new Error(`Error interpolating secrets. Make sure the secrets format is correct. ${err}`);
   }
-
-  return validationOutput.data;
-};
-
-export const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: AirkeeperConfig) => {
-  return {
-    ...airnodeConfig,
-    chains: airkeeperConfig.chains.map((chain) => {
-      if (isNil(chain.id)) {
-        throw new Error(`Missing 'id' property in chain config: ${JSON.stringify(chain)}`);
-      }
-      const configChain = airnodeConfig.chains.find((c) => c.id === chain.id);
-      if (isNil(configChain)) {
-        throw new Error(`Chain id ${chain.id} not found in node config.json`);
-      }
-      return merge(configChain, chain);
-    }),
-    triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
-    subscriptions: airkeeperConfig.subscriptions,
-    templatesV1: airkeeperConfig.templatesV1,
-    endpoints: airkeeperConfig.endpoints,
-  };
 };

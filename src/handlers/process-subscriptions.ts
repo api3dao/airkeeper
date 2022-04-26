@@ -1,7 +1,8 @@
+import * as path from 'path';
 import * as utils from '@api3/airnode-utilities';
 import { goSync } from '@api3/promise-utils';
 import isNil from 'lodash/isNil';
-import { loadAirnodeConfig } from '../config';
+import { loadConfig } from '../config';
 import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
 import { buildLogOptions } from '../logger';
 import { ProviderSponsorProcessSubscriptionsState, ProviderSponsorSubscriptionsState } from '../types';
@@ -67,14 +68,14 @@ export const handler = async (payload: {
 
   const { providerSponsorSubscriptions, baseLogOptions } = payload;
 
-  const airnodeConfig = goSync(loadAirnodeConfig);
-  if (!airnodeConfig.success) {
-    utils.logger.error(airnodeConfig.error.message);
-    throw airnodeConfig.error;
+  const config = goSync(() => loadConfig(path.join(__dirname, '..', '..', 'config', 'airkeeper.json'), process.env));
+  if (!config.success) {
+    utils.logger.error(config.error.message);
+    throw config.error;
   }
 
   const providerState = await initializeProvider(
-    airnodeConfig.data.nodeSettings.airnodeWalletMnemonic,
+    config.data.nodeSettings.airnodeWalletMnemonic,
     providerSponsorSubscriptions.providerState
   );
 

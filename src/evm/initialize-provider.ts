@@ -1,12 +1,13 @@
-import { ethers } from 'ethers';
-import isNil from 'lodash/isNil';
-import * as protocol from '@api3/airnode-protocol';
 import * as node from '@api3/airnode-node';
+import * as protocol from '@api3/airnode-protocol';
+import { DapiServer__factory as DapiServerFactory } from '@api3/airnode-protocol-v1';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
-import { DapiServer__factory as DapiServerFactory } from '@api3/airnode-protocol-v1';
-import { ChainConfig, EVMBaseState, ProviderState } from '../types';
-import { TIMEOUT_MS, RETRIES } from '../constants';
+import { ethers } from 'ethers';
+import isNil from 'lodash/isNil';
+import { RETRIES, TIMEOUT_MS } from '../constants';
+import { EVMBaseState, ProviderState } from '../types';
+import { ChainConfig } from '../validator';
 
 export const initializeProvider = async (airnodeWalletMnemonic: string, providerState: ProviderState<EVMBaseState>) => {
   const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeWalletMnemonic);
