@@ -29,13 +29,13 @@ updates is `12345` and for PSP it is `2`.
 
 ## Setup
 
-- Airkeeper will require a configuration file that matches the one being used by the target Airnode. The Airnode's
-  `config.json` and `secrets.env` file can be copied from the Airnode repo and placed in the /config directory of this
-  repo. Examples of these two files can be found in the /config directory of this repo.
+- Airkeeper will require a configuration file that matches the one being used by the target Airnode. You will need to
+  copy the contents of the Airnode `config.json` into `airkeeper.json`. Then `secrets.env` file can be copied from the
+  Airnode repo and placed in the /config directory of this repo. This `secrets.env` file will be interpolated with the
+  `airkeeper.json` file during runtime.
 
-- Airkeeper will also require an additional configuration file named `airkeeper.json`, which will be merged with the
-  configuration. `airkeeper.json` will contain configuration specific to Airkeeper. An example is available in the
-  /config directory of this repo.
+- Additional configuration specific to Airkeeper can be added to the `airkeeper.json` file. For instance `proto-psp`
+  triggers, etc. Check out the `airkeeper.example.json` inside the /config directory for more details.
   <!-- TODO: add more details on each configuration property or link to docs -->
 
 - Another requirement is to have an AWS account where these lambda functions can be deployed. Cloud provider credentials
@@ -120,7 +120,7 @@ Follow these steps to run Airkeeper locally:
 1. Deploy all required contracts (RrpBeaconServer, DapiServer, etc) and set everything up (whitelisting, sponsorship,
    etc).
 1. Switch to the Airkeeper root directory and run `yarn install`.
-1. Add appropriate values to the `config.json` and `airkeeper.json` files.
+1. Add appropriate values to the `airkeeper.json` file.
 1. Finally, run `yarn sls:invoke-local:psp-beacon-update` to invoke the `psp.beaconUpdate` handler function or run
    `yarn sls:invoke-local:rrp-beacon-update` to invoke the `rrp.beaconUpdate` handler function.
 

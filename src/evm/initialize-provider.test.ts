@@ -10,7 +10,7 @@ jest.mock('@api3/airnode-utilities', () => {
 import { ethers } from 'ethers';
 import { initializeEvmState, initializeProvider } from './initialize-provider';
 import { BASE_FEE_MULTIPLIER, PRIORITY_FEE_IN_WEI } from '../constants';
-import { ChainConfig } from '../types';
+import { ChainConfig } from '../validator';
 
 describe('initializeEvmState', () => {
   beforeEach(() => jest.restoreAllMocks());

@@ -5,21 +5,25 @@ import * as adapter from '@api3/airnode-adapter';
 import { ethers } from 'ethers';
 import { callApi } from './call-api';
 import { Config } from '../validator';
+import { interpolateSecrets } from '../config';
+
+const envVariables = {
+  AIRNODE_WALLET_MNEMONIC: 'achieve climb couple wait accident symbol spy blouse reduce foil echo label',
+  PROVIDER_URL: 'https://some.self.hosted.mainnet.url',
+  SS_CURRENCY_CONVERTER_API_KEY: '18e06827-8544-4b0f-a639-33df3b5bc62f',
+};
 
 describe('callApi', () => {
-  const airnodeWalletMnemonic = 'achieve climb couple wait accident symbol spy blouse reduce foil echo label';
-  const config: Config = {
-    ...JSON.parse(readFileSync(join(__dirname, '../../config/airkeeper.example.json')).toString()),
-    airnodeWalletMnemonic,
-  };
-  const airnodeAddress = config.airnodeAddress;
-  const airnodeXpub = config.airnodeXpub;
-  if (config.airnodeAddress && config.airnodeAddress !== airnodeAddress) {
+  const config = JSON.parse(readFileSync(join(__dirname, '../../config/airkeeper.example.json')).toString());
+  const interpolatedConfig: Config = interpolateSecrets(config, envVariables);
+  const airnodeAddress = interpolatedConfig.airnodeAddress;
+  const airnodeXpub = interpolatedConfig.airnodeXpub;
+  if (interpolatedConfig.airnodeAddress && interpolatedConfig.airnodeAddress !== airnodeAddress) {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
-  const endpoint = config.endpoints[Object.keys(config.endpoints)[0]];
-  const templateId = Object.keys(config.templatesV1)[0];
-  const templateParameters = config.templatesV1[templateId].encodedParameters;
+  const endpoint = interpolatedConfig.endpoints[Object.keys(interpolatedConfig.endpoints)[0]];
+  const templateId = Object.keys(interpolatedConfig.templatesV1)[0];
+  const templateParameters = interpolatedConfig.templatesV1[templateId].encodedParameters;
   const apiCallParameters = abi.decode(templateParameters);
 
   it('calls the api and returns the value', async () => {
@@ -28,7 +32,7 @@ describe('callApi', () => {
     const apiResponse = { data: { success: true, result: '723.392028' } };
     spy.mockResolvedValue(apiResponse);
 
-    let [logs, res] = await callApi(config, endpoint, apiCallParameters);
+    let [logs, res] = await callApi(interpolatedConfig, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(expect.arrayContaining([{ level: 'DEBUG', message: 'API value: 723392028' }]));
@@ -36,7 +40,7 @@ describe('callApi', () => {
     expect(res).toEqual(ethers.BigNumber.from(723392028));
     expect(spy).toHaveBeenCalledTimes(1);
 
-    [logs, res] = await callApi({ ...config, airnodeXpub }, endpoint, apiCallParameters);
+    [logs, res] = await callApi({ ...interpolatedConfig, airnodeXpub }, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(expect.arrayContaining([{ level: 'DEBUG', message: 'API value: 723392028' }]));
@@ -50,7 +54,7 @@ describe('callApi', () => {
 
     const apiResponse = { data: { success: true, result: '723.392028' } };
     spy.mockResolvedValueOnce(apiResponse);
-    const oisesWithoutType = config.ois.map((o) => ({
+    const oisesWithoutType = interpolatedConfig.ois.map((o) => ({
       ...o,
       endpoints: o.endpoints.map((e) => ({
         ...e,
@@ -58,7 +62,7 @@ describe('callApi', () => {
       })),
     }));
 
-    const [logs, res] = await callApi({ ...config, ois: oisesWithoutType }, endpoint, apiCallParameters);
+    const [logs, res] = await callApi({ ...interpolatedConfig, ois: oisesWithoutType }, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(
@@ -78,7 +82,7 @@ describe('callApi', () => {
       throw error;
     });
 
-    const [logs, res] = await callApi(config, endpoint, apiCallParameters);
+    const [logs, res] = await callApi(interpolatedConfig, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Unexpected error' }]));
