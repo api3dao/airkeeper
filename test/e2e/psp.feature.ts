@@ -10,8 +10,8 @@ import {
 } from '@api3/airnode-protocol-v1';
 import * as psp from '../../src/handlers/psp';
 import * as api from '../../src/api/call-api';
-import * as config from '../../src/config';
-import { buildAirnodeConfig, buildAirkeeperConfig, buildLocalConfigETH, buildLocalConfigBTC } from '../config/config';
+import * as configModule from '../../src/config';
+import { buildConfig, buildLocalConfigETH, buildLocalConfigBTC } from '../config/config';
 import { PROTOCOL_ID_PSP } from '../../src/constants';
 
 // Jest version 27 has a bug where jest.setTimeout does not work correctly inside describe or test blocks
@@ -27,8 +27,7 @@ process.env = Object.assign(process.env, {
   STAGE: 'dev',
 });
 
-const airnodeConfig = buildAirnodeConfig();
-const airkeeperConfig = buildAirkeeperConfig();
+const config = buildConfig();
 const localConfigETH = buildLocalConfigETH();
 
 const roles = {
@@ -188,50 +187,42 @@ describe('PSP', () => {
   });
 
   it('updates the beacons successfully', async () => {
-    jest
-      .spyOn(config, 'loadAirnodeConfig')
-      .mockImplementationOnce(() => airnodeConfig as any)
-      .mockImplementationOnce(() => airnodeConfig as any);
-    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    jest.spyOn(configModule, 'loadConfig').mockImplementation(() => config as any);
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
   });
 
   it('updates the beacons successfully after retrying a failed api call', async () => {
-    jest
-      .spyOn(config, 'loadAirnodeConfig')
-      .mockImplementationOnce(() => airnodeConfig as any)
-      .mockImplementationOnce(() => airnodeConfig as any);
-    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+    jest.spyOn(configModule, 'loadConfig').mockImplementation(() => config as any);
 
     const callApiSpy = jest.spyOn(api, 'callApi');
     callApiSpy.mockRejectedValueOnce(new Error('Api call failed'));
 
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
   });
 
   it('updates the beacons successfully with one invalid provider present', async () => {
-    jest.spyOn(config, 'loadAirnodeConfig').mockImplementation(
+    jest.spyOn(configModule, 'loadConfig').mockImplementation(
       () =>
         ({
-          ...airnodeConfig,
+          ...config,
           chains: [
-            ...airnodeConfig.chains,
+            ...config.chains,
             {
-              ...airnodeConfig.chains[0],
+              ...config.chains[0],
               providers: {
-                ...airnodeConfig.chains[0].providers,
+                ...config.chains[0].providers,
                 invalidProvider: {
                   url: 'http://invalid',
                 },
@@ -240,59 +231,48 @@ describe('PSP', () => {
           ],
         } as any)
     );
-    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig);
 
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
   });
 
   it('updates the beacon successfully with one invalid subscription present', async () => {
-    jest
-      .spyOn(config, 'loadAirnodeConfig')
-      .mockImplementationOnce(() => airnodeConfig as any)
-      .mockImplementationOnce(() => airnodeConfig as any);
-    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => ({
-      ...airkeeperConfig,
-      subscriptions: {
-        ...airkeeperConfig.subscriptions,
-        [subscriptionIdBTC]: {
-          ...airkeeperConfig.subscriptions[subscriptionIdBTC],
-          fulfillFunctionId: '0x206b48fa', // invalid fulfillFunctionId
-        },
-      },
-    }));
+    jest.spyOn(configModule, 'loadConfig').mockImplementation(
+      () =>
+        ({
+          ...config,
+          subscriptions: {
+            ...config.subscriptions,
+            [subscriptionIdBTC]: {
+              ...config.subscriptions[subscriptionIdBTC],
+              fulfillFunctionId: '0x206b48fa', // invalid fulfillFunctionId
+            },
+          },
+        } as any)
+    );
 
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(null);
   });
 
-  it('throws on invalid airnode config', async () => {
+  it('throws on invalid config', async () => {
     mockReadFileSync(
-      'config.json',
+      'airkeeper.json',
       JSON.stringify({
-        ...airnodeConfig,
-        nodeSettings: { ...airnodeConfig.nodeSettings, airnodeWalletMnemonic: null },
+        ...config,
+        nodeSettings: { ...config.nodeSettings, airnodeWalletMnemonic: null },
       })
     );
-    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
-
-    await expect(psp.handler).rejects.toThrow('Invalid Airnode configuration file');
-  });
-
-  it('throws on invalid airkeeper config', async () => {
-    jest.spyOn(config, 'loadAirnodeConfig').mockImplementationOnce(() => airnodeConfig as any);
-    mockReadFileSync('airkeeper.json', JSON.stringify({ ...airkeeperConfig, airnodeAddress: null }));
-
     await expect(psp.handler).rejects.toThrow('Invalid Airkeeper configuration file');
   });
 });
