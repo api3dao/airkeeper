@@ -1,7 +1,9 @@
 import fs from 'fs';
 import template from 'lodash/template';
+import * as airnodeValidator from '@api3/airnode-validator';
+import merge from 'lodash/merge';
 import { z } from 'zod';
-import { configSchema } from './validator';
+import { Config, configSchema } from './validator';
 
 type Secrets = Record<string, string | undefined>;
 
@@ -39,8 +41,22 @@ export const parseSecrets = (secrets: unknown) => {
 };
 
 export const parseConfig = (config: unknown) => {
+  // Parse and validate Airnode config
+  const airnodeValidationResult = airnodeValidator.parseConfig(config);
+  if (!airnodeValidationResult.success) {
+    return airnodeValidationResult;
+  }
+
+  // Parse and validate Airkeeper config
   const parseConfigRes = configSchema.safeParse(config);
-  return parseConfigRes;
+  if (!parseConfigRes.success) {
+    return parseConfigRes;
+  }
+
+  return {
+    success: true,
+    data: merge(airnodeValidationResult.data, parseConfigRes.data),
+  } as z.SafeParseSuccess<Config>;
 };
 
 // Regular expression that does not match anything, ensuring no escaping or interpolation happens
