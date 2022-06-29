@@ -80,7 +80,7 @@ async function main() {
   console.log('🆔 ~ templateId', templateId);
 
   // Subscriptions
-  const threshold = (await dapiServer.HUNDRED_PERCENT()).div(config.threshold); // Update threshold %
+  const threshold = (await dapiServer.HUNDRED_PERCENT()).mul(config.threshold).div(100); // Update threshold %
   console.log('📄 ~ threshold', threshold.toString());
   const beaconUpdateSubscriptionConditionParameters = ethers.utils.defaultAbiCoder.encode(['uint256'], [threshold]);
   console.log('📄 ~ beaconUpdateSubscriptionConditionParameters', beaconUpdateSubscriptionConditionParameters);
