@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as abi from '@api3/airnode-abi';
 import * as utils from '@api3/airnode-utilities';
 import * as promise from '@api3/promise-utils';
@@ -5,40 +6,33 @@ import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
-import { spawn } from '../workers';
-import { initializeEvmState } from '../evm';
 import { callApi } from '../api/call-api';
-import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
+import { loadConfig } from '../config';
+import { initializeEvmState } from '../evm';
 import { buildLogOptions } from '../logger';
 import {
   CallApiResult,
   CheckedSubscription,
-  Config,
   EVMBaseState,
   GroupedSubscriptions,
   Id,
   ProviderState,
   State,
 } from '../types';
-import { Subscription } from '../validator';
+import { Config, Subscription } from '../validator';
+import { spawn } from '../workers';
 
 export const handler = async (_event: any = {}): Promise<any> => {
   const startedAt = new Date();
-
-  const airnodeConfig = promise.goSync(loadAirnodeConfig);
-  if (!airnodeConfig.success) {
-    utils.logger.error(airnodeConfig.error.message);
-    throw airnodeConfig.error;
+  const config: promise.GoResult<Config> = promise.goSync(() =>
+    loadConfig(path.join(__dirname, '..', '..', 'config', 'airkeeper.json'), process.env)
+  );
+  if (!config.success) {
+    utils.logger.error(config.error.message);
+    throw config.error;
   }
-  // This file will be merged with config.json from above
-  const airkeeperConfig = promise.goSync(loadAirkeeperConfig);
-  if (!airkeeperConfig.success) {
-    utils.logger.error(airkeeperConfig.error.message);
-    throw airkeeperConfig.error;
-  }
-  const config = mergeConfigs(airnodeConfig.data, airkeeperConfig.data);
 
-  const state = await updateBeacon(config);
+  const state = await updateBeacon(config.data);
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());

@@ -1,18 +1,28 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import fs from 'fs';
+import path from 'path';
 import { ZodError } from 'zod';
 import { configSchema, validateConfig } from './validator';
+import { interpolateSecrets } from '../config';
+
+const envVariables = {
+  AIRNODE_WALLET_MNEMONIC: 'achieve climb couple wait accident symbol spy blouse reduce foil echo label',
+  PROVIDER_URL: 'https://some.self.hosted.mainnet.url',
+  SS_CURRENCY_CONVERTER_API_KEY: '18e06827-8544-4b0f-a639-33df3b5bc62f',
+};
 
 describe('validator', () => {
-  const airkeeperConfig = JSON.parse(readFileSync(join(__dirname, '../../config/airkeeper.example.json')).toString());
+  const config = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '../../', 'config', 'airkeeper.example.json'), 'utf8')
+  );
+  const interpolatedConfig = interpolateSecrets(config, envVariables);
 
   describe('basic zod parsing', () => {
     it('successfully parses config.json specs', () => {
-      expect(() => configSchema.parse(airkeeperConfig)).not.toThrow();
+      expect(() => configSchema.parse(interpolatedConfig)).not.toThrow();
     });
 
     it('throws on missing fields', () => {
-      const { airnodeAddress, ...rest } = airkeeperConfig;
+      const { airnodeAddress, ...rest } = interpolatedConfig;
       expect(typeof airnodeAddress).toEqual('string');
       expect(() => configSchema.parse(rest)).toThrow(
         new ZodError([
@@ -28,7 +38,7 @@ describe('validator', () => {
     });
 
     it('throws on incorrect type', () => {
-      const { airnodeAddress, ...rest } = airkeeperConfig;
+      const { airnodeAddress, ...rest } = interpolatedConfig;
       expect(typeof airnodeAddress).toEqual('string');
       expect(() => configSchema.parse({ airnodeAddress: 100, ...rest })).toThrow(
         new ZodError([
@@ -46,12 +56,12 @@ describe('validator', () => {
 
   describe('validateConfig', () => {
     it('validates successfully', () => {
-      expect(() => validateConfig(airkeeperConfig)).not.toThrow();
-      expect(validateConfig(airkeeperConfig)).toEqual({ success: true, data: airkeeperConfig });
+      expect(() => validateConfig(interpolatedConfig)).not.toThrow();
+      expect(validateConfig(interpolatedConfig)).toEqual({ success: true, data: interpolatedConfig });
     });
 
     it('does not throw on missing field', () => {
-      const { airnodeAddress, ...rest } = airkeeperConfig;
+      const { airnodeAddress, ...rest } = interpolatedConfig;
       expect(typeof airnodeAddress).toEqual('string');
 
       expect(() => validateConfig(rest)).not.toThrow();
@@ -70,7 +80,7 @@ describe('validator', () => {
     });
 
     it('does not throw on incorrect type', () => {
-      const { airnodeAddress, ...rest } = airkeeperConfig;
+      const { airnodeAddress, ...rest } = interpolatedConfig;
       expect(typeof airnodeAddress).toEqual('string');
 
       expect(() => validateConfig({ airnodeAddress: 100 as any, ...rest })).not.toThrow();

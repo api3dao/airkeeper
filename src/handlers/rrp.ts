@@ -1,8 +1,9 @@
+import * as path from 'path';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
 import * as utils from '@api3/airnode-utilities';
-import { go, goSync } from '@api3/promise-utils';
+import * as promise from '@api3/promise-utils';
 import { ethers } from 'ethers';
 import flatMap from 'lodash/flatMap';
 import groupBy from 'lodash/groupBy';
@@ -10,10 +11,11 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
-import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, TIMEOUT_MS, RETRIES } from '../constants';
-import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
+import { loadConfig } from '../config';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, RETRIES, TIMEOUT_MS } from '../constants';
 import { buildLogOptions } from '../logger';
-import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
+import { LogsAndApiValuesByBeaconId } from '../types';
+import { ChainConfig, Config } from '../validator';
 import { shortenAddress } from '../wallet';
 
 type ApiValueByBeaconId = {
@@ -26,35 +28,31 @@ export const handler = async (_event: any = {}): Promise<any> => {
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
-  const airnodeConfig = goSync(loadAirnodeConfig);
-  if (!airnodeConfig.success) {
-    utils.logger.error(airnodeConfig.error.message);
-    throw airnodeConfig.error;
+  const goConfig: promise.GoResult<Config> = promise.goSync(() =>
+    loadConfig(path.join(__dirname, '..', '..', 'config', 'airkeeper.json'), process.env)
+  );
+  if (!goConfig.success) {
+    utils.logger.error(goConfig.error.message);
+    throw goConfig.error;
   }
-  // This file will be merged with config.json from above
-  const airkeeperConfig = goSync(loadAirkeeperConfig);
-  if (!airkeeperConfig.success) {
-    utils.logger.error(airkeeperConfig.error.message);
-    throw airkeeperConfig.error;
-  }
+  const { data: config } = goConfig;
 
-  const baseLogOptions = utils.buildBaseOptions(airnodeConfig.data, {
+  const baseLogOptions = utils.buildBaseOptions(config, {
     coordinatorId: utils.randomHexString(8),
   });
   utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const config = mergeConfigs(airnodeConfig.data, airkeeperConfig.data);
-  const { chains, triggers, endpoints } = config;
+  const { airnodeAddress, airnodeXpub, chains, nodeSettings, triggers, endpoints } = config;
 
-  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(config.nodeSettings.airnodeWalletMnemonic);
-  const airnodeAddress = (
-    airkeeperConfig.data.airnodeXpub
-      ? ethers.utils.HDNode.fromExtendedKey(airkeeperConfig.data.airnodeXpub).derivePath('0/0')
+  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
+  const derivedAirnodeAddress = (
+    airnodeXpub
+      ? ethers.utils.HDNode.fromExtendedKey(airnodeXpub).derivePath('0/0')
       : airnodeHDNode.derivePath(ethers.utils.defaultPath)
   ).address;
 
-  if (airkeeperConfig.data.airnodeAddress && airkeeperConfig.data.airnodeAddress !== airnodeAddress) {
-    throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
+  if (airnodeAddress && airnodeAddress !== derivedAirnodeAddress) {
+    throw new Error(`xpub does not belong to Airnode: ${derivedAirnodeAddress}`);
   }
 
   // **************************************************************************
@@ -63,7 +61,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
   utils.logger.debug('making API requests...', baseLogOptions);
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
-    go(
+    promise.go(
       async () => {
         const { oisTitle, endpointName } = endpoints[endpointId];
 
@@ -82,7 +80,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
         // Verify templateId
         const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
-          airnodeAddress,
+          airnodeAddress: derivedAirnodeAddress,
           endpointId: expectedEndpointId,
           encodedParameters,
         });
@@ -149,7 +147,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
         const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(chain.contracts.RrpBeaconServer!, provider);
 
         // Fetch current block number from chain via provider
-        const currentBlock = await go(() => provider.getBlockNumber(), {
+        const currentBlock = await promise.go(() => provider.getBlockNumber(), {
           attemptTimeoutMs: TIMEOUT_MS,
           retries: RETRIES,
         });
@@ -191,7 +189,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
           // **************************************************************************
           utils.logger.debug('fetching transaction count...', keeperSponsorWalletLogOptions);
 
-          const keeperSponsorWalletTransactionCount = await go(
+          const keeperSponsorWalletTransactionCount = await promise.go(
             () => provider.getTransactionCount(keeperSponsorWallet.address, currentBlock.data),
             { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
           );
@@ -274,7 +272,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
             // address(0) is considered whitelisted
             const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
-            const beaconResponse = await go(() => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId), {
+            const beaconResponse = await promise.go(() => rrpBeaconServer.connect(voidSigner).readBeacon(beaconId), {
               attemptTimeoutMs: TIMEOUT_MS,
               retries: RETRIES,
             });
@@ -334,7 +332,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               requestSponsor,
               keeperSponsorWallet.address
             );
-            const requestedBeaconUpdateEvents = await go(
+            const requestedBeaconUpdateEvents = await promise.go(
               () => rrpBeaconServer.queryFilter(requestedBeaconUpdateFilter, blockHistoryLimit * -1, currentBlock.data),
               { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
@@ -348,7 +346,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
 
             // Fetch UpdatedBeacon events by beaconId
             const updatedBeaconFilter = rrpBeaconServer.filters.UpdatedBeacon(beaconId);
-            const updatedBeaconEvents = await go(
+            const updatedBeaconEvents = await promise.go(
               () => rrpBeaconServer.queryFilter(updatedBeaconFilter, blockHistoryLimit * -1, currentBlock.data),
               { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
@@ -366,7 +364,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
             );
             if (!isNil(pendingRequestedBeaconUpdateEvent)) {
               // Check if RequestedBeaconUpdate event is awaiting fulfillment by calling AirnodeRrp.requestIsAwaitingFulfillment with requestId and check if beacon value is fresh enough and skip if it is
-              const requestIsAwaitingFulfillment = await go(
+              const requestIsAwaitingFulfillment = await promise.go(
                 () => airnodeRrp.requestIsAwaitingFulfillment(pendingRequestedBeaconUpdateEvent.args!['requestId']),
                 { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
               );
@@ -417,7 +415,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
               ...gasTarget,
               nonce,
             };
-            const tx = await go(
+            const tx = await promise.go(
               () =>
                 rrpBeaconServer
                   .connect(keeperSponsorWallet)

@@ -1,8 +1,7 @@
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
-import { Config } from '../types';
-import { Endpoint } from '../validator';
+import { Config, Endpoint } from '../validator';
 
 export const callApi = async (
   config: Config,
