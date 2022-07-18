@@ -1,8 +1,8 @@
-import { mockReadFileSync } from '../mock-utils';
-import { ContractFactory, Contract } from 'ethers';
+import fs from 'fs';
 import * as hre from 'hardhat';
 import * as abi from '@api3/airnode-abi';
 import * as node from '@api3/airnode-node';
+import { ethers } from 'ethers';
 import {
   AccessControlRegistry__factory as AccessControlRegistryFactory,
   AirnodeProtocol__factory as AirnodeProtocolFactory,
@@ -38,7 +38,7 @@ const roles = {
   randomPerson: new hre.ethers.Wallet(localConfigETH.privateKeys.randomPerson).connect(provider),
 };
 
-const readBeaconValue = async (airnodeAddress: string, templateId: string, dapiServer: Contract) => {
+const readBeaconValue = async (airnodeAddress: string, templateId: string, dapiServer: ethers.Contract) => {
   const voidSigner = new hre.ethers.VoidSigner(hre.ethers.constants.AddressZero, provider);
   const beaconId = hre.ethers.utils.keccak256(
     hre.ethers.utils.solidityPack(['address', 'bytes32'], [airnodeAddress, templateId])
@@ -52,12 +52,12 @@ const readBeaconValue = async (airnodeAddress: string, templateId: string, dapiS
 };
 
 describe('PSP', () => {
-  let accessControlRegistryFactory: ContractFactory;
-  let accessControlRegistry: Contract;
-  let airnodeProtocolFactory: ContractFactory;
-  let airnodeProtocol: Contract;
-  let dapiServerFactory: ContractFactory;
-  let dapiServer: Contract;
+  let accessControlRegistryFactory: ethers.ContractFactory;
+  let accessControlRegistry: ethers.Contract;
+  let airnodeProtocolFactory: ethers.ContractFactory;
+  let airnodeProtocol: ethers.Contract;
+  let dapiServerFactory: ethers.ContractFactory;
+  let dapiServer: ethers.Contract;
   let templateIdETH: string;
   let templateIdBTC: string;
 
@@ -297,18 +297,42 @@ describe('PSP', () => {
   });
 
   it('throws on invalid airnode config', async () => {
-    mockReadFileSync(
-      'config.json',
-      JSON.stringify({
-        ...airnodeConfig,
-        nodeSettings: { ...airnodeConfig.nodeSettings, airnodeWalletMnemonic: null },
-      })
-    );
+    jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
+
+    const originalFs = fs.readFileSync;
+    jest.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+      const path = args[0].toString();
+      if (path.includes('config.json')) {
+        return JSON.stringify({
+          ...airnodeConfig,
+          nodeSettings: { ...airnodeConfig.nodeSettings, airnodeWalletMnemonic: null },
+        });
+      } else if (path.includes('secrets.env')) {
+        return 'AIRNODE_WALLET_MNEMONIC=achieve climb couple wait accident symbol spy blouse reduce foil echo label\n \
+        PROVIDER_URL=http://127.0.0.1:8545\n \
+        SS_CURRENCY_CONVERTER_API_KEY=<enter your API key>';
+      }
+      return originalFs(...args);
+    });
+
     await expect(psp.handler).rejects.toThrow('Invalid Airnode configuration file');
   });
 
   it('throws on invalid airkeeper config', async () => {
-    mockReadFileSync('airkeeper.json', JSON.stringify({ ...airkeeperConfig, airnodeAddress: null }));
+    jest.spyOn(config, 'loadAirnodeConfig').mockImplementationOnce(() => airnodeConfig as any);
+
+    const originalFs = fs.readFileSync;
+    jest.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
+      const path = args[0].toString();
+      if (path.includes('airkeeper.json')) {
+        return JSON.stringify({ ...airkeeperConfig, airnodeAddress: null });
+      } else if (path.includes('secrets.env')) {
+        return 'AIRNODE_WALLET_MNEMONIC=achieve climb couple wait accident symbol spy blouse reduce foil echo label\n \
+        PROVIDER_URL=http://127.0.0.1:8545\n \
+        SS_CURRENCY_CONVERTER_API_KEY=<enter your API key>';
+      }
+      return originalFs(...args);
+    });
     await expect(psp.handler).rejects.toThrow('Invalid Airkeeper configuration file');
   });
 });
