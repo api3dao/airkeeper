@@ -9,7 +9,7 @@ There are two different lambda functions that can be used to update the beacon v
 
 1. `rrp-beacon-update` uses the
    [RrpBeaconServer](https://github.com/api3dao/airnode/blob/v0.4/packages/airnode-protocol/contracts/rrp/requesters/RrpBeaconServer.sol)
-   contract from airnode-protocol v0.4. See [Beacons](https://docs.api3.org/beacon/v0.1/functions/)
+   contract from airnode-protocol v0.4.
 
    This function will fetch the API values for all triggers set in the `airkeeper.json` file, read current the beacon
    value in RrpBeaconServer and update it if the API value is not within the threshold (also defined in the
