@@ -304,12 +304,10 @@ describe('PSP', () => {
         nodeSettings: { ...airnodeConfig.nodeSettings, airnodeWalletMnemonic: null },
       })
     );
-    mockReadFileSync('airkeeper.json', JSON.stringify(airkeeperConfig));
     await expect(psp.handler).rejects.toThrow('Invalid Airnode configuration file');
   });
 
   it('throws on invalid airkeeper config', async () => {
-    mockReadFileSync('config.json', JSON.stringify(airnodeConfig));
     mockReadFileSync('airkeeper.json', JSON.stringify({ ...airkeeperConfig, airnodeAddress: null }));
     await expect(psp.handler).rejects.toThrow('Invalid Airkeeper configuration file');
   });

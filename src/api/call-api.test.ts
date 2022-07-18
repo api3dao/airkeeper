@@ -26,8 +26,8 @@ describe('callApi', () => {
     throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
   }
   const endpoint = airkeeperConfig.endpoints[Object.keys(airkeeperConfig.endpoints)[0]];
-  const templateId = Object.keys(airkeeperConfig.templates)[0];
-  const templateParameters = airkeeperConfig.templates[templateId].templateParameters;
+  const templateId = Object.keys(airkeeperConfig.templatesV1)[0];
+  const templateParameters = airkeeperConfig.templatesV1[templateId].encodedParameters;
   const apiCallParameters = abi.decode(templateParameters);
 
   it('calls the api and returns the value', async () => {

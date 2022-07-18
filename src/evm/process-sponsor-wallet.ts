@@ -9,7 +9,7 @@ import { CheckedSubscription } from '../types';
 export const processSponsorWallet = async (
   airnodeWallet: ethers.Wallet,
   contract: ethers.Contract,
-  gasTarget: node.GasTarget,
+  gasTarget: utils.GasTarget,
   subscriptions: CheckedSubscription[],
   sponsorWallet: ethers.Wallet,
   voidSigner: ethers.VoidSigner,

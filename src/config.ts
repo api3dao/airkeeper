@@ -1,14 +1,18 @@
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
 import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
 import { AirkeeperConfig, validateConfig } from './validator';
 
 export const loadAirnodeConfig = () => {
+  const rawSecrets = fs.readFileSync(path.resolve(__dirname, '..', 'config', 'secrets.env'));
+  const secrets = dotenv.parse(rawSecrets);
+
   // This file must be the same as the one used by the @api3/airnode-node
   const nodeConfigPath = path.resolve(__dirname, '..', 'config', `config.json`);
-  return node.config.loadConfig(nodeConfigPath, process.env);
+  return node.config.loadConfig(nodeConfigPath, secrets);
 };
 
 export const loadAirkeeperConfig = () => {
@@ -38,7 +42,7 @@ export const mergeConfigs = (airnodeConfig: node.Config, airkeeperConfig: Airkee
     }),
     triggers: { ...airnodeConfig.triggers, ...airkeeperConfig.triggers },
     subscriptions: airkeeperConfig.subscriptions,
-    templates: airkeeperConfig.templates,
+    templatesV1: airkeeperConfig.templatesV1,
     endpoints: airkeeperConfig.endpoints,
   };
 };

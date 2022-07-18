@@ -14,8 +14,7 @@ import {
 } from './validator';
 
 export interface ChainConfig extends node.ChainConfig {
-  readonly contracts: node.ChainContracts & AirkeeperChainContracts;
-  readonly options: node.ChainOptions;
+  readonly contracts: node.ChainConfig['contracts'] & AirkeeperChainContracts;
 }
 
 export interface Config extends node.Config {
@@ -24,7 +23,7 @@ export interface Config extends node.Config {
   readonly chains: (ChainConfig & AirkeeperChainConfig)[];
   readonly triggers: node.Triggers & Triggers;
   readonly subscriptions: Subscriptions;
-  readonly templates: Templates;
+  readonly templatesV1: Templates;
   readonly endpoints: Endpoints;
 }
 
@@ -54,7 +53,7 @@ export type ProviderState<T extends {}> = T & {
 
 export interface EVMBaseState {
   currentBlock: number;
-  gasTarget: node.GasTarget;
+  gasTarget: utils.GasTarget;
 }
 
 export interface EVMProviderState extends EVMBaseState {

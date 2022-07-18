@@ -31,9 +31,7 @@ RUN git clone --single-branch --branch ${branch} ${repository} ${buildDir}
 # Production dependencies
 FROM source${build} AS deps
 
-RUN yarn install
-# TODO add back after Airnode 0.6 is released 
-# --production --no-optional --ignore-scripts
+RUN yarn install --production --no-optional --ignore-scripts
 
 FROM source${build} AS build
 

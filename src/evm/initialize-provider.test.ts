@@ -23,6 +23,7 @@ describe('initializeEvmState', () => {
       txType: 'eip1559',
       baseFeeMultiplier: 2,
       priorityFee: { value: 3.12, unit: 'gwei' },
+      fulfillmentGasLimit: 500_000,
     },
   };
 
@@ -40,6 +41,7 @@ describe('initializeEvmState', () => {
           txType,
           baseFeeMultiplier: 2,
           priorityFee: { value: 3.12, unit: 'gwei' },
+          fulfillmentGasLimit: 500_000,
         },
       },
       providerUrl
@@ -145,10 +147,11 @@ describe('initializeEvmState', () => {
 const createAndMockGasTarget = (txType: 'legacy' | 'eip1559') => {
   const gasPriceSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getGasPrice');
   const blockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
+  const gasLimit = ethers.BigNumber.from(500_000);
   if (txType === 'legacy') {
-    const gasPrice = ethers.BigNumber.from(1000);
+    const gasPrice = ethers.BigNumber.from(1_000);
     gasPriceSpy.mockResolvedValue(gasPrice);
-    return { gasTarget: { gasPrice }, blockSpy, gasPriceSpy };
+    return { gasTarget: { type: 0, gasPrice, gasLimit }, blockSpy, gasPriceSpy };
   }
 
   const baseFeePerGas = ethers.BigNumber.from(1000);
@@ -156,5 +159,9 @@ const createAndMockGasTarget = (txType: 'legacy' | 'eip1559') => {
   const maxPriorityFeePerGas = ethers.BigNumber.from(PRIORITY_FEE_IN_WEI);
   const maxFeePerGas = baseFeePerGas.mul(BASE_FEE_MULTIPLIER).add(maxPriorityFeePerGas);
 
-  return { gasTarget: { maxPriorityFeePerGas, maxFeePerGas }, blockSpy, gasPriceSpy };
+  return {
+    gasTarget: { type: 2, maxPriorityFeePerGas, maxFeePerGas, gasLimit },
+    blockSpy,
+    gasPriceSpy,
+  };
 };
