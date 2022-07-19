@@ -1,24 +1,27 @@
 import fs from 'fs';
 import path from 'path';
-import dotenv from 'dotenv';
-import * as node from '@api3/airnode-node';
 import isNil from 'lodash/isNil';
 import merge from 'lodash/merge';
+import * as node from '@api3/airnode-node';
+import * as nodeValidator from '@api3/airnode-validator';
 import { AirkeeperConfig, validateConfig } from './validator';
 
 export const loadAirnodeConfig = () => {
-  const rawSecrets = fs.readFileSync(path.resolve(__dirname, '..', 'config', 'secrets.env'));
-  const secrets = dotenv.parse(rawSecrets);
-
   // This file must be the same as the one used by the @api3/airnode-node
-  const nodeConfigPath = path.resolve(__dirname, '..', 'config', `config.json`);
-  return node.config.loadConfig(nodeConfigPath, secrets);
+  const configPath = path.resolve(__dirname, '..', 'config', `config.json`);
+  const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  const config = nodeValidator.unsafeParseConfigWithSecrets(rawConfig, process.env);
+  const parsedConfigRes = nodeValidator.parseConfig(config);
+  if (!parsedConfigRes.success) {
+    throw new Error(`Invalid Airnode configuration file: ${parsedConfigRes.error}`);
+  }
+
+  return parsedConfigRes.data;
 };
 
 export const loadAirkeeperConfig = () => {
   const configPath = path.resolve(__dirname, '..', 'config', `airkeeper.json`);
   const airkeeperConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
   const validationOutput = validateConfig(airkeeperConfig);
   if (!validationOutput.success) {
     throw new Error(`Invalid Airkeeper configuration file: ${JSON.stringify(validationOutput.error, null, 2)}`);

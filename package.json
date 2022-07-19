@@ -23,7 +23,6 @@
     "*.js"
   ],
   "scripts": {
-    "postinstall": "rm -f hardhat.config.ts; cp -a test/hardhat.config.ts ./;",
     "build": "yarn clean && yarn compile:build",
     "clean": "rimraf -rf ./dist *.tgz",
     "compile": "tsc -p tsconfig.json",
@@ -32,7 +31,7 @@
     "dev:list": "pm2 list",
     "dev:stop": "pm2 stop ecosystem.config.js",
     "dev:delete": "pm2 delete all",
-    "dev:eth-node": "hardhat node --config test/hardhat.config.ts",
+    "dev:eth-node": "hardhat node --config hardhat.config.ts",
     "dev:api": "ts-node test/server/server.ts",
     "dev:background": "yarn run dev:clean && pm2 start ecosystem.config.js",
     "docker": "docker build -t api3/airkeeper .",

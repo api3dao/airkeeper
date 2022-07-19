@@ -23,10 +23,6 @@ aws.env
 **/secrets.env
 **/psp-beacon-local.json
 
-# Temporarily add airnode for unpublished changes
-airnode
-/hardhat.config.ts
-
 # Hardhat files
 cache
 
