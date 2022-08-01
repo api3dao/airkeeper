@@ -110,7 +110,7 @@ const initializeState = (config: Config): State => {
   const groupedSubscriptions = Object.keys(enabledSubscriptionsByTemplateId).reduce(
     (acc: GroupedSubscriptions[], templateId) => {
       // Get template details
-      const template = config.templates[templateId];
+      const template = config.templatesV1[templateId];
       if (isNil(template)) {
         utils.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
         return acc;
@@ -118,7 +118,7 @@ const initializeState = (config: Config): State => {
       // Verify templateId
       const expectedTemplateId = ethers.utils.solidityKeccak256(
         ['bytes32', 'bytes'],
-        [template.endpointId, template.templateParameters]
+        [template.endpointId, template.encodedParameters]
       );
       if (expectedTemplateId !== templateId) {
         utils.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
@@ -201,7 +201,7 @@ const initializeEvmStates = async (state: State): Promise<State> => {
 const executeApiCalls = async (state: State): Promise<State> => {
   const { config, baseLogOptions, groupedSubscriptions } = state;
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
-    const apiCallParameters = abi.decode(template.templateParameters);
+    const apiCallParameters = abi.decode(template.encodedParameters);
 
     const infiniteRetries = 100_000;
     const goResult = await promise.go(() => callApi(config, endpoint, apiCallParameters), {

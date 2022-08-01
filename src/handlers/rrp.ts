@@ -81,7 +81,7 @@ export const handler = async (_event: any = {}): Promise<any> => {
         }
 
         // Verify templateId
-        const expectedTemplateId = node.evm.templates.getExpectedTemplateId({
+        const expectedTemplateId = node.evm.templates.getExpectedTemplateIdV0({
           airnodeAddress,
           endpointId: expectedEndpointId,
           encodedParameters,
@@ -144,9 +144,9 @@ export const handler = async (_event: any = {}): Promise<any> => {
         const chainProviderUrl = chainProvider.url || '';
         const provider = node.evm.buildEVMProvider(chainProviderUrl, chain.id);
 
-        const airnodeRrp = protocol.AirnodeRrpFactory.connect(chain.contracts.AirnodeRrp, provider);
+        const airnodeRrp = protocol.AirnodeRrpV0Factory.connect(chain.contracts.AirnodeRrp, provider);
 
-        const rrpBeaconServer = protocol.RrpBeaconServerFactory.connect(chain.contracts.RrpBeaconServer!, provider);
+        const rrpBeaconServer = protocol.RrpBeaconServerV0Factory.connect(chain.contracts.RrpBeaconServer!, provider);
 
         // Fetch current block number from chain via provider
         const currentBlock = await go(() => provider.getBlockNumber(), {

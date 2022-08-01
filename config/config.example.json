@@ -19,7 +19,8 @@
         "priorityFee": {
           "value": 3.12,
           "unit": "gwei"
-        }
+        },
+        "fulfillmentGasLimit": 500000
       }
     }
   ],
@@ -36,7 +37,7 @@
     },
     "logFormat": "plain",
     "logLevel": "INFO",
-    "nodeVersion": "0.5.0",
+    "nodeVersion": "0.7.2",
     "cloudProvider": {
       "type": "local"
     },
@@ -65,6 +66,7 @@
       }
     ]
   },
+  "templates": [],
   "ois": [
     {
       "oisFormat": "1.0.0",
@@ -91,10 +93,6 @@
                 {
                   "in": "query",
                   "name": "amount"
-                },
-                {
-                  "in": "query",
-                  "name": "date"
                 }
               ]
             }

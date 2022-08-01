@@ -10,7 +10,7 @@ const originalFs = fs.readFileSync;
  * and otherwise returns the original content.
  */
 export const mockReadFileSync = (filePathSubstr: string, mockValue: string) => {
-  return jest.spyOn(fs, 'readFileSync').mockImplementationOnce((...args) => {
+  return jest.spyOn(fs, 'readFileSync').mockImplementation((...args) => {
     const path = args[0].toString();
     if (path.includes(filePathSubstr)) {
       return mockValue;

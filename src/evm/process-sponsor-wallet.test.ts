@@ -35,6 +35,7 @@ const conditionPspBeaconUpdateMock = (
 ) => Promise.resolve([true]);
 
 const gasTarget = {
+  type: 2,
   maxPriorityFeePerGas: ethers.BigNumber.from(3120000000),
   maxFeePerGas: ethers.BigNumber.from(3866792752),
 };

@@ -7,7 +7,7 @@ module.exports = {
     },
     {
       name: 'ethereum-node',
-      script: 'hardhat node --config test/hardhat.config.ts',
+      script: 'hardhat node',
     },
   ],
 };

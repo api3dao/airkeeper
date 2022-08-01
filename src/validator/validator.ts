@@ -33,7 +33,7 @@ export const subscriptionsSchema = z.record(subscriptionSchema);
 
 export const templateSchema = z.object({
   endpointId: z.string(),
-  templateParameters: z.string(),
+  encodedParameters: z.string(),
 });
 
 export const templatesSchema = z.record(templateSchema);
@@ -63,7 +63,7 @@ export const configSchema = z.object({
   chains: chainsSchema,
   triggers: triggersSchema,
   subscriptions: subscriptionsSchema,
-  templates: templatesSchema,
+  templatesV1: templatesSchema,
   endpoints: endpointsSchema,
 });
 

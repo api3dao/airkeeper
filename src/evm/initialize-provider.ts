@@ -13,7 +13,7 @@ export const initializeProvider = async (airnodeWalletMnemonic: string, provider
   const provider = node.evm.buildEVMProvider(providerState.providerUrl, providerState.chainId);
 
   const abis: { [contractName: string]: ethers.ContractInterface } = {
-    RrpBeaconServer: protocol.RrpBeaconServerFactory.abi,
+    RrpBeaconServer: protocol.RrpBeaconServerV0Factory.abi,
     DapiServer: DapiServerFactory.abi,
   };
   const contracts = Object.entries(providerState.chainConfig.contracts).reduce(

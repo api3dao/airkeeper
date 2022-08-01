@@ -23,7 +23,6 @@
     "*.js"
   ],
   "scripts": {
-    "postinstall": "rm -f hardhat.config.ts; rm -rf airnode; git clone https://github.com/api3dao/airnode.git airnode; cd airnode && git checkout 994d895f37ca871f57224ac1603ea58e79ef071e && yarn run bootstrap && yarn build && cd ..; cp -a airnode/node_modules/@api3/airnode-node/. node_modules/@api3/airnode-node; cp -a test/hardhat.config.ts ./; rm -rf airnode",
     "build": "yarn clean && yarn compile:build",
     "clean": "rimraf -rf ./dist *.tgz",
     "compile": "tsc -p tsconfig.json",
@@ -32,7 +31,7 @@
     "dev:list": "pm2 list",
     "dev:stop": "pm2 stop ecosystem.config.js",
     "dev:delete": "pm2 delete all",
-    "dev:eth-node": "hardhat node --config test/hardhat.config.ts",
+    "dev:eth-node": "hardhat node --config hardhat.config.ts",
     "dev:api": "ts-node test/server/server.ts",
     "dev:background": "yarn run dev:clean && pm2 start ecosystem.config.js",
     "docker": "docker build -t api3/airkeeper .",
@@ -53,13 +52,13 @@
     "prepare": "husky install"
   },
   "dependencies": {
-    "@api3/airnode-abi": "^0.5.0",
-    "@api3/airnode-adapter": "^0.5.0",
-    "@api3/airnode-node": "^0.5.0",
-    "@api3/airnode-protocol": "^0.5.0",
-    "@api3/airnode-protocol-v1": "^0.1.0",
-    "@api3/airnode-utilities": "^0.5.0",
-    "@api3/promise-utils": "^0.2.0",
+    "@api3/airnode-abi": "^0.7.2",
+    "@api3/airnode-adapter": "^0.7.2",
+    "@api3/airnode-node": "^0.7.2",
+    "@api3/airnode-protocol": "^0.7.2",
+    "@api3/airnode-protocol-v1": "^0.6.0",
+    "@api3/airnode-utilities": "^0.7.2",
+    "@api3/promise-utils": "^0.3.0",
     "aws-sdk": "^2.1101.0",
     "dotenv-safe": "^8.2.0",
     "ethers": "^5.6.0",
