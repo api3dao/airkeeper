@@ -58,6 +58,7 @@
     "@api3/airnode-protocol": "^0.7.2",
     "@api3/airnode-protocol-v1": "^0.6.0",
     "@api3/airnode-utilities": "^0.7.2",
+    "@api3/airnode-validator": "^0.7.2",
     "@api3/promise-utils": "^0.3.0",
     "aws-lambda": "^1.0.7",
     "aws-sdk": "^2.1101.0",

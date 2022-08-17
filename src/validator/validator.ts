@@ -1,4 +1,5 @@
 import * as airnodeValidator from '@api3/airnode-validator';
+import * as airnodeOis from '@api3/airnode-ois';
 import { RefinementCtx, z, ZodFirstPartySchemaTypes } from 'zod';
 
 export const templateParametersSchema = z.object({ type: z.string(), name: z.string(), value: z.string() });
@@ -16,7 +17,7 @@ export const rrpBeaconServerKeeperJobsTriggerSchema = z.object({
 // TODO: XOR?
 // either rrpBeaconServerKeeperJobs or protoPsp should be set
 // or maybe they both need to be optional 🤔
-export const triggersSchema = airnodeValidator.triggersSchema.extend({
+export const triggersSchema = airnodeValidator.config.triggersSchema.extend({
   rrpBeaconServerKeeperJobs: z.array(rrpBeaconServerKeeperJobsTriggerSchema),
   protoPsp: z.array(z.string()),
 });
@@ -49,27 +50,30 @@ export const endpointSchema = z.object({
 
 export const endpointsSchema = z.record(endpointSchema);
 
-export const chainContractsSchema = airnodeValidator.chainContractsSchema.extend({
+export const chainContractsSchema = airnodeValidator.config.chainContractsSchema.extend({
   RrpBeaconServer: z.string(),
   DapiServer: z.string(),
 });
 
-export const chainSchema = airnodeValidator.chainConfigSchema.extend({
+export const chainSchema = airnodeValidator.config.chainConfigSchema.extend({
   contracts: chainContractsSchema,
 });
 
 export const chainsSchema = z.array(chainSchema);
 
-export const configSchema = airnodeValidator.configSchema.extend({
+export const configSchema = z.object({
   airnodeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   airnodeXpub: z.string(),
   chains: chainsSchema,
+  nodeSettings: airnodeValidator.config.nodeSettingsSchema,
   triggers: triggersSchema,
+  templates: z.array(airnodeValidator.config.templateSchema),
   subscriptions: subscriptionsSchema,
   templatesV1: templatesSchema,
   endpoints: endpointsSchema,
+  ois: z.array(airnodeOis.oisSchema),
+  apiCredentials: z.array(airnodeValidator.config.apiCredentialsSchema),
 });
-
 export type SchemaType<Schema extends ZodFirstPartySchemaTypes> = z.infer<Schema>;
 export type ValidatorRefinement<T> = (arg: T, ctx: RefinementCtx) => void;
 

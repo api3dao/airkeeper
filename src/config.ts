@@ -1,7 +1,5 @@
 import fs from 'fs';
 import template from 'lodash/template';
-import * as airnodeValidator from '@api3/airnode-validator';
-import merge from 'lodash/merge';
 import { z } from 'zod';
 import { Config, configSchema } from './validator';
 
@@ -41,13 +39,6 @@ export const parseSecrets = (secrets: unknown) => {
 };
 
 export const parseConfig = (config: unknown) => {
-  // Parse and validate Airnode config
-  const airnodeValidationResult = airnodeValidator.parseConfig(config);
-  if (!airnodeValidationResult.success) {
-    return airnodeValidationResult;
-  }
-
-  // Parse and validate Airkeeper config
   const parseConfigRes = configSchema.safeParse(config);
   if (!parseConfigRes.success) {
     return parseConfigRes;
@@ -55,7 +46,7 @@ export const parseConfig = (config: unknown) => {
 
   return {
     success: true,
-    data: merge(airnodeValidationResult.data, parseConfigRes.data),
+    data: parseConfigRes.data,
   } as z.SafeParseSuccess<Config>;
 };
 

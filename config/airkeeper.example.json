@@ -23,7 +23,8 @@
         "priorityFee": {
           "value": 3.12,
           "unit": "gwei"
-        }
+        },
+        "fulfillmentGasLimit": 500000
       }
     }
   ],
@@ -40,7 +41,7 @@
     },
     "logFormat": "plain",
     "logLevel": "INFO",
-    "nodeVersion": "0.4.0",
+    "nodeVersion": "0.7.2",
     "cloudProvider": {
       "type": "local"
     },
@@ -87,6 +88,7 @@
     ],
     "protoPsp": ["0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e"]
   },
+  "templates": [],
   "subscriptions": {
     "0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e": {
       "chainId": "31337",
@@ -138,10 +140,6 @@
                 {
                   "in": "query",
                   "name": "amount"
-                },
-                {
-                  "in": "query",
-                  "name": "date"
                 }
               ]
             }
