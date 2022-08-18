@@ -61,19 +61,24 @@ export const chainSchema = airnodeValidator.config.chainConfigSchema.extend({
 
 export const chainsSchema = z.array(chainSchema);
 
-export const configSchema = z.object({
-  airnodeAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  airnodeXpub: z.string(),
-  chains: chainsSchema,
-  nodeSettings: airnodeValidator.config.nodeSettingsSchema,
-  triggers: triggersSchema,
-  templates: z.array(airnodeValidator.config.templateSchema),
-  subscriptions: subscriptionsSchema,
-  templatesV1: templatesSchema,
-  endpoints: endpointsSchema,
-  ois: z.array(airnodeOis.oisSchema),
-  apiCredentials: z.array(airnodeValidator.config.apiCredentialsSchema),
-});
+export const configSchema = z
+  .object({
+    airnodeAddress: z
+      .string()
+      .regex(/^0x[a-fA-F0-9]{40}$/)
+      .optional(),
+    airnodeXpub: z.string().optional(),
+    chains: chainsSchema,
+    nodeSettings: airnodeValidator.config.nodeSettingsSchema,
+    triggers: triggersSchema,
+    templates: z.array(airnodeValidator.config.templateSchema),
+    subscriptions: subscriptionsSchema,
+    templatesV1: templatesSchema,
+    endpoints: endpointsSchema,
+    ois: z.array(airnodeOis.oisSchema),
+    apiCredentials: z.array(airnodeValidator.config.apiCredentialsSchema),
+  })
+  .strict();
 export type SchemaType<Schema extends ZodFirstPartySchemaTypes> = z.infer<Schema>;
 export type ValidatorRefinement<T> = (arg: T, ctx: RefinementCtx) => void;
 

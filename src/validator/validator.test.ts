@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { ZodError } from 'zod';
-import { configSchema, validateConfig } from './validator';
+import { Config, configSchema, validateConfig } from './validator';
 import { interpolateSecrets } from '../config';
 
 const envVariables = {
@@ -11,26 +11,29 @@ const envVariables = {
 };
 
 describe('validator', () => {
-  const config = JSON.parse(
+  const config: Config = JSON.parse(
     fs.readFileSync(path.join(__dirname, '../../', 'config', 'airkeeper.example.json'), 'utf8')
   );
   const interpolatedConfig = interpolateSecrets(config, envVariables);
+  if (!interpolatedConfig.success) {
+    throw new Error('Secrets interpolation failed. Caused by: ' + interpolatedConfig.error.message);
+  }
 
   describe('basic zod parsing', () => {
     it('successfully parses config.json specs', () => {
-      expect(() => configSchema.parse(interpolatedConfig)).not.toThrow();
+      expect(() => configSchema.parse(interpolatedConfig.data)).not.toThrow();
     });
 
     it('throws on missing fields', () => {
-      const { airnodeAddress, ...rest } = interpolatedConfig;
-      expect(typeof airnodeAddress).toEqual('string');
+      const { nodeSettings, ...rest } = interpolatedConfig.data;
+      expect(typeof nodeSettings).toEqual('object');
       expect(() => configSchema.parse(rest)).toThrow(
         new ZodError([
           {
             code: 'invalid_type',
-            expected: 'string',
+            expected: 'object',
             received: 'undefined',
-            path: ['airnodeAddress'],
+            path: ['nodeSettings'],
             message: 'Required',
           },
         ])
@@ -38,7 +41,7 @@ describe('validator', () => {
     });
 
     it('throws on incorrect type', () => {
-      const { airnodeAddress, ...rest } = interpolatedConfig;
+      const { airnodeAddress, ...rest } = interpolatedConfig.data;
       expect(typeof airnodeAddress).toEqual('string');
       expect(() => configSchema.parse({ airnodeAddress: 100, ...rest })).toThrow(
         new ZodError([
@@ -56,46 +59,15 @@ describe('validator', () => {
 
   describe('validateConfig', () => {
     it('validates successfully', () => {
-      expect(() => validateConfig(interpolatedConfig)).not.toThrow();
-      expect(validateConfig(interpolatedConfig)).toEqual({ success: true, data: interpolatedConfig });
+      expect(() => validateConfig(interpolatedConfig.data)).not.toThrow();
+      expect(validateConfig(interpolatedConfig.data)).toEqual({ success: true, data: interpolatedConfig.data });
     });
 
-    it('does not throw on missing field', () => {
-      const { airnodeAddress, ...rest } = interpolatedConfig;
+    it('does not throw on missing optional field', () => {
+      const { airnodeAddress, ...rest } = interpolatedConfig.data;
       expect(typeof airnodeAddress).toEqual('string');
 
-      expect(() => validateConfig(rest)).not.toThrow();
-      expect(validateConfig(rest)).toEqual({
-        success: false,
-        error: new ZodError([
-          {
-            code: 'invalid_type',
-            expected: 'string',
-            received: 'undefined',
-            path: ['airnodeAddress'],
-            message: 'Required',
-          },
-        ]),
-      });
-    });
-
-    it('does not throw on incorrect type', () => {
-      const { airnodeAddress, ...rest } = interpolatedConfig;
-      expect(typeof airnodeAddress).toEqual('string');
-
-      expect(() => validateConfig({ airnodeAddress: 100 as any, ...rest })).not.toThrow();
-      expect(validateConfig({ airnodeAddress: 100, ...rest })).toEqual({
-        success: false,
-        error: new ZodError([
-          {
-            code: 'invalid_type',
-            expected: 'string',
-            received: 'number',
-            path: ['airnodeAddress'],
-            message: 'Expected string, received number',
-          },
-        ]),
-      });
+      expect(validateConfig(rest)).toEqual({ success: true, data: rest });
     });
   });
 });

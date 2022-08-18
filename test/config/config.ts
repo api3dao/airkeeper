@@ -25,6 +25,7 @@ export const buildConfig = () => ({
           value: 3.12,
           unit: 'gwei',
         },
+        fulfillmentGasLimit: 500000,
       },
     },
   ],
@@ -41,7 +42,7 @@ export const buildConfig = () => ({
     },
     logFormat: 'plain',
     logLevel: 'INFO',
-    nodeVersion: '0.5.0',
+    nodeVersion: '0.7.2',
     cloudProvider: {
       type: 'local',
     },
@@ -91,6 +92,7 @@ export const buildConfig = () => ({
       '0xb4c3cea3b78c384eb4409df1497bb2f1fd872f1928a218f8907c38fe0d66ffea',
     ],
   },
+  templates: [],
   subscriptions: {
     '0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e': {
       chainId: '31337',
@@ -117,7 +119,7 @@ export const buildConfig = () => ({
       fulfillFunctionId: '0x206b48f4',
     },
   },
-  templates: {
+  templatesV1: {
     '0xea30f92923ece1a97af69d450a8418db31be5a26a886540a13c09c739ba8eaaa': {
       endpointId: '0x13dea3311fe0d6b84f4daeab831befbc49e19e6494c41e9e065a09c3c68f43b6',
       encodedParameters:
@@ -161,10 +163,6 @@ export const buildConfig = () => ({
                 {
                   in: 'query',
                   name: 'amount',
-                },
-                {
-                  in: 'query',
-                  name: 'date',
                 },
               ],
             },
@@ -239,7 +237,7 @@ export const buildConfig = () => ({
     {
       oisTitle: 'Currency Converter API',
       securitySchemeName: 'Currency Converter Security Scheme',
-      securitySchemeValue: 'secret',
+      securitySchemeValue: '${SS_CURRENCY_CONVERTER_API_KEY}',
     },
   ],
 });
