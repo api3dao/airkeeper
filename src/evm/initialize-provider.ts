@@ -37,13 +37,13 @@ export const initializeEvmState = async (
   const provider = node.evm.buildEVMProvider(providerUrl, chain.id);
 
   // Fetch current block number
-  const currentBlock = await go(() => provider.getBlockNumber(), { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES });
+  const currentBlock = await go(() => provider.getBlock('latest'), { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES });
   if (!currentBlock.success) {
-    const message = 'Failed to fetch the blockNumber';
+    const message = 'Failed to fetch the block';
     const log = utils.logger.pend('ERROR', message, currentBlock.error);
     return [[log], null];
   }
-  const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock.data}`;
+  const currentBlockMessage = `Current block number for chainId ${chain.id}: ${currentBlock.data.number}`;
   const currentBlockLog = utils.logger.pend('INFO', currentBlockMessage);
 
   // Fetch current gas fee data
@@ -54,7 +54,7 @@ export const initializeEvmState = async (
   if (!gasTarget) {
     const message = 'Failed to fetch gas price';
     const log = utils.logger.pend('ERROR', message);
-    return [[log], null];
+    return [[...gasPriceLogs, log], null];
   }
   let gasTargetMessage;
   if (chain.options.txType === 'eip1559') {

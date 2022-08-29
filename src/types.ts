@@ -52,7 +52,7 @@ export type ProviderState<T extends {}> = T & {
 };
 
 export interface EVMBaseState {
-  currentBlock: number;
+  currentBlock: ethers.providers.Block;
   gasTarget: utils.GasTarget;
 }
 

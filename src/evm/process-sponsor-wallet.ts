@@ -13,7 +13,8 @@ export const processSponsorWallet = async (
   subscriptions: CheckedSubscription[],
   sponsorWallet: ethers.Wallet,
   voidSigner: ethers.VoidSigner,
-  transactionCount: number
+  transactionCount: number,
+  currentBlockTimestamp: number
 ): Promise<node.LogsData<CheckedSubscription>[]> => {
   const logs: node.LogsData<CheckedSubscription>[] = [];
 
@@ -42,14 +43,12 @@ export const processSponsorWallet = async (
     const encodedFulfillmentData = ethers.utils.defaultAbiCoder.encode(['int256'], [apiValue]);
 
     // Compute signature
-    const timestamp = Math.floor(Date.now() / 1000);
-
     const signature = await airnodeWallet.signMessage(
       ethers.utils.arrayify(
         ethers.utils.keccak256(
           ethers.utils.solidityPack(
             ['bytes32', 'uint256', 'address'],
-            [subscriptionId, timestamp, sponsorWallet.address]
+            [subscriptionId, currentBlockTimestamp, sponsorWallet.address]
           )
         )
       )
@@ -75,7 +74,7 @@ export const processSponsorWallet = async (
             airnodeWallet.address,
             relayer,
             sponsor,
-            timestamp,
+            currentBlockTimestamp,
             encodedFulfillmentData,
             signature,
             {

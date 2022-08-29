@@ -21,7 +21,7 @@ export const processSubscriptions = async (
   const [transactionCountLogs, walletData] = await getSponsorWalletAndTransactionCount(
     airnodeWallet,
     provider,
-    currentBlock,
+    currentBlock.number,
     sponsorAddress
   );
 
@@ -49,7 +49,8 @@ export const processSubscriptions = async (
     subscriptions,
     sponsorWallet,
     voidSigner,
-    transactionCount
+    transactionCount,
+    currentBlock.timestamp
   );
 
   processSponsorWalletResult.forEach(([logs, data]) => {

@@ -1,4 +1,6 @@
 import { ethers } from 'ethers';
+import { PendingLog } from '@api3/airnode-utilities';
+import * as gasPricesModule from '@api3/airnode-utilities/dist/evm/gas-prices/gas-prices';
 import { initializeEvmState, initializeProvider } from './initialize-provider';
 import { BASE_FEE_MULTIPLIER, PRIORITY_FEE_IN_WEI } from '../constants';
 import { ChainConfig } from '../types';
@@ -28,11 +30,13 @@ describe('initializeEvmState', () => {
   };
 
   test.each(['legacy', 'eip1559'] as const)('should initialize provider - txType: %s', async (txType) => {
-    const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
-    const currentBlock = Math.floor(Date.now() / 1000);
-    getBlockNumberSpy.mockResolvedValueOnce(currentBlock);
+    const getBlockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
+    const currentBlock = { number: Math.floor(Date.now() / 1000), timestamp: Date.now() };
+    getBlockSpy.mockResolvedValueOnce(currentBlock as ethers.providers.Block);
 
-    const { gasTarget, blockSpy, gasPriceSpy } = createAndMockGasTarget(txType);
+    const gasTarget = createGasTarget(txType);
+    const getGasPriceSpy = jest.spyOn(gasPricesModule, 'getGasPrice');
+    getGasPriceSpy.mockImplementation(() => Promise.resolve([[], gasTarget]));
 
     const [logs, data] = await initializeEvmState(
       {
@@ -47,9 +51,8 @@ describe('initializeEvmState', () => {
       providerUrl
     );
 
-    expect(getBlockNumberSpy).toHaveBeenCalled();
-    expect(txType === 'legacy' ? blockSpy : gasPriceSpy).not.toHaveBeenCalled();
-    expect(txType === 'eip1559' ? blockSpy : gasPriceSpy).toHaveBeenCalled();
+    expect(getBlockSpy).toHaveBeenNthCalledWith(1, 'latest');
+    expect(getGasPriceSpy).toHaveBeenCalledTimes(1);
     const gasPriceLogMessage =
       txType === 'legacy'
         ? expect.stringMatching(/Gas price \(legacy\) set to [0-9]*\.[0-9]+ Gwei/)
@@ -58,7 +61,7 @@ describe('initializeEvmState', () => {
           );
     expect(logs).toEqual(
       expect.arrayContaining([
-        { level: 'INFO', message: `Current block number for chainId 31337: ${currentBlock}` },
+        { level: 'INFO', message: `Current block number for chainId 31337: ${currentBlock.number}` },
         {
           level: 'INFO',
           message: gasPriceLogMessage,
@@ -74,22 +77,22 @@ describe('initializeEvmState', () => {
   });
 
   it('returns null with error log if current block cannot be fetched', async () => {
-    const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
+    const getBlockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
     const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
-    getBlockNumberSpy.mockRejectedValue(new Error(errorMessage));
+    getBlockSpy.mockRejectedValue(new Error(errorMessage));
 
-    const { blockSpy, gasPriceSpy } = createAndMockGasTarget('eip1559');
+    const getGasPriceSpy = jest.spyOn(gasPricesModule, 'getGasPrice');
 
     const [logs, data] = await initializeEvmState(chain, providerUrl);
 
-    expect(blockSpy).not.toHaveBeenCalled();
-    expect(gasPriceSpy).not.toHaveBeenCalled();
+    expect(getBlockSpy).toHaveBeenCalled();
+    expect(getGasPriceSpy).not.toHaveBeenCalled();
     expect(logs).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           error: expect.objectContaining({ message: expect.stringContaining('could not detect network') }),
           level: 'ERROR',
-          message: 'Failed to fetch the blockNumber',
+          message: 'Failed to fetch the block',
         }),
       ])
     );
@@ -97,34 +100,35 @@ describe('initializeEvmState', () => {
   });
 
   it('returns null with error log if gas target cannot be fetched', async () => {
-    const getBlockNumberSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlockNumber');
-    const currentBlock = Math.floor(Date.now() / 1000);
-    getBlockNumberSpy.mockResolvedValue(currentBlock);
+    const getBlockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
+    const currentBlock = { number: Math.floor(Date.now() / 1000), timestamp: Date.now() };
+    getBlockSpy.mockResolvedValue(currentBlock as ethers.providers.Block);
 
-    const gasPriceSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getGasPrice');
-    const errorMessage = 'could not detect network (event="noNetwork", code=NETWORK_ERROR, version=providers/5.5.3)';
-    gasPriceSpy.mockRejectedValue(new Error(errorMessage));
-    const blockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
-    blockSpy.mockRejectedValue(new Error(errorMessage));
+    const errorLog: PendingLog = {
+      level: 'ERROR',
+      message: 'All attempts to get EIP-1559 gas pricing from provider failed',
+    };
+    const getGasPriceSpy = jest.spyOn(gasPricesModule, 'getGasPrice').mockResolvedValue([[errorLog], null]);
 
     const [logs, data] = await initializeEvmState(chain, providerUrl);
 
-    expect(getBlockNumberSpy).toHaveBeenCalled();
-    expect(logs).toEqual(expect.arrayContaining([{ level: 'ERROR', message: 'Failed to fetch gas price' }]));
+    expect(getBlockSpy).toHaveBeenCalled();
+    expect(getGasPriceSpy).toHaveBeenCalled();
+    expect(logs).toEqual(expect.arrayContaining([errorLog, { level: 'ERROR', message: 'Failed to fetch gas price' }]));
     expect(data).toEqual(null);
   });
 
   it('should initialize provider and airnode wallet', async () => {
     const airnodeWalletMnemonic = 'achieve climb couple wait accident symbol spy blouse reduce foil echo label';
-    const currentBlock = Math.floor(Date.now() / 1000);
-    const { gasTarget } = createAndMockGasTarget('eip1559');
+    const currentBlock = { number: Math.floor(Date.now() / 1000), timestamp: Date.now() };
+    const gasTarget = createGasTarget('eip1559');
 
     const data = await initializeProvider(airnodeWalletMnemonic, {
       providerName: 'local',
       providerUrl: 'http://localhost:8545',
       chainId: '31337',
       chainConfig: chain,
-      currentBlock,
+      currentBlock: currentBlock as ethers.providers.Block,
       gasTarget,
     });
     expect(data).toEqual(
@@ -142,26 +146,23 @@ describe('initializeEvmState', () => {
 });
 
 /**
- * Creates and mocks gas pricing-related resources based on txType.
+ * Creates gas pricing-related resources based on txType.
  */
-const createAndMockGasTarget = (txType: 'legacy' | 'eip1559') => {
-  const gasPriceSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getGasPrice');
-  const blockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
+const createGasTarget = (txType: 'legacy' | 'eip1559') => {
   const gasLimit = ethers.BigNumber.from(500_000);
   if (txType === 'legacy') {
     const gasPrice = ethers.BigNumber.from(1_000);
-    gasPriceSpy.mockResolvedValue(gasPrice);
-    return { gasTarget: { type: 0, gasPrice, gasLimit }, blockSpy, gasPriceSpy };
+    return { type: 0, gasPrice, gasLimit };
   }
 
   const baseFeePerGas = ethers.BigNumber.from(1000);
-  blockSpy.mockResolvedValue({ baseFeePerGas } as ethers.providers.Block);
   const maxPriorityFeePerGas = ethers.BigNumber.from(PRIORITY_FEE_IN_WEI);
   const maxFeePerGas = baseFeePerGas.mul(BASE_FEE_MULTIPLIER).add(maxPriorityFeePerGas);
 
   return {
-    gasTarget: { type: 2, maxPriorityFeePerGas, maxFeePerGas, gasLimit },
-    blockSpy,
-    gasPriceSpy,
+    type: 2,
+    maxPriorityFeePerGas,
+    maxFeePerGas,
+    gasLimit,
   };
 };
