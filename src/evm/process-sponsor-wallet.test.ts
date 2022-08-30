@@ -133,7 +133,8 @@ describe('processSponsorWallet', () => {
       subscriptions,
       sponsorWallet,
       voidSigner,
-      transactionCount
+      transactionCount,
+      Date.now()
     );
 
     // Calls to conditionFunction
@@ -212,7 +213,8 @@ describe('processSponsorWallet', () => {
       [subscription1, invalidSubscription2, subscription3],
       sponsorWallet,
       voidSigner,
-      transactionCount
+      transactionCount,
+      Date.now()
     );
 
     expect(getFunctionSpy).not.toHaveBeenCalled();
@@ -283,7 +285,8 @@ describe('processSponsorWallet', () => {
       subscriptions,
       sponsorWallet,
       voidSigner,
-      transactionCount
+      transactionCount,
+      Date.now()
     );
 
     expect(getFunctionSpy).toHaveBeenCalledTimes(6);
@@ -344,7 +347,8 @@ describe('processSponsorWallet', () => {
       subscriptions,
       sponsorWallet,
       voidSigner,
-      transactionCount
+      transactionCount,
+      Date.now()
     );
 
     expect(getFunctionSpy).toHaveBeenCalledTimes(5);

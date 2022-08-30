@@ -9,7 +9,7 @@ import { shortenAddress } from '../wallet';
 export const getSponsorWalletAndTransactionCount = async (
   airnodeWallet: ethers.Wallet,
   provider: ethers.providers.Provider,
-  currentBlock: number,
+  currentBlockNumber: number,
   sponsor: string
 ): Promise<node.LogsData<SponsorWalletTransactionCount | null>> => {
   // Derive sponsorWallet address
@@ -18,7 +18,7 @@ export const getSponsorWalletAndTransactionCount = async (
     .connect(provider);
 
   // Fetch sponsorWallet transaction count
-  const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlock), {
+  const transactionCount = await go(() => provider.getTransactionCount(sponsorWallet.address, currentBlockNumber), {
     attemptTimeoutMs: TIMEOUT_MS,
     retries: RETRIES,
   });
