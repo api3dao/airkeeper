@@ -193,17 +193,13 @@ describe('PSP', () => {
       .mockImplementationOnce(() => airnodeConfig as any)
       .mockImplementationOnce(() => airnodeConfig as any);
     jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
-    const res = await psp.handler({} as any, {} as any, {} as any);
+    await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
-    expect(res).toEqual({
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
-    });
   });
 
   it('updates the beacons successfully after retrying a failed api call', async () => {
@@ -216,17 +212,13 @@ describe('PSP', () => {
     const callApiSpy = jest.spyOn(api, 'callApi');
     callApiSpy.mockRejectedValueOnce(new Error('Api call failed'));
 
-    const res = await psp.handler({} as any, {} as any, {} as any);
+    await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
-    expect(res).toEqual({
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
-    });
   });
 
   it('updates the beacons successfully with one invalid provider present', async () => {
@@ -250,17 +242,13 @@ describe('PSP', () => {
     );
     jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig);
 
-    const res = await psp.handler({} as any, {} as any, {} as any);
+    await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
-    expect(res).toEqual({
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
-    });
   });
 
   it('updates the beacon successfully with one invalid subscription present', async () => {
@@ -279,17 +267,13 @@ describe('PSP', () => {
       },
     }));
 
-    const res = await psp.handler({} as any, {} as any, {} as any);
+    await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(null);
-    expect(res).toEqual({
-      statusCode: 200,
-      body: JSON.stringify({ ok: true, data: { message: 'PSP beacon update execution has finished' } }),
-    });
   });
 
   it('throws on invalid airnode config', async () => {
