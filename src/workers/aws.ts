@@ -10,7 +10,7 @@ export const spawn = async ({ providerSponsorSubscriptions, baseLogOptions, stag
     // AWS doesn't allow uppercase letters in lambda function names
     const resolvedName = `airkeeper-${stage}-process-subscriptions`;
 
-    const options = {
+    const options: AWS.Lambda.InvocationRequest = {
       FunctionName: resolvedName,
       Payload: JSON.stringify({ providerSponsorSubscriptions, baseLogOptions }),
     };

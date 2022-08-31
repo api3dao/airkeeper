@@ -3,6 +3,7 @@ import * as node from '@api3/airnode-node';
 import * as protocol from '@api3/airnode-protocol';
 import * as utils from '@api3/airnode-utilities';
 import { go, goSync } from '@api3/promise-utils';
+import { Context, ScheduledEvent, ScheduledHandler } from 'aws-lambda';
 import { ethers } from 'ethers';
 import flatMap from 'lodash/flatMap';
 import groupBy from 'lodash/groupBy';
@@ -10,8 +11,8 @@ import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
 import map from 'lodash/map';
 import { callApi } from '../api/call-api';
-import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, TIMEOUT_MS, RETRIES } from '../constants';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
+import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, RETRIES, TIMEOUT_MS } from '../constants';
 import { buildLogOptions } from '../logger';
 import { ChainConfig, LogsAndApiValuesByBeaconId } from '../types';
 import { shortenAddress } from '../wallet';
@@ -20,7 +21,10 @@ type ApiValueByBeaconId = {
   [beaconId: string]: ethers.BigNumber | null;
 };
 
-export const handler = async (_event: any = {}): Promise<any> => {
+export const handler: ScheduledHandler = async (event: ScheduledEvent, context: Context): Promise<void> => {
+  utils.logger.debug(`Event: ${JSON.stringify(event, null, 2)}`);
+  utils.logger.debug(`Context: ${JSON.stringify(context, null, 2)}`);
+
   const startedAt = new Date();
 
   // **************************************************************************
@@ -457,10 +461,4 @@ export const handler = async (_event: any = {}): Promise<any> => {
     `Airkeeper finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
     baseLogOptions
   );
-
-  const response = {
-    ok: true,
-    data: { message: 'Airkeeper invocation has finished' },
-  };
-  return { statusCode: 200, body: JSON.stringify(response) };
 };

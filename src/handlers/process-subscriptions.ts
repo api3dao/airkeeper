@@ -2,10 +2,10 @@ import * as utils from '@api3/airnode-utilities';
 import { goSync } from '@api3/promise-utils';
 import isNil from 'lodash/isNil';
 import { loadAirnodeConfig } from '../config';
-import { getSponsorWalletAndTransactionCount, processSponsorWallet, initializeProvider } from '../evm';
+import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
 import { buildLogOptions } from '../logger';
-import { shortenAddress } from '../wallet';
 import { ProviderSponsorProcessSubscriptionsState, ProviderSponsorSubscriptionsState } from '../types';
+import { shortenAddress } from '../wallet';
 
 export const processSubscriptions = async (
   providerSponsorSubscriptions: ProviderSponsorProcessSubscriptionsState,
@@ -59,13 +59,14 @@ export const processSubscriptions = async (
   });
 };
 
-export const handler = async ({
-  providerSponsorSubscriptions,
-  baseLogOptions,
-}: {
+export const handler = async (payload: {
   providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
   baseLogOptions: utils.LogOptions;
 }) => {
+  utils.logger.debug(`Payload: ${JSON.stringify(payload, null, 2)}`);
+
+  const { providerSponsorSubscriptions, baseLogOptions } = payload;
+
   const airnodeConfig = goSync(loadAirnodeConfig);
   if (!airnodeConfig.success) {
     utils.logger.error(airnodeConfig.error.message);

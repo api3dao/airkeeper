@@ -193,7 +193,7 @@ describe('PSP', () => {
       .mockImplementationOnce(() => airnodeConfig as any)
       .mockImplementationOnce(() => airnodeConfig as any);
     jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig as any);
-    const res = await psp.handler();
+    const res = await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
@@ -216,7 +216,7 @@ describe('PSP', () => {
     const callApiSpy = jest.spyOn(api, 'callApi');
     callApiSpy.mockRejectedValueOnce(new Error('Api call failed'));
 
-    const res = await psp.handler();
+    const res = await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
@@ -250,7 +250,7 @@ describe('PSP', () => {
     );
     jest.spyOn(config, 'loadAirkeeperConfig').mockImplementationOnce(() => airkeeperConfig);
 
-    const res = await psp.handler();
+    const res = await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);
@@ -279,7 +279,7 @@ describe('PSP', () => {
       },
     }));
 
-    const res = await psp.handler();
+    const res = await psp.handler({} as any, {} as any, {} as any);
 
     const beaconValueETH = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdETH, dapiServer);
     const beaconValueBTC = await readBeaconValue(airkeeperConfig.airnodeAddress, templateIdBTC, dapiServer);

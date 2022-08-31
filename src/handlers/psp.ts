@@ -1,14 +1,14 @@
 import * as abi from '@api3/airnode-abi';
 import * as utils from '@api3/airnode-utilities';
 import * as promise from '@api3/promise-utils';
+import { Context, ScheduledEvent, ScheduledHandler } from 'aws-lambda';
 import { ethers } from 'ethers';
 import groupBy from 'lodash/groupBy';
 import isEmpty from 'lodash/isEmpty';
 import isNil from 'lodash/isNil';
-import { spawn } from '../workers';
-import { initializeEvmState } from '../evm';
 import { callApi } from '../api/call-api';
 import { loadAirkeeperConfig, loadAirnodeConfig, mergeConfigs } from '../config';
+import { initializeEvmState } from '../evm';
 import { buildLogOptions } from '../logger';
 import {
   CallApiResult,
@@ -21,8 +21,12 @@ import {
   State,
 } from '../types';
 import { Subscription } from '../validator';
+import { spawn } from '../workers';
 
-export const handler = async (_event: any = {}): Promise<any> => {
+export const handler: ScheduledHandler = async (event: ScheduledEvent, context: Context): Promise<void> => {
+  utils.logger.debug(`Event: ${JSON.stringify(event, null, 2)}`);
+  utils.logger.debug(`Context: ${JSON.stringify(context, null, 2)}`);
+
   const startedAt = new Date();
 
   const airnodeConfig = promise.goSync(loadAirnodeConfig);
@@ -46,12 +50,6 @@ export const handler = async (_event: any = {}): Promise<any> => {
     `PSP beacon update finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
     state.baseLogOptions
   );
-
-  const response = {
-    ok: true,
-    data: { message: 'PSP beacon update execution has finished' },
-  };
-  return { statusCode: 200, body: JSON.stringify(response) };
 };
 
 const initializeState = (config: Config): State => {
