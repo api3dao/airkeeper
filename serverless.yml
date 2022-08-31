@@ -24,6 +24,7 @@ functions:
     timeout: 60
     events:
       - schedule: rate(1 minute)
+    reservedConcurrency: 1
   psp-beacon-update:
     handler: dist/handlers/psp.handler
     environment:
@@ -32,6 +33,8 @@ functions:
     timeout: 60
     events:
       - schedule: rate(1 minute)
+    reservedConcurrency: 1
   process-subscriptions:
     handler: dist/handlers/process-subscriptions.handler
     timeout: 15
+    reservedConcurrency: 100
