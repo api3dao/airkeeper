@@ -48,28 +48,10 @@ export const initializeEvmState = async (
   const currentBlockLog = utils.logger.pend('INFO', currentBlockMessage);
 
   // Fetch current gas fee data
-  const [gasPriceLogs, gasTarget] = await utils.getGasPrice({
-    provider,
-    chainOptions: chain.options,
-  });
-  if (!gasTarget) {
-    const message = 'Failed to fetch gas price';
-    const log = utils.logger.pend('ERROR', message);
-    return [[...gasPriceLogs, log], null];
-  }
-  let gasTargetMessage;
-  if (chain.options.txType === 'eip1559') {
-    const gweiMaxFee = node.evm.weiToGwei(gasTarget.maxFeePerGas!);
-    const gweiPriorityFee = node.evm.weiToGwei(gasTarget.maxPriorityFeePerGas!);
-    gasTargetMessage = `Gas price (EIP-1559) set to a Max Fee of ${gweiMaxFee} Gwei and a Priority Fee of ${gweiPriorityFee} Gwei`;
-  } else {
-    const gweiPrice = node.evm.weiToGwei(gasTarget.gasPrice!);
-    gasTargetMessage = `Gas price (legacy) set to ${gweiPrice} Gwei`;
-  }
-  const gasTargetLog = utils.logger.pend('INFO', gasTargetMessage);
+  const [gasPriceLogs, gasTarget] = await utils.getGasPrice(provider, chain.options);
 
   return [
-    [currentBlockLog, ...gasPriceLogs, gasTargetLog],
+    [currentBlockLog, ...gasPriceLogs],
     {
       currentBlock: currentBlock.data,
       gasTarget,

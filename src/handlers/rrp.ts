@@ -14,7 +14,6 @@ import map from 'lodash/map';
 import { callApi } from '../api/call-api';
 import { loadConfig } from '../config';
 import { BLOCK_COUNT_HISTORY_LIMIT, GAS_LIMIT, RETRIES, TIMEOUT_MS } from '../constants';
-import { buildLogOptions } from '../logger';
 import { LogsAndApiValuesByBeaconId } from '../types';
 import { ChainConfig, Config } from '../validator';
 import { shortenAddress } from '../wallet';
@@ -41,12 +40,16 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
   }
   const { data: config } = goConfig;
 
-  const baseLogOptions = utils.buildBaseOptions(config, {
-    coordinatorId: utils.randomHexString(8),
+  const coordinatorId = utils.randomHexString(16);
+  utils.setLogOptions({
+    format: config.nodeSettings.logFormat,
+    level: config.nodeSettings.logLevel,
+    meta: { 'Coordinator-ID': coordinatorId },
   });
-  utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`, baseLogOptions);
 
-  const { airnodeAddress, airnodeXpub, chains, nodeSettings, triggers, endpoints } = config;
+  utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`);
+
+  const { airnodeAddress, airnodeXpub, chains, nodeSettings, triggers, endpoints, ois, apiCredentials } = config;
 
   const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
   const derivedAirnodeAddress = (
@@ -62,7 +65,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
   // **************************************************************************
   // 2. Read and cache API values
   // **************************************************************************
-  utils.logger.debug('making API requests...', baseLogOptions);
+  utils.logger.debug('making API requests...');
 
   const apiValuePromises = triggers.rrpBeaconServerKeeperJobs.map(({ templateId, templateParameters, endpointId }) =>
     promise.go(
@@ -96,7 +99,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
 
         const apiCallParameters = templateParameters.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {});
 
-        const [logs, data] = await callApi(config, endpoints[endpointId], apiCallParameters);
+        const [logs, data] = await callApi({ ois, apiCredentials }, endpoints[endpointId], apiCallParameters);
 
         return [logs, { [beaconId]: data }] as node.LogsData<ApiValueByBeaconId>;
       },
@@ -116,17 +119,21 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
   }, {});
 
   // Print pending logs
-  Object.keys(logsAndApiValuesByBeaconId).forEach((beaconId) =>
-    utils.logger.logPending(
-      logsAndApiValuesByBeaconId[beaconId].logs,
-      buildLogOptions('additional', { beaconId }, baseLogOptions)
-    )
-  );
+  Object.keys(logsAndApiValuesByBeaconId).forEach((beaconId) => {
+    const logOptions = utils.getLogOptions();
+    return utils.logger.logPending(logsAndApiValuesByBeaconId[beaconId].logs, {
+      ...logOptions,
+      meta: {
+        ...logOptions!.meta,
+        'Beacon-ID': beaconId,
+      },
+    });
+  });
 
   // **************************************************************************
   // 3. Process chain providers in parallel
   // **************************************************************************
-  utils.logger.debug('processing chain providers...', baseLogOptions);
+  utils.logger.debug('processing chain providers...');
 
   const evmChains = chains.filter((chain: ChainConfig) => chain.type === 'evm');
   if (isEmpty(evmChains)) {
@@ -135,12 +142,12 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
   const providerPromises = flatMap(
     evmChains.map((chain: ChainConfig) => {
       return map(chain.providers, async (chainProvider, providerName) => {
-        const providerLogOptions = buildLogOptions('meta', { providerName, chainId: chain.id }, baseLogOptions);
+        utils.addMetadata({ 'Chain-ID': chain.id, Provider: providerName });
 
         // **************************************************************************
         // 3.1 Initialize provider specific data
         // **************************************************************************
-        utils.logger.debug('initializing...', providerLogOptions);
+        utils.logger.debug('initializing...');
 
         const blockHistoryLimit = chain.blockHistoryLimit || BLOCK_COUNT_HISTORY_LIMIT;
         const chainProviderUrl = chainProvider.url || '';
@@ -156,17 +163,14 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
           retries: RETRIES,
         });
         if (!currentBlock.success) {
-          utils.logger.error('failed to fetch the blockNumber', {
-            ...providerLogOptions,
-            error: currentBlock.error,
-          });
+          utils.logger.error('failed to fetch the blockNumber', currentBlock.error);
           return;
         }
 
         // **************************************************************************
         // 3.2 Process each keeperSponsor address in parallel
         // **************************************************************************
-        utils.logger.debug('processing keeperSponsor addresses...', providerLogOptions);
+        utils.logger.debug('processing keeperSponsor addresses...');
 
         // Group rrpBeaconServerKeeperJobs by keeperSponsor
         const rrpBeaconServerKeeperJobsByKeeperSponsor = groupBy(triggers.rrpBeaconServerKeeperJobs, 'keeperSponsor');
@@ -176,32 +180,28 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
           // **************************************************************************
           // 3.2.1 Derive keeperSponsorWallet address
           // **************************************************************************
-          utils.logger.debug('deriving keeperSponsorWallet...', providerLogOptions);
+          utils.logger.debug('deriving keeperSponsorWallet...');
 
           const keeperSponsorWallet = node.evm
             .deriveSponsorWalletFromMnemonic(config.nodeSettings.airnodeWalletMnemonic, keeperSponsor, '12345')
             .connect(provider);
 
-          const keeperSponsorWalletLogOptions = buildLogOptions(
-            'additional',
-            { keeperSponsorWallet: shortenAddress(keeperSponsorWallet.address) },
-            providerLogOptions
-          );
+          utils.addMetadata({ 'Sponsor-Wallet': shortenAddress(keeperSponsorWallet.address) });
 
           // **************************************************************************
           // 3.2.2 Fetch keeperSponsorWallet transaction count
           // **************************************************************************
-          utils.logger.debug('fetching transaction count...', keeperSponsorWalletLogOptions);
+          utils.logger.debug('fetching transaction count...');
 
           const keeperSponsorWalletTransactionCount = await promise.go(
             () => provider.getTransactionCount(keeperSponsorWallet.address, currentBlock.data),
             { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
           );
           if (!keeperSponsorWalletTransactionCount.success) {
-            utils.logger.error('failed to fetch the keeperSponsorWallet transaction count', {
-              ...keeperSponsorWalletLogOptions,
-              error: keeperSponsorWalletTransactionCount.error,
-            });
+            utils.logger.error(
+              'failed to fetch the keeperSponsorWallet transaction count',
+              keeperSponsorWalletTransactionCount.error
+            );
             return;
           }
           let nextNonce = keeperSponsorWalletTransactionCount.data;
@@ -209,7 +209,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
           // **************************************************************************
           // 3.2.3 Process each rrpBeaconServerKeeperJob in serial to keep nonces in order
           // **************************************************************************
-          utils.logger.debug('processing rrpBeaconServerKeeperJobs...', keeperSponsorWalletLogOptions);
+          utils.logger.debug('processing rrpBeaconServerKeeperJobs...');
 
           const rrpBeaconServerKeeperJobs = rrpBeaconServerKeeperJobsByKeeperSponsor[keeperSponsor];
           for (const {
@@ -222,12 +222,19 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
             // **************************************************************************
             // 3.2.3.1 Derive beaconId
             // **************************************************************************
-            utils.logger.debug('deriving beaconId...', keeperSponsorWalletLogOptions);
+            utils.logger.debug('deriving beaconId...');
 
             const encodedParameters = abi.encode(templateParameters);
             const beaconId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [templateId, encodedParameters]);
 
-            const beaconIdLogOptions = buildLogOptions('additional', { beaconId }, keeperSponsorWalletLogOptions);
+            const logOptions = utils.getLogOptions();
+            const beaconIdLogOptions: utils.LogOptions = {
+              ...logOptions!,
+              meta: {
+                ...logOptions!.meta,
+                'Beacon-ID': beaconId,
+              },
+            };
 
             // **************************************************************************
             // 3.2.3.2 Verify if beacon must be updated for current chain
@@ -264,6 +271,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
             ) {
               utils.logger.error(
                 `deviationPercentage '${deviationPercentage}' must be a number larger than 0 and less then or equal to 100 with no more than 2 decimal places`,
+                null,
                 beaconIdLogOptions
               );
               continue;
@@ -281,10 +289,11 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
               retries: RETRIES,
             });
             if (!beaconResponse.success) {
-              utils.logger.error(`failed to read value for beaconId: ${beaconId}`, {
-                ...beaconIdLogOptions,
-                error: beaconResponse.error,
-              });
+              utils.logger.error(
+                `failed to read value for beaconId: ${beaconId}`,
+                beaconResponse.error,
+                beaconIdLogOptions
+              );
               continue;
             }
             utils.logger.info(`beacon server value: ${beaconResponse.data.value.toString()}`, beaconIdLogOptions);
@@ -341,10 +350,11 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
               { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!requestedBeaconUpdateEvents.success) {
-              utils.logger.error('failed to fetch RequestedBeaconUpdate events', {
-                ...beaconIdLogOptions,
-                error: requestedBeaconUpdateEvents.error,
-              });
+              utils.logger.error(
+                'failed to fetch RequestedBeaconUpdate events',
+                requestedBeaconUpdateEvents.error,
+                beaconIdLogOptions
+              );
               continue;
             }
 
@@ -355,10 +365,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
               { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
             );
             if (!updatedBeaconEvents.success) {
-              utils.logger.error('failed to fetch UpdatedBeacon events', {
-                ...beaconIdLogOptions,
-                error: updatedBeaconEvents.error,
-              });
+              utils.logger.error('failed to fetch UpdatedBeacon events', updatedBeaconEvents.error, beaconIdLogOptions);
               continue;
             }
 
@@ -373,10 +380,11 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
                 { attemptTimeoutMs: TIMEOUT_MS, retries: RETRIES }
               );
               if (!requestIsAwaitingFulfillment.success) {
-                utils.logger.error('failed to check if request is awaiting fulfillment', {
-                  ...beaconIdLogOptions,
-                  error: requestIsAwaitingFulfillment.error,
-                });
+                utils.logger.error(
+                  'failed to check if request is awaiting fulfillment',
+                  requestIsAwaitingFulfillment.error,
+                  beaconIdLogOptions
+                );
                 continue;
               }
               if (requestIsAwaitingFulfillment.data) {
@@ -390,12 +398,9 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
             // **************************************************************************
             utils.logger.debug('fetching gas price...', beaconIdLogOptions);
 
-            const [gasPriceLogs, gasTarget] = await utils.getGasPrice({
-              provider,
-              chainOptions: chain.options,
-            });
+            const [gasPriceLogs, gasTarget] = await utils.getGasPrice(provider, chain.options);
             if (!isEmpty(gasPriceLogs)) {
-              utils.logger.logPending(gasPriceLogs, beaconIdLogOptions);
+              utils.logger.logPending(gasPriceLogs);
             }
             if (!gasTarget) {
               utils.logger.warn('failed to fetch gas price. Skipping update...', beaconIdLogOptions);
@@ -435,18 +440,19 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
             if (!tx.success) {
               utils.logger.error(
                 `failed to submit transaction using wallet ${keeperSponsorWallet.address} with nonce ${nonce}. skipping update`,
-                {
-                  ...beaconIdLogOptions,
-                  error: tx.error,
-                }
+                tx.error,
+                beaconIdLogOptions
               );
               continue;
             }
             utils.logger.info(`beacon update tx submitted: ${tx.data.hash}`, beaconIdLogOptions);
           }
+
+          utils.removeMetadata(['Sponsor-Wallet']);
         });
 
         await Promise.all(keeperSponsorWalletPromises);
+        utils.removeMetadata(['Chain-ID', 'Provider']);
       });
     })
   );
@@ -455,8 +461,5 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  utils.logger.info(
-    `Airkeeper finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
-    baseLogOptions
-  );
+  utils.logger.info(`Airkeeper finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`);
 };

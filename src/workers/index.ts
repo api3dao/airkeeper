@@ -5,21 +5,21 @@ import { ProviderSponsorSubscriptionsState } from '../types';
 
 export const spawn = ({
   providerSponsorSubscriptions,
-  baseLogOptions,
+  logOptions: logOptions,
   type,
   stage,
 }: {
   providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
-  baseLogOptions: utils.LogOptions;
+  logOptions: utils.LogOptions;
   type: 'local' | 'aws';
   stage: string;
 }): Promise<any> => {
   switch (type) {
     case 'local':
       return new Promise((resolve, reject) =>
-        processSubscriptionsHandler({ providerSponsorSubscriptions, baseLogOptions }).then(resolve).catch(reject)
+        processSubscriptionsHandler({ providerSponsorSubscriptions, logOptions }).then(resolve).catch(reject)
       );
     case 'aws':
-      return aws.spawn({ providerSponsorSubscriptions, baseLogOptions, stage });
+      return aws.spawn({ providerSponsorSubscriptions, logOptions, stage });
   }
 };

@@ -1,20 +1,21 @@
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
-import { Config, Endpoint } from '../validator';
+import { Endpoint } from '../validator';
 
 export const callApi = async (
-  config: Config,
+  config: node.HttpApiCallConfig,
   endpoint: Endpoint,
   parameters: node.ApiCallParameters
 ): Promise<node.LogsData<ethers.BigNumber | null>> => {
-  const [logs, apiCallResponse] = await node.handlers.callApi({
+  const aggregatedApiCall: node.BaseAggregatedApiCall = {
+    parameters,
+    ...endpoint,
+  };
+  const [logs, apiCallResponse] = await node.api.callApi({
+    type: 'http-gateway',
     config,
-    aggregatedApiCall: {
-      type: 'http-gateway',
-      parameters,
-      ...endpoint,
-    },
+    aggregatedApiCall,
   });
   if (!apiCallResponse.success) {
     return [logs, null];

@@ -10,7 +10,6 @@ import isNil from 'lodash/isNil';
 import { callApi } from '../api/call-api';
 import { loadConfig } from '../config';
 import { initializeEvmState } from '../evm';
-import { buildLogOptions } from '../logger';
 import {
   CallApiResult,
   CheckedSubscription,
@@ -20,7 +19,7 @@ import {
   ProviderState,
   State,
 } from '../types';
-import { Config, Subscription } from '../validator';
+import { Config, Subscription, Template } from '../validator';
 import { spawn } from '../workers';
 
 export const handler: ScheduledHandler = async (event: ScheduledEvent, context: Context): Promise<void> => {
@@ -36,28 +35,28 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
     throw config.error;
   }
 
-  const state = await updateBeacon(config.data);
+  await updateBeacon(config.data);
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
-  utils.logger.info(
-    `PSP beacon update finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`,
-    state.baseLogOptions
-  );
+  utils.logger.info(`PSP beacon update finished at ${utils.formatDateTime(completedAt)}. Total time: ${durationMs}ms`);
 };
 
 const initializeState = (config: Config): State => {
   const { triggers, subscriptions } = config;
 
-  const baseLogOptions = utils.buildBaseOptions(config, {
-    coordinatorId: utils.randomHexString(8),
+  const coordinatorId = utils.randomHexString(16);
+  utils.setLogOptions({
+    format: config.nodeSettings.logFormat,
+    level: config.nodeSettings.logLevel,
+    meta: { 'Coordinator-ID': coordinatorId },
   });
 
   const enabledSubscriptions = triggers.protoPsp.reduce((acc: Id<Subscription>[], subscriptionId) => {
     // Get subscriptions details
     const subscription = subscriptions[subscriptionId];
     if (isNil(subscription)) {
-      utils.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`, baseLogOptions);
+      utils.logger.warn(`SubscriptionId ${subscriptionId} not found in subscriptions`);
       return acc;
     }
     // Verify subscriptionId
@@ -78,10 +77,7 @@ const initializeState = (config: Config): State => {
       )
     );
     if (subscriptionId !== expectedSubscriptionId) {
-      utils.logger.warn(
-        `SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`,
-        baseLogOptions
-      );
+      utils.logger.warn(`SubscriptionId ${subscriptionId} does not match expected ${expectedSubscriptionId}`);
       return acc;
     }
 
@@ -95,16 +91,16 @@ const initializeState = (config: Config): State => {
   }, []);
 
   if (isEmpty(enabledSubscriptions)) {
-    utils.logger.info('No proto-PSP subscriptions to process', baseLogOptions);
+    utils.logger.info('No proto-PSP subscriptions to process');
   }
 
   const enabledSubscriptionsByTemplateId = groupBy(enabledSubscriptions, 'templateId');
   const groupedSubscriptions = Object.keys(enabledSubscriptionsByTemplateId).reduce(
     (acc: GroupedSubscriptions[], templateId) => {
       // Get template details
-      const template = config.templatesV1[templateId];
+      const template: Template = config.templatesV1[templateId];
       if (isNil(template)) {
-        utils.logger.warn(`TemplateId ${templateId} not found in templates`, baseLogOptions);
+        utils.logger.warn(`TemplateId ${templateId} not found in templates`);
         return acc;
       }
       // Verify templateId
@@ -113,14 +109,14 @@ const initializeState = (config: Config): State => {
         [template.endpointId, template.encodedParameters]
       );
       if (expectedTemplateId !== templateId) {
-        utils.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`, baseLogOptions);
+        utils.logger.warn(`TemplateId ${templateId} does not match expected ${expectedTemplateId}`);
         return acc;
       }
 
       // Get endpoint details
       const endpoint = config.endpoints[template.endpointId];
       if (isNil(endpoint)) {
-        utils.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`, baseLogOptions);
+        utils.logger.warn(`EndpointId ${template.endpointId} not found in endpoints`);
         return acc;
       }
       // Verify endpointId
@@ -128,10 +124,7 @@ const initializeState = (config: Config): State => {
         ethers.utils.defaultAbiCoder.encode(['string', 'string'], [endpoint.oisTitle, endpoint.endpointName])
       );
       if (expectedEndpointId !== template.endpointId) {
-        utils.logger.warn(
-          `EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`,
-          baseLogOptions
-        );
+        utils.logger.warn(`EndpointId ${template.endpointId} does not match expected ${expectedEndpointId}`);
         return acc;
       }
 
@@ -148,7 +141,6 @@ const initializeState = (config: Config): State => {
   );
   return {
     config,
-    baseLogOptions,
     groupedSubscriptions,
     apiValuesBySubscriptionId: {},
     providerStates: [],
@@ -156,7 +148,7 @@ const initializeState = (config: Config): State => {
 };
 
 const initializeEvmStates = async (state: State): Promise<State> => {
-  const { config, baseLogOptions } = state;
+  const { config } = state;
 
   const evmChains = config.chains.filter((chain) => chain.type === 'evm');
   if (isEmpty(evmChains)) {
@@ -164,16 +156,18 @@ const initializeEvmStates = async (state: State): Promise<State> => {
   }
   const evmPromises = evmChains.flatMap((chain) =>
     Object.entries(chain.providers).map(async ([providerName, chainProvider]) => {
-      const evmLogOptions = buildLogOptions('meta', { chainId: chain.id, providerName }, baseLogOptions);
+      utils.addMetadata({ 'Chain-ID': chain.id, Provider: providerName });
 
       // Initialize provider specific data
       const [logs, evmState] = await initializeEvmState(chain, chainProvider.url || '');
-      utils.logger.logPending(logs, evmLogOptions);
+      utils.logger.logPending(logs);
       if (isNil(evmState)) {
-        utils.logger.warn('Failed to initialize EVM state', evmLogOptions);
+        utils.logger.warn('Failed to initialize EVM state');
+        utils.removeMetadata(['Chain-ID', 'Provider']);
         return null;
       }
 
+      utils.removeMetadata(['Chain-ID', 'Provider']);
       return {
         chainId: chain.id,
         providerName,
@@ -191,12 +185,15 @@ const initializeEvmStates = async (state: State): Promise<State> => {
 };
 
 const executeApiCalls = async (state: State): Promise<State> => {
-  const { config, baseLogOptions, groupedSubscriptions } = state;
+  const {
+    config: { ois, apiCredentials },
+    groupedSubscriptions,
+  } = state;
   const apiValuePromises = groupedSubscriptions.map(async ({ subscriptions, template, endpoint }) => {
     const apiCallParameters = abi.decode(template.encodedParameters);
 
     const infiniteRetries = 100_000;
-    const goResult = await promise.go(() => callApi(config, endpoint, apiCallParameters), {
+    const goResult = await promise.go(() => callApi({ ois, apiCredentials }, endpoint, apiCallParameters), {
       attemptTimeoutMs: 10_000,
       retries: infiniteRetries,
       totalTimeoutMs: 40_000,
@@ -221,8 +218,11 @@ const executeApiCalls = async (state: State): Promise<State> => {
   const callApiResults = await Promise.all(apiValuePromises);
   const successfulCalls = callApiResults.filter((call) => call[1].apiValue !== null);
 
-  const logs = callApiResults.flatMap((call) => call[0]);
-  utils.logger.logPending(logs, baseLogOptions);
+  callApiResults.forEach(([logs, template]) => {
+    utils.addMetadata({ 'Template-ID': template.templateId });
+    utils.logger.logPending(logs);
+    utils.removeMetadata(['Template-ID']);
+  });
 
   const apiValuesBySubscriptionId = successfulCalls.reduce(
     (acc: { [subscriptionId: string]: ethers.BigNumber }, result) => {
@@ -242,7 +242,7 @@ const executeApiCalls = async (state: State): Promise<State> => {
 };
 
 const submitTransactions = async (state: State) => {
-  const { baseLogOptions, groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
+  const { groupedSubscriptions, apiValuesBySubscriptionId, providerStates } = state;
 
   const subscriptions = groupedSubscriptions.flatMap((s) => s.subscriptions);
 
@@ -284,7 +284,7 @@ const submitTransactions = async (state: State) => {
   const providerSponsorPromises = providerSponsorSubscriptionsArray.map(async (providerSponsorSubscriptions) =>
     spawn({
       providerSponsorSubscriptions,
-      baseLogOptions: baseLogOptions,
+      logOptions: utils.getLogOptions()!,
       type: process.env.CLOUD_PROVIDER as 'local' | 'aws',
       stage: process.env.STAGE!,
     })
@@ -294,7 +294,7 @@ const submitTransactions = async (state: State) => {
 
   providerSponsorResults.forEach((result) => {
     if (result.status === 'rejected') {
-      utils.logger.error(JSON.stringify(result.reason), baseLogOptions);
+      utils.logger.error(JSON.stringify(result.reason));
     }
   });
 };
@@ -304,25 +304,25 @@ const updateBeacon = async (config: Config) => {
   // STEP 1: Initialize state
   // =================================================================
   let state: State = initializeState(config);
-  utils.logger.debug('Initial state created...', state.baseLogOptions);
+  utils.logger.debug('Initial state created...');
 
   // **************************************************************************
   // STEP 2. Initialize providers
   // **************************************************************************
   state = await initializeEvmStates(state);
-  utils.logger.debug('Evm states initialized...', state.baseLogOptions);
+  utils.logger.debug('Evm states initialized...');
 
   // **************************************************************************
   // STEP 3: Make API calls
   // **************************************************************************
   state = await executeApiCalls(state);
-  utils.logger.debug('API requests executed...', state.baseLogOptions);
+  utils.logger.debug('API requests executed...');
 
   // **************************************************************************
   // STEP 4. Initiate transactions for each provider, sponsor wallet pair
   // **************************************************************************
   await submitTransactions(state);
-  utils.logger.debug('Transactions submitted...', state.baseLogOptions);
+  utils.logger.debug('Transactions submitted...');
 
   return state;
 };

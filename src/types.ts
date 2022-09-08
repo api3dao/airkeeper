@@ -12,7 +12,6 @@ export interface LogsAndApiValuesByBeaconId {
 
 export interface BaseState {
   config: Config;
-  baseLogOptions: utils.LogOptions;
 }
 export interface State extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];
@@ -72,7 +71,7 @@ export interface ProviderSponsorProcessSubscriptionsState extends SponsorSubscri
 
 export interface WorkerParameters {
   providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
-  baseLogOptions: utils.LogOptions;
+  logOptions: utils.LogOptions;
   stage: string;
 }
 export type CallApiResult = node.LogsData<{

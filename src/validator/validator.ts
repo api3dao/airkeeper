@@ -1,5 +1,5 @@
 import * as airnodeValidator from '@api3/airnode-validator';
-import * as airnodeOis from '@api3/airnode-ois';
+import * as airnodeOis from '@api3/ois';
 import { RefinementCtx, z, ZodFirstPartySchemaTypes } from 'zod';
 
 export const templateParametersSchema = z.object({ type: z.string(), name: z.string(), value: z.string() });
