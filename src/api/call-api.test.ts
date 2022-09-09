@@ -19,11 +19,7 @@ describe('callApi', () => {
   if (!interpolatedConfig.success) {
     throw new Error('Secrets interpolation failed. Caused by: ' + interpolatedConfig.error.message);
   }
-  const airnodeAddress = interpolatedConfig.data.airnodeAddress;
-  const airnodeXpub = interpolatedConfig.data.airnodeXpub;
-  if (interpolatedConfig.data.airnodeAddress && interpolatedConfig.data.airnodeAddress !== airnodeAddress) {
-    throw new Error(`xpub does not belong to Airnode: ${airnodeAddress}`);
-  }
+  const { ois, apiCredentials } = config;
   const endpoint = interpolatedConfig.data.endpoints[Object.keys(interpolatedConfig.data.endpoints)[0]];
   const templateId = Object.keys(interpolatedConfig.data.templatesV1)[0];
   const templateParameters = interpolatedConfig.data.templatesV1[templateId].encodedParameters;
@@ -35,21 +31,13 @@ describe('callApi', () => {
     const apiResponse = { data: { success: true, result: '723.392028' } };
     spy.mockResolvedValue(apiResponse);
 
-    let [logs, res] = await callApi(interpolatedConfig.data, endpoint, apiCallParameters);
+    const [logs, res] = await callApi({ ois, apiCredentials }, endpoint, apiCallParameters);
 
     expect(logs).toHaveLength(1);
     expect(logs).toEqual(expect.arrayContaining([{ level: 'DEBUG', message: 'API value: 723392028' }]));
     expect(res).toBeDefined();
     expect(res).toEqual(ethers.BigNumber.from(723392028));
     expect(spy).toHaveBeenCalledTimes(1);
-
-    [logs, res] = await callApi({ ...interpolatedConfig.data, airnodeXpub }, endpoint, apiCallParameters);
-
-    expect(logs).toHaveLength(1);
-    expect(logs).toEqual(expect.arrayContaining([{ level: 'DEBUG', message: 'API value: 723392028' }]));
-    expect(res).toBeDefined();
-    expect(res).toEqual(ethers.BigNumber.from(723392028));
-    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it("returns null if reserved parameter '_type' is missing", async () => {

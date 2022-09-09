@@ -41,15 +41,16 @@ describe('validator', () => {
     });
 
     it('throws on incorrect type', () => {
-      const { airnodeAddress, ...rest } = interpolatedConfig.data;
+      const { nodeSettings, ...rest } = interpolatedConfig.data;
+      const { airnodeAddress, ...restNodeSettings } = nodeSettings;
       expect(typeof airnodeAddress).toEqual('string');
-      expect(() => configSchema.parse({ airnodeAddress: 100, ...rest })).toThrow(
+      expect(() => configSchema.parse({ ...rest, nodeSettings: { airnodeAddress: 100, ...restNodeSettings } })).toThrow(
         new ZodError([
           {
             code: 'invalid_type',
             expected: 'string',
             received: 'number',
-            path: ['airnodeAddress'],
+            path: ['nodeSettings', 'airnodeAddress'],
             message: 'Expected string, received number',
           },
         ])
@@ -64,10 +65,12 @@ describe('validator', () => {
     });
 
     it('does not throw on missing optional field', () => {
-      const { airnodeAddress, ...rest } = interpolatedConfig.data;
+      const { nodeSettings, ...rest } = interpolatedConfig.data;
+      const { airnodeAddress, ...restNodeSettings } = nodeSettings;
       expect(typeof airnodeAddress).toEqual('string');
 
-      expect(validateConfig(rest)).toEqual({ success: true, data: rest });
+      const expectedConfig = { ...rest, nodeSettings: { ...restNodeSettings } };
+      expect(validateConfig(expectedConfig)).toEqual({ success: true, data: expectedConfig });
     });
   });
 });

@@ -1,4 +1,5 @@
 import * as node from '@api3/airnode-node';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { processSponsorWallet } from './process-sponsor-wallet';
 import { GAS_LIMIT, PROTOCOL_ID_PSP } from '../constants';
@@ -34,7 +35,7 @@ const conditionPspBeaconUpdateMock = (
   _conditionParameters: string
 ) => Promise.resolve([true]);
 
-const gasTarget = {
+const gasTarget: utils.GasTarget = {
   type: 2,
   maxPriorityFeePerGas: ethers.BigNumber.from(3120000000),
   maxFeePerGas: ethers.BigNumber.from(3866792752),

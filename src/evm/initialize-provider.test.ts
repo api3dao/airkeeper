@@ -7,6 +7,7 @@ jest.mock('@api3/airnode-utilities', () => {
   };
 });
 
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { initializeEvmState, initializeProvider } from './initialize-provider';
 import { BASE_FEE_MULTIPLIER, PRIORITY_FEE_IN_WEI } from '../constants';
@@ -18,8 +19,6 @@ describe('initializeEvmState', () => {
   const providerUrl = 'http://localhost:8545';
 
   const chain: ChainConfig = {
-    maxConcurrency: 100,
-    authorizers: [],
     contracts: {
       AirnodeRrp: '0x5FbDB2315678afecb367f032d93F642f64180aa3',
       RrpBeaconServer: '0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e',
@@ -29,10 +28,16 @@ describe('initializeEvmState', () => {
     providers: { local: { url: providerUrl } },
     type: 'evm',
     options: {
-      txType: 'eip1559',
-      baseFeeMultiplier: 2,
-      priorityFee: { value: 3.12, unit: 'gwei' },
-      fulfillmentGasLimit: 500_000,
+      fulfillmentGasLimit: 500000,
+      gasPriceOracle: [
+        {
+          gasPriceStrategy: 'constantGasPrice',
+          gasPrice: {
+            value: 10,
+            unit: 'gwei',
+          },
+        },
+      ],
     },
   };
 
@@ -48,10 +53,28 @@ describe('initializeEvmState', () => {
       {
         ...chain,
         options: {
-          txType,
-          baseFeeMultiplier: 2,
-          priorityFee: { value: 3.12, unit: 'gwei' },
-          fulfillmentGasLimit: 500_000,
+          fulfillmentGasLimit: 500000,
+          gasPriceOracle: [
+            ...(txType === 'eip1559'
+              ? [
+                  {
+                    gasPriceStrategy: 'providerRecommendedEip1559GasPrice',
+                    baseFeeMultiplier: 2,
+                    priorityFee: {
+                      value: 3.12,
+                      unit: 'gwei',
+                    },
+                  },
+                ]
+              : []),
+            {
+              gasPriceStrategy: 'constantGasPrice',
+              gasPrice: {
+                value: 10,
+                unit: 'gwei',
+              },
+            },
+          ] as any,
         },
       },
       providerUrl
@@ -59,19 +82,9 @@ describe('initializeEvmState', () => {
 
     expect(getBlockSpy).toHaveBeenNthCalledWith(1, 'latest');
     expect(getGasPriceMock).toHaveBeenCalledTimes(1);
-    const gasPriceLogMessage =
-      txType === 'legacy'
-        ? expect.stringMatching(/Gas price \(legacy\) set to [0-9]*\.[0-9]+ Gwei/)
-        : expect.stringMatching(
-            /Gas price \(EIP-1559\) set to a Max Fee of [0-9]*\.[0-9]+ Gwei and a Priority Fee of [0-9]*\.[0-9]+ Gwei/
-          );
     expect(logs).toEqual(
       expect.arrayContaining([
         { level: 'INFO', message: `Current block number for chainId 31337: ${currentBlock.number}` },
-        {
-          level: 'INFO',
-          message: gasPriceLogMessage,
-        },
       ])
     );
     expect(data).toEqual(
@@ -100,25 +113,6 @@ describe('initializeEvmState', () => {
         }),
       ])
     );
-    expect(data).toEqual(null);
-  });
-
-  it('returns null with error log if gas target cannot be fetched', async () => {
-    const getBlockSpy = jest.spyOn(ethers.providers.JsonRpcProvider.prototype, 'getBlock');
-    const currentBlock = { number: Math.floor(Date.now() / 1000), timestamp: Date.now() };
-    getBlockSpy.mockResolvedValue(currentBlock as ethers.providers.Block);
-
-    const errorLog = {
-      level: 'ERROR',
-      message: 'All attempts to get EIP-1559 gas pricing from provider failed',
-    };
-    getGasPriceMock.mockResolvedValue([[errorLog], null]);
-
-    const [logs, data] = await initializeEvmState(chain, providerUrl);
-
-    expect(getBlockSpy).toHaveBeenCalled();
-    expect(getGasPriceMock).toHaveBeenCalled();
-    expect(logs).toEqual(expect.arrayContaining([errorLog, { level: 'ERROR', message: 'Failed to fetch gas price' }]));
     expect(data).toEqual(null);
   });
 
@@ -152,8 +146,9 @@ describe('initializeEvmState', () => {
 /**
  * Creates gas pricing-related resources based on txType.
  */
-const createGasTarget = (txType: 'legacy' | 'eip1559') => {
+const createGasTarget = (txType: 'legacy' | 'eip1559'): utils.GasTarget => {
   const gasLimit = ethers.BigNumber.from(500_000);
+
   if (txType === 'legacy') {
     const gasPrice = ethers.BigNumber.from(1_000);
     return { type: 0, gasPrice, gasLimit };
