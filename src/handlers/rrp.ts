@@ -49,9 +49,10 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
 
   utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`);
 
-  const { airnodeAddress, airnodeXpub, chains, nodeSettings, triggers, endpoints, ois, apiCredentials } = config;
+  const { chains, nodeSettings, triggers, endpoints, ois, apiCredentials } = config;
+  const { airnodeWalletMnemonic, airnodeAddress, airnodeXpub } = nodeSettings;
 
-  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(nodeSettings.airnodeWalletMnemonic);
+  const airnodeHDNode = ethers.utils.HDNode.fromMnemonic(airnodeWalletMnemonic);
   const derivedAirnodeAddress = (
     airnodeXpub
       ? ethers.utils.HDNode.fromExtendedKey(airnodeXpub).derivePath('0/0')
@@ -183,7 +184,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
           utils.logger.debug('deriving keeperSponsorWallet...');
 
           const keeperSponsorWallet = node.evm
-            .deriveSponsorWalletFromMnemonic(config.nodeSettings.airnodeWalletMnemonic, keeperSponsor, '12345')
+            .deriveSponsorWalletFromMnemonic(airnodeWalletMnemonic, keeperSponsor, '12345')
             .connect(provider);
 
           utils.addMetadata({ 'Sponsor-Wallet': shortenAddress(keeperSponsorWallet.address) });

@@ -1,6 +1,6 @@
 import * as airnodeValidator from '@api3/airnode-validator';
 import * as airnodeOis from '@api3/ois';
-import { RefinementCtx, z, ZodFirstPartySchemaTypes } from 'zod';
+import { z, ZodFirstPartySchemaTypes } from 'zod';
 
 export const templateParametersSchema = z.object({ type: z.string(), name: z.string(), value: z.string() });
 
@@ -17,7 +17,7 @@ export const rrpBeaconServerKeeperJobsTriggerSchema = z.object({
 // TODO: XOR?
 // either rrpBeaconServerKeeperJobs or protoPsp should be set
 // or maybe they both need to be optional 🤔
-export const triggersSchema = airnodeValidator.config.triggersSchema.extend({
+export const triggersSchema = z.object({
   rrpBeaconServerKeeperJobs: z.array(rrpBeaconServerKeeperJobsTriggerSchema),
   protoPsp: z.array(z.string()),
 });
@@ -55,23 +55,33 @@ export const chainContractsSchema = airnodeValidator.config.chainContractsSchema
   DapiServer: z.string(),
 });
 
-export const chainSchema = airnodeValidator.config.chainConfigSchema.extend({
+export const chainSchema = z.object({
+  blockHistoryLimit: z.number().int().optional(), // Defaults to BLOCK_COUNT_HISTORY_LIMIT defined in airnode-node
   contracts: chainContractsSchema,
+  id: z.string(),
+  type: airnodeValidator.config.chainTypeSchema,
+  options: airnodeValidator.config.chainOptionsSchema,
+  providers: z.record(z.string(), airnodeValidator.config.providerSchema),
 });
 
 export const chainsSchema = z.array(chainSchema);
 
+export const nodeSettingsSchema = z.object({
+  airnodeAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/)
+    .optional(),
+  airnodeXpub: z.string().optional(),
+  airnodeWalletMnemonic: z.string(),
+  logFormat: airnodeValidator.config.logFormatSchema,
+  logLevel: airnodeValidator.config.logLevelSchema,
+});
+
 export const configSchema = z
   .object({
-    airnodeAddress: z
-      .string()
-      .regex(/^0x[a-fA-F0-9]{40}$/)
-      .optional(),
-    airnodeXpub: z.string().optional(),
     chains: chainsSchema,
-    nodeSettings: airnodeValidator.config.nodeSettingsSchema,
+    nodeSettings: nodeSettingsSchema,
     triggers: triggersSchema,
-    templates: z.array(airnodeValidator.config.templateSchema),
     subscriptions: subscriptionsSchema,
     templatesV1: templatesSchema,
     endpoints: endpointsSchema,
@@ -79,11 +89,13 @@ export const configSchema = z
     apiCredentials: z.array(airnodeValidator.config.apiCredentialsSchema),
   })
   .strict();
+
 export type SchemaType<Schema extends ZodFirstPartySchemaTypes> = z.infer<Schema>;
-export type ValidatorRefinement<T> = (arg: T, ctx: RefinementCtx) => void;
 
 export type Config = SchemaType<typeof configSchema>;
 export type ChainConfig = z.infer<typeof chainSchema>;
+export type NodeSettings = z.infer<typeof nodeSettingsSchema>;
+export type Triggers = z.infer<typeof triggersSchema>;
 export type Subscription = z.infer<typeof subscriptionSchema>;
 export type Subscriptions = z.infer<typeof subscriptionsSchema>;
 export type Template = z.infer<typeof templateSchema>;
