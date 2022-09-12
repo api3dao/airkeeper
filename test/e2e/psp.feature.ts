@@ -190,8 +190,8 @@ describe('PSP', () => {
     jest.spyOn(configModule, 'loadConfig').mockImplementation(() => config as any);
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
@@ -205,8 +205,8 @@ describe('PSP', () => {
 
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
@@ -234,8 +234,8 @@ describe('PSP', () => {
 
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(ethers.BigNumber.from(41091.12345 * 1_000_000));
@@ -258,8 +258,8 @@ describe('PSP', () => {
 
     await psp.handler({} as any, {} as any, {} as any);
 
-    const beaconValueETH = await readBeaconValue(config.airnodeAddress, templateIdETH, dapiServer);
-    const beaconValueBTC = await readBeaconValue(config.airnodeAddress, templateIdBTC, dapiServer);
+    const beaconValueETH = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdETH, dapiServer);
+    const beaconValueBTC = await readBeaconValue(config.nodeSettings.airnodeAddress!, templateIdBTC, dapiServer);
 
     expect(beaconValueETH).toEqual(ethers.BigNumber.from(723.39202 * 1_000_000));
     expect(beaconValueBTC).toEqual(null);

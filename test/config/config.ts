@@ -1,11 +1,8 @@
-export const buildConfig = () => ({
-  airnodeAddress: '0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace',
-  airnodeXpub:
-    'xpub6CjvSJ3sybHuVaYnQsCvNQnXfNrMusXEtfoAvYuS1pEDtKngXQE1dcTDXR9dgwfqdakksFrhNHeKiqsYKD6KS5mga1NvegzbV6nKwsNyfGd',
+import { Config } from '../../src';
+
+export const buildConfig = (): Config => ({
   chains: [
     {
-      maxConcurrency: 100,
-      authorizers: [],
       contracts: {
         AirnodeRrp: '0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512',
         RrpBeaconServer: '0x610178dA211FEF7D417bC0e6FeD39F05609AD788',
@@ -19,57 +16,28 @@ export const buildConfig = () => ({
       },
       type: 'evm',
       options: {
-        txType: 'eip1559',
-        baseFeeMultiplier: 2,
-        priorityFee: {
-          value: 3.12,
-          unit: 'gwei',
-        },
         fulfillmentGasLimit: 500000,
+        gasPriceOracle: [
+          {
+            gasPriceStrategy: 'constantGasPrice',
+            gasPrice: {
+              value: 10,
+              unit: 'gwei',
+            },
+          },
+        ],
       },
     },
   ],
   nodeSettings: {
     airnodeWalletMnemonic: 'achieve climb couple wait accident symbol spy blouse reduce foil echo label',
-    httpGateway: {
-      enabled: false,
-    },
-    httpSignedDataGateway: {
-      enabled: false,
-    },
-    heartbeat: {
-      enabled: false,
-    },
+    airnodeAddress: '0xA30CA71Ba54E83127214D3271aEA8F5D6bD4Dace',
+    airnodeXpub:
+      'xpub6CjvSJ3sybHuVaYnQsCvNQnXfNrMusXEtfoAvYuS1pEDtKngXQE1dcTDXR9dgwfqdakksFrhNHeKiqsYKD6KS5mga1NvegzbV6nKwsNyfGd',
     logFormat: 'plain',
     logLevel: 'INFO',
-    nodeVersion: '0.7.2',
-    cloudProvider: {
-      type: 'local',
-    },
-    stage: 'dev',
   },
   triggers: {
-    rrp: [
-      {
-        endpointId: '0x13dea3311fe0d6b84f4daeab831befbc49e19e6494c41e9e065a09c3c68f43b6',
-        oisTitle: 'Currency Converter API',
-        endpointName: 'convertToUSD',
-      },
-    ],
-    http: [
-      {
-        endpointId: '0x13dea3311fe0d6b84f4daeab831befbc49e19e6494c41e9e065a09c3c68f43b6',
-        oisTitle: 'Currency Converter API',
-        endpointName: 'convertToUSD',
-      },
-    ],
-    httpSignedData: [
-      {
-        endpointId: '0x13dea3311fe0d6b84f4daeab831befbc49e19e6494c41e9e065a09c3c68f43b6',
-        oisTitle: 'Currency Converter API',
-        endpointName: 'convertToUSD',
-      },
-    ],
     rrpBeaconServerKeeperJobs: [
       {
         chainIds: ['31337'],
@@ -92,7 +60,6 @@ export const buildConfig = () => ({
       '0xb4c3cea3b78c384eb4409df1497bb2f1fd872f1928a218f8907c38fe0d66ffea',
     ],
   },
-  templates: [],
   subscriptions: {
     '0xc1ed31de05a9aa74410c24bccd6aa40235006f9063f1c65d47401e97ad04560e': {
       chainId: '31337',
@@ -139,7 +106,7 @@ export const buildConfig = () => ({
   },
   ois: [
     {
-      oisFormat: '1.0.0',
+      oisFormat: '1.1.1',
       version: '1.2.3',
       title: 'Currency Converter API',
       apiSpecifications: {
