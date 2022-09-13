@@ -29,14 +29,15 @@ updates is `12345` and for PSP it is `2`.
 
 ## Setup
 
-- Airkeeper will require a configuration file that matches the one being used by the target Airnode. You will need to
-  copy the contents of the Airnode `config.json` into `airkeeper.json`. Then `secrets.env` file can be copied from the
-  Airnode repo and placed in the /config directory of this repo. This `secrets.env` file will be interpolated with the
-  `airkeeper.json` file during runtime.
+- Airkeeper configuration file will require you to copy over some parts of the Airnode's
+  [`config.json`](https://github.com/api3dao/airnode/blob/v0.8.0/packages/airnode-node/config/config.example.json) file.
+  For instance, `ois` and `apiCredentials` sections must be copied and pasted completely. You can refer to the
+  [`airkeeper.example.json`](config/airkeeper.example.json) file for other fields that also need to be copied. Then
+  `secrets.env` file can be copied from the Airnode repo and placed in the /config directory of this repo. This
+  `secrets.env` file will be interpolated with the `airkeeper.json` file during runtime.
 
 - Additional configuration specific to Airkeeper can be added to the `airkeeper.json` file. For instance `proto-psp`
-  triggers, etc. Check out the `airkeeper.example.json` inside the /config directory for more details.
-  <!-- TODO: add more details on each configuration property or link to docs -->
+  triggers, etc. <!-- TODO: add more details on each configuration property or link to docs -->
 
 - Another requirement is to have an AWS account where these lambda functions can be deployed. Cloud provider credentials
   must be provided in the `aws.env` file and placed in the /config directory of this repo.
