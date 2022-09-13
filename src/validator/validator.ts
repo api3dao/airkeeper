@@ -6,9 +6,9 @@ export const templateParametersSchema = z.object({ type: z.string(), name: z.str
 
 export const rrpBeaconServerKeeperJobsTriggerSchema = z.object({
   chainIds: z.array(z.string()),
-  templateId: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  templateId: airnodeValidator.config.evmIdSchema,
   templateParameters: z.array(templateParametersSchema),
-  endpointId: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  endpointId: airnodeValidator.config.evmIdSchema,
   deviationPercentage: z.string(),
   keeperSponsor: z.string(),
   requestSponsor: z.string(),
@@ -25,7 +25,7 @@ export const triggersSchema = z.object({
 export const subscriptionSchema = z.object({
   chainId: z.string(),
   airnodeAddress: z.string(),
-  templateId: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  templateId: airnodeValidator.config.evmIdSchema,
   parameters: z.string(),
   conditions: z.string(),
   relayer: z.string(),
@@ -37,7 +37,7 @@ export const subscriptionSchema = z.object({
 export const subscriptionsSchema = z.record(subscriptionSchema);
 
 export const templateSchema = z.object({
-  endpointId: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  endpointId: airnodeValidator.config.evmIdSchema,
   encodedParameters: z.string(),
 });
 
@@ -67,10 +67,7 @@ export const chainSchema = z.object({
 export const chainsSchema = z.array(chainSchema);
 
 export const nodeSettingsSchema = z.object({
-  airnodeAddress: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/)
-    .optional(),
+  airnodeAddress: airnodeValidator.config.evmAddressSchema.optional(),
   airnodeXpub: z.string().optional(),
   airnodeWalletMnemonic: z.string(),
   logFormat: airnodeValidator.config.logFormatSchema,
