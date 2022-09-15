@@ -26,16 +26,26 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
   utils.logger.debug(`Event: ${JSON.stringify(event, null, 2)}`);
   utils.logger.debug(`Context: ${JSON.stringify(context, null, 2)}`);
 
-  const startedAt = new Date();
-  const config: promise.GoResult<Config> = promise.goSync(() =>
+  const goConfig: promise.GoResult<Config> = promise.goSync(() =>
     loadConfig(path.join(__dirname, '..', '..', 'config', 'airkeeper.json'), process.env)
   );
-  if (!config.success) {
-    utils.logger.error(config.error.message);
-    throw config.error;
+  if (!goConfig.success) {
+    utils.logger.error(goConfig.error.message);
+    throw goConfig.error;
   }
+  const { data: config } = goConfig;
 
-  await updateBeacon(config.data);
+  const coordinatorId = utils.randomHexString(16);
+  utils.setLogOptions({
+    format: config.nodeSettings.logFormat,
+    level: config.nodeSettings.logLevel,
+    meta: { 'Coordinator-ID': coordinatorId },
+  });
+
+  const startedAt = new Date();
+  utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`);
+
+  await updateBeacon(config);
 
   const completedAt = new Date();
   const durationMs = Math.abs(completedAt.getTime() - startedAt.getTime());
@@ -44,13 +54,6 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
 
 const initializeState = (config: Config): State => {
   const { triggers, subscriptions } = config;
-
-  const coordinatorId = utils.randomHexString(16);
-  utils.setLogOptions({
-    format: config.nodeSettings.logFormat,
-    level: config.nodeSettings.logLevel,
-    meta: { 'Coordinator-ID': coordinatorId },
-  });
 
   const enabledSubscriptions = triggers.protoPsp.reduce((acc: Id<Subscription>[], subscriptionId) => {
     // Get subscriptions details
