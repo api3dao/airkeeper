@@ -1,15 +1,9 @@
 service: airkeeper
 
-package:
-  patterns:
-    - ./config/airkeeper.json
-    - '!src'
-    - '!.*'
-
 provider:
   name: aws
-  region: ${opt:region, env:REGION, 'us-east-1'}
-  stage: ${opt:stage, env:STAGE, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
   runtime: nodejs14.x
   memorySize: 512
   logRetentionInDays: 14
@@ -19,6 +13,16 @@ provider:
       Action:
         - 'lambda:InvokeFunction'
       Resource: !Sub 'arn:aws:lambda:${self:provider.region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-process-subscriptions'
+
+package:
+  patterns:
+    - ./config/airkeeper.json
+    - '!.git/**'
+    - '!.github/**'
+    - '!.husky/**'
+    - '!src/**'
+    - '!test/**'
+    - '!.*'
 
 functions:
   rrp-beacon-update:
