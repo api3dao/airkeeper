@@ -14,9 +14,6 @@ export const rrpBeaconServerKeeperJobsTriggerSchema = z.object({
   requestSponsor: z.string(),
 });
 
-// TODO: XOR?
-// either rrpBeaconServerKeeperJobs or protoPsp should be set
-// or maybe they both need to be optional 🤔
 export const triggersSchema = z.object({
   rrpBeaconServerKeeperJobs: z.array(rrpBeaconServerKeeperJobsTriggerSchema),
   protoPsp: z.array(z.string()),
