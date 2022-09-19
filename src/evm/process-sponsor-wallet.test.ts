@@ -1,7 +1,9 @@
 import * as node from '@api3/airnode-node';
+import * as protocol from '@api3/airnode-protocol';
+import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
 import { processSponsorWallet } from './process-sponsor-wallet';
-import { GAS_LIMIT, PROTOCOL_ID_PSP } from '../constants';
+import { GAS_LIMIT } from '../constants';
 
 const airnodeWallet = ethers.Wallet.fromMnemonic(
   'achieve climb couple wait accident symbol spy blouse reduce foil echo label'
@@ -34,7 +36,7 @@ const conditionPspBeaconUpdateMock = (
   _conditionParameters: string
 ) => Promise.resolve([true]);
 
-const gasTarget = {
+const gasTarget: utils.GasTarget = {
   type: 2,
   maxPriorityFeePerGas: ethers.BigNumber.from(3120000000),
   maxFeePerGas: ethers.BigNumber.from(3866792752),
@@ -93,7 +95,7 @@ const sponsorWallet = node.evm
   .deriveSponsorWalletFromMnemonic(
     airnodeWallet.mnemonic.phrase,
     '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-    PROTOCOL_ID_PSP
+    protocol.PROTOCOL_IDS.PSP
   )
   .connect(provider);
 

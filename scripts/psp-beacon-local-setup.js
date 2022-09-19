@@ -3,12 +3,12 @@ const path = require('path');
 const ethers = require('ethers');
 const abi = require('@api3/airnode-abi');
 const { evm } = require('@api3/airnode-node');
+const { PROTOCOL_IDS } = require('@api3/airnode-protocol');
 const {
   AccessControlRegistry__factory: AccessControlRegistryFactory,
   AirnodeProtocol__factory: AirnodeProtocolFactory,
   DapiServer__factory: DapiServerFactory,
 } = require('@api3/airnode-protocol-v1');
-const { PROTOCOL_ID_PSP } = require('../dist/constants');
 
 async function main() {
   const config = JSON.parse(fs.readFileSync(path.resolve('./scripts/config/psp-beacon-local.json')).toString());
@@ -61,7 +61,7 @@ async function main() {
   const airnodeWallet = ethers.Wallet.fromMnemonic(config.airnodeMnemonic);
   console.log('👛 ~ airnodeWallet', airnodeWallet.address);
   const airnodePspSponsorWallet = evm
-    .deriveSponsorWalletFromMnemonic(config.airnodeMnemonic, roles.sponsor.address, PROTOCOL_ID_PSP)
+    .deriveSponsorWalletFromMnemonic(config.airnodeMnemonic, roles.sponsor.address, PROTOCOL_IDS.PSP)
     .connect(provider);
   console.log('👛 ~ airnodePspSponsorWallet', airnodePspSponsorWallet.address);
   await roles.deployer.sendTransaction({
@@ -80,7 +80,7 @@ async function main() {
   console.log('🆔 ~ templateId', templateId);
 
   // Subscriptions
-  const threshold = (await dapiServer.HUNDRED_PERCENT()).div(config.threshold); // Update threshold %
+  const threshold = (await dapiServer.HUNDRED_PERCENT()).mul(config.threshold).div(100); // Update threshold %
   console.log('📄 ~ threshold', threshold.toString());
   const beaconUpdateSubscriptionConditionParameters = ethers.utils.defaultAbiCoder.encode(['uint256'], [threshold]);
   console.log('📄 ~ beaconUpdateSubscriptionConditionParameters', beaconUpdateSubscriptionConditionParameters);

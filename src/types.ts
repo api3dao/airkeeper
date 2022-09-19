@@ -1,31 +1,7 @@
 import * as node from '@api3/airnode-node';
 import * as utils from '@api3/airnode-utilities';
 import { ethers } from 'ethers';
-import {
-  Triggers,
-  Subscription,
-  Subscriptions,
-  Template,
-  Templates,
-  Endpoint,
-  Endpoints,
-  AirkeeperChainContracts,
-  AirkeeperChainConfig,
-} from './validator';
-
-export interface ChainConfig extends node.ChainConfig {
-  readonly contracts: node.ChainConfig['contracts'] & AirkeeperChainContracts;
-}
-
-export interface Config extends node.Config {
-  readonly airnodeAddress?: string;
-  readonly airnodeXpub?: string;
-  readonly chains: (ChainConfig & AirkeeperChainConfig)[];
-  readonly triggers: node.Triggers & Triggers;
-  readonly subscriptions: Subscriptions;
-  readonly templatesV1: Templates;
-  readonly endpoints: Endpoints;
-}
+import { ChainConfig, Config, Endpoint, Subscription, Template } from './validator';
 
 export interface LogsAndApiValuesByBeaconId {
   [beaconId: string]: {
@@ -36,7 +12,6 @@ export interface LogsAndApiValuesByBeaconId {
 
 export interface BaseState {
   config: Config;
-  baseLogOptions: utils.LogOptions;
 }
 export interface State extends BaseState {
   groupedSubscriptions: GroupedSubscriptions[];
@@ -48,7 +23,7 @@ export type ProviderState<T extends {}> = T & {
   chainId: string;
   providerName: string;
   providerUrl: string;
-  chainConfig: ChainConfig & AirkeeperChainConfig;
+  chainConfig: ChainConfig;
 };
 
 export interface EVMBaseState {
@@ -96,7 +71,7 @@ export interface ProviderSponsorProcessSubscriptionsState extends SponsorSubscri
 
 export interface WorkerParameters {
   providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
-  baseLogOptions: utils.LogOptions;
+  logOptions: utils.LogOptions;
   stage: string;
 }
 export type CallApiResult = node.LogsData<{

@@ -1,12 +1,13 @@
-import { ethers } from 'ethers';
-import isNil from 'lodash/isNil';
-import * as protocol from '@api3/airnode-protocol';
 import * as node from '@api3/airnode-node';
+import * as protocol from '@api3/airnode-protocol';
+import { DapiServer__factory as DapiServerFactory } from '@api3/airnode-protocol-v1';
 import * as utils from '@api3/airnode-utilities';
 import { go } from '@api3/promise-utils';
-import { DapiServer__factory as DapiServerFactory } from '@api3/airnode-protocol-v1';
-import { ChainConfig, EVMBaseState, ProviderState } from '../types';
-import { TIMEOUT_MS, RETRIES } from '../constants';
+import { ethers } from 'ethers';
+import isNil from 'lodash/isNil';
+import { RETRIES, TIMEOUT_MS } from '../constants';
+import { EVMBaseState, ProviderState } from '../types';
+import { ChainConfig } from '../validator';
 
 export const initializeProvider = async (airnodeWalletMnemonic: string, providerState: ProviderState<EVMBaseState>) => {
   const airnodeWallet = ethers.Wallet.fromMnemonic(airnodeWalletMnemonic);
@@ -47,28 +48,10 @@ export const initializeEvmState = async (
   const currentBlockLog = utils.logger.pend('INFO', currentBlockMessage);
 
   // Fetch current gas fee data
-  const [gasPriceLogs, gasTarget] = await utils.getGasPrice({
-    provider,
-    chainOptions: chain.options,
-  });
-  if (!gasTarget) {
-    const message = 'Failed to fetch gas price';
-    const log = utils.logger.pend('ERROR', message);
-    return [[...gasPriceLogs, log], null];
-  }
-  let gasTargetMessage;
-  if (chain.options.txType === 'eip1559') {
-    const gweiMaxFee = node.evm.weiToGwei(gasTarget.maxFeePerGas!);
-    const gweiPriorityFee = node.evm.weiToGwei(gasTarget.maxPriorityFeePerGas!);
-    gasTargetMessage = `Gas price (EIP-1559) set to a Max Fee of ${gweiMaxFee} Gwei and a Priority Fee of ${gweiPriorityFee} Gwei`;
-  } else {
-    const gweiPrice = node.evm.weiToGwei(gasTarget.gasPrice!);
-    gasTargetMessage = `Gas price (legacy) set to ${gweiPrice} Gwei`;
-  }
-  const gasTargetLog = utils.logger.pend('INFO', gasTargetMessage);
+  const [gasPriceLogs, gasTarget] = await utils.getGasPrice(provider, chain.options);
 
   return [
-    [currentBlockLog, ...gasPriceLogs, gasTargetLog],
+    [currentBlockLog, ...gasPriceLogs],
     {
       currentBlock: currentBlock.data,
       gasTarget,

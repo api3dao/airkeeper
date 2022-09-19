@@ -1,21 +1,18 @@
+import * as path from 'path';
 import * as utils from '@api3/airnode-utilities';
 import { goSync } from '@api3/promise-utils';
 import isNil from 'lodash/isNil';
-import { loadAirnodeConfig } from '../config';
+import { loadConfig } from '../config';
 import { getSponsorWalletAndTransactionCount, initializeProvider, processSponsorWallet } from '../evm';
-import { buildLogOptions } from '../logger';
 import { ProviderSponsorProcessSubscriptionsState, ProviderSponsorSubscriptionsState } from '../types';
 import { shortenAddress } from '../wallet';
 
-export const processSubscriptions = async (
-  providerSponsorSubscriptions: ProviderSponsorProcessSubscriptionsState,
-  baseLogOptions: utils.LogOptions
-) => {
+export const processSubscriptions = async (providerSponsorSubscriptions: ProviderSponsorProcessSubscriptionsState) => {
   const { sponsorAddress, providerState, subscriptions } = providerSponsorSubscriptions;
   const { airnodeWallet, providerName, chainId, provider, contracts, voidSigner, currentBlock, gasTarget } =
     providerState;
 
-  const providerLogOptions = buildLogOptions('meta', { chainId, providerName }, baseLogOptions);
+  utils.addMetadata({ 'Chain-ID': chainId, Provider: providerName, Sponsor: shortenAddress(sponsorAddress) });
 
   // Fetch sponsor wallet transaction counts to be able to assign nonces to subscriptions
   const [transactionCountLogs, walletData] = await getSponsorWalletAndTransactionCount(
@@ -27,20 +24,17 @@ export const processSubscriptions = async (
 
   // Skip processing for the current sponsorAddress if the wallet functions fail
   if (isNil(walletData)) {
-    const sponsorLogOptions = buildLogOptions('additional', { sponsor: sponsorAddress }, providerLogOptions);
-    utils.logger.warn('Failed to fetch sponsor wallet or transaction count', sponsorLogOptions);
+    utils.logger.warn('Failed to fetch sponsor wallet or transaction count');
+    utils.removeMetadata(['Chain-ID', 'Provider', 'Sponsor']);
     return;
   }
 
   const { sponsorWallet, transactionCount } = walletData;
 
-  const sponsorWalletLogOptions = buildLogOptions(
-    'additional',
-    { sponsorWallet: shortenAddress(sponsorWallet.address) },
-    providerLogOptions
-  );
-  utils.logger.logPending(transactionCountLogs, sponsorWalletLogOptions);
-  utils.logger.info(`Processing ${subscriptions.length} subscription(s)`, sponsorWalletLogOptions);
+  utils.addMetadata({ 'Sponsor-Wallet': shortenAddress(sponsorWallet.address) });
+  utils.logger.logPending(transactionCountLogs);
+
+  utils.logger.info(`Processing ${subscriptions.length} subscription(s)`);
 
   const processSponsorWalletResult = await processSponsorWallet(
     airnodeWallet,
@@ -54,40 +48,39 @@ export const processSubscriptions = async (
   );
 
   processSponsorWalletResult.forEach(([logs, data]) => {
-    const subscriptionLogOptions = buildLogOptions('additional', { subscriptionId: data.id }, sponsorWalletLogOptions);
-    utils.logger.logPending(logs, subscriptionLogOptions);
+    utils.addMetadata({ 'Subscription-ID': data.id });
+    utils.logger.logPending(logs);
+    utils.removeMetadata(['Subscription-ID']);
   });
+
+  utils.removeMetadata(['Chain-ID', 'Provider', 'Sponsor', 'Sponsor-Wallet']);
 };
 
 export const handler = async (payload: {
   providerSponsorSubscriptions: ProviderSponsorSubscriptionsState;
-  baseLogOptions: utils.LogOptions;
+  logOptions: utils.LogOptions;
 }) => {
   utils.logger.debug(`Payload: ${JSON.stringify(payload, null, 2)}`);
 
-  const { providerSponsorSubscriptions, baseLogOptions } = payload;
+  const { providerSponsorSubscriptions } = payload;
 
-  const airnodeConfig = goSync(loadAirnodeConfig);
-  if (!airnodeConfig.success) {
-    utils.logger.error(airnodeConfig.error.message);
-    throw airnodeConfig.error;
+  const config = goSync(() => loadConfig(path.join(__dirname, '..', '..', 'config', 'airkeeper.json'), process.env));
+  if (!config.success) {
+    utils.logger.error(config.error.message);
+    throw config.error;
   }
 
   const providerState = await initializeProvider(
-    airnodeConfig.data.nodeSettings.airnodeWalletMnemonic,
+    config.data.nodeSettings.airnodeWalletMnemonic,
     providerSponsorSubscriptions.providerState
   );
 
-  await processSubscriptions(
-    {
-      ...providerSponsorSubscriptions,
-      providerState: { ...providerSponsorSubscriptions.providerState, ...providerState },
-    },
-    baseLogOptions
-  );
+  await processSubscriptions({
+    ...providerSponsorSubscriptions,
+    providerState: { ...providerSponsorSubscriptions.providerState, ...providerState },
+  });
 
   utils.logger.info(
-    `Processing subscriptions for sponsorAddress: ${providerSponsorSubscriptions.sponsorAddress} has finished`,
-    baseLogOptions
+    `Processing subscriptions for sponsorAddress: ${providerSponsorSubscriptions.sponsorAddress} has finished`
   );
 };
