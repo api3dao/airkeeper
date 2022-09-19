@@ -83,7 +83,7 @@ docker run -it --rm ^
 api3/airkeeper:latest deploy --stage dev --region us-east-1
 ```
 
-### Deploy
+### Remove
 
 The `remove` command will delete the previously deployed AWS lambda function and its AWS cloud scheduler.
 
@@ -105,13 +105,14 @@ api3/airkeeper:latest remove --stage dev --region us-east-1
 
 ## Deploy from CLI
 
-Airkeeper can also be deployed and removed form AWS by just running the following commands in the terminal:
+Airkeeper can also be deployed and removed from AWS by just running the following commands in the terminal:
 
 `yarn run sls:deploy --region us-east-1 --stage dev`
 
 `yarn run sls:remove --region us-east-1 --stage dev`
 
-You will need to export your AWS credentials in your terminal or ensure your local aws installation is logged in.
+Export your AWS credentials in your terminal or ensure your local aws installation is logged in before running these
+commands.
 
 ## Development instructions
 
@@ -136,15 +137,8 @@ Follow these steps to run Airkeeper locally:
 
 ### Running Airkeeper on AWS Lambda
 
-Airkeeper is meant to be deployed to the AWS lambda service and for this you will need to add your credentials to the
-`config/aws.env` file. Once done, the [`export-aws-env.sh`](scripts/export-aws-env.sh) script can be used to load them
-into the environment.
-
-1. (Optional) Run `yarn sls:config` to configure the AWS credentials. You must first configure the `config/aws.env` file
-   with your AWS account details and then run `source scripts/export-aws-env.sh` script to load the env vars.
-1. Run `yarn sls:deploy` to deploy the Airkeeper lambda function.
+1. Deploy the Airkeeper lambda function (See [here](#deploy-from-cli)).
 1. Run `yarn sls:invoke:psp` to invoke the Airkeeper PSP beacon update lambda function.
-1. Run `yarn sls:remove` to remove the Airkeeper lambda function.
 
 ## Additional considerations
 
