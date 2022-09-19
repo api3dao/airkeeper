@@ -20,7 +20,8 @@
   "files": [
     "dist",
     "serverless.yml",
-    "*.js"
+    "*.js",
+    "scripts"
   ],
   "scripts": {
     "build": "yarn clean && yarn compile:build",
@@ -35,18 +36,18 @@
     "dev:api": "ts-node test/server/server.ts",
     "dev:background": "yarn run dev:clean && pm2 start ecosystem.config.js",
     "docker": "docker build -t api3/airkeeper .",
+    "export-aws-env": "test -f config/aws.env && export $(egrep -v '^#' config/aws.env | xargs)",
     "lint": "yarn run prettier:check && yarn run lint:eslint",
     "lint:eslint": "eslint . --ext .js,.ts",
     "prettier:check": "prettier --check \"./**/*.{js,sol,ts,md,yml,json}\"",
     "prettier:write": "prettier --write \"./**/*.{js,sol,ts,md,yml,json}\" --ignore-unknown",
-    "sls:config": "sls config credentials --provider aws --key $AWS_ACCESS_KEY_ID --secret $AWS_SECRET_ACCESS_KEY",
-    "sls:deploy": "yarn build && sls deploy --region $REGION --stage $STAGE",
-    "sls:remove": "sls remove --region $REGION --stage $STAGE",
+    "sls:deploy": "yarn build && sls deploy",
+    "sls:remove": "sls remove",
     "sls:invoke:rrp-beacon-update": "sls invoke --function rrp-beacon-update",
     "sls:invoke-local:rrp-beacon-update": "yarn build && sls invoke local --function rrp-beacon-update",
     "sls:invoke:psp-beacon-update": "sls invoke --function psp-beacon-update",
     "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update --param='provider=local'",
-    "setup:psp-local": "tsc && node scripts/psp-beacon-local-setup.js",
+    "setup:psp-local": "node scripts/psp-beacon-local-setup.js",
     "test": "jest --selectProjects unit",
     "test:e2e": "SILENCE_LOGGER=true jest --selectProjects e2e",
     "prepare": "husky install"
@@ -61,7 +62,6 @@
     "@api3/airnode-validator": "^0.8.0",
     "@api3/promise-utils": "^0.3.0",
     "aws-lambda": "^1.0.7",
-    "aws-sdk": "^2.1212.0",
     "dotenv-safe": "^8.2.0",
     "ethers": "^5.7.0",
     "lodash": "^4.17.21",
@@ -79,6 +79,7 @@
     "@types/serverless": "^3.12.8",
     "@typescript-eslint/eslint-plugin": "^5.36.2",
     "@typescript-eslint/parser": "^5.36.2",
+    "aws-sdk": "^2.1212.0",
     "eslint": "^8.23.0",
     "eslint-plugin-functional": "^4.3.0",
     "eslint-plugin-import": "^2.25.4",
