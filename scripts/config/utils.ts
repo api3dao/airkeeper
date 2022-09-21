@@ -21,8 +21,6 @@ const PRETTIER_CONFIG = {
   ],
 } as any;
 
-export const PROTOCOL_ID_PSP = '2';
-
 export const runAndHandleErrors = (fn: () => Promise<unknown>) => {
   try {
     fn()
