@@ -4,26 +4,56 @@ import { encode } from '@api3/airnode-abi';
 import { AirnodeRrpAddresses } from '@api3/airnode-protocol';
 import { readOperationsRepository } from '@api3/operations/dist/utils/read-operations';
 import { ChainOptions } from '@api3/airnode-node';
-import {
-  readConfigurationData,
-  runAndHandleErrors,
-  writeJsonFile,
-  getDapiServerInterface,
-  sanitiseFilename,
-} from './utils';
+import { deriveEndpointId } from '@api3/airnode-admin';
+import prompts, { PromptObject } from 'prompts';
+import { runAndHandleErrors, writeJsonFile, getDapiServerInterface, sanitiseFilename } from './utils';
 import { Config, ChainConfig, NodeSettings, Subscriptions, Triggers, Templates, Endpoints } from '../../src';
+
+const questions = (): PromptObject[] => {
+  return [
+    {
+      type: 'select',
+      name: 'configurationType',
+      message: 'Do you want to use Operations repository or use local data?',
+      choices: [
+        { title: 'Operations Repository', value: 'operations', selected: true },
+        { title: 'Local', value: 'local' },
+      ],
+    },
+    {
+      type: (prev, values) => (values.configurationType.includes('local') ? 'confirm' : null),
+      name: 'localConfirm',
+      message:
+        'To use the scripts locally make sure your data is structured similar to the operations repository and is placed in "/scripts/config/data"',
+      initial: true,
+    },
+    {
+      type: 'autocomplete',
+      name: 'apiName',
+      message: 'What is the name of the API Integration?',
+      choices: (prev, values) =>
+        Object.keys(
+          readOperationsRepository(values.configurationType.includes('local') ? join(__dirname, 'data') : undefined)
+            .apis
+        ).map((api) => ({ title: api, value: api })),
+    },
+  ];
+};
 
 const main = async () => {
   const operationsRepository = readOperationsRepository();
-  const ConfigurationData = readConfigurationData();
+  const response = await prompts(questions(), {
+    onCancel: () => {
+      throw new Error('Aborted by the user');
+    },
+  });
+  const apiData = operationsRepository.apis[response.apiName];
 
-  const { airnode, xpub } = Object.values(ConfigurationData.beacons)[0] as any;
+  const { airnode, xpub } = apiData.apiMetadata;
 
-  const apiChains = [
-    ...new Set(Object.values(ConfigurationData.beacons).flatMap((beacon: any) => Object.keys(beacon.chains))),
-  ];
+  const apiChains = [...new Set(Object.values(apiData.beacons).flatMap((beacon: any) => Object.keys(beacon.chains)))];
 
-  const chains: ChainConfig[] = apiChains.map((chainName) => {
+  const chains: ChainConfig[] = apiChains.map((chainName): ChainConfig => {
     const chainId = parseInt(operationsRepository.chains[chainName].id);
     const contracts = {
       AirnodeRrp: AirnodeRrpAddresses[chainId] || '',
@@ -34,12 +64,23 @@ const main = async () => {
       fulfillmentGasLimit: 500000,
       gasPriceOracle: [
         {
+          gasPriceStrategy: 'latestBlockPercentileGasPrice',
+          percentile: 60,
+          minTransactionCount: 20,
+          pastToCompareInBlocks: 20,
+          maxDeviationMultiplier: 2,
+        },
+        {
+          gasPriceStrategy: 'providerRecommendedGasPrice',
+          recommendedGasPriceMultiplier: 1.2,
+        },
+        {
           gasPriceStrategy: 'constantGasPrice',
           gasPrice: {
             value: 10,
             unit: 'gwei',
           },
-        } as const,
+        },
       ],
     };
     const providers = {
@@ -52,20 +93,20 @@ const main = async () => {
       contracts,
       id: `${chainId}`,
       providers,
-      type: 'evm' as const,
+      type: 'evm',
       options,
     };
   });
 
-  const nodeSettings = {
+  const nodeSettings: NodeSettings = {
     airnodeWalletMnemonic: '${AIRNODE_WALLET_MNEMONIC}',
     airnodeAddress: airnode,
     airnodeXpub: xpub,
     logFormat: 'plain',
     logLevel: 'INFO',
-  } as NodeSettings;
+  };
 
-  const apiCredentials = Object.values(ConfigurationData.ois).flatMap((ois: any) =>
+  const apiCredentials = Object.values(apiData.ois).flatMap((ois: any) =>
     Object.keys(ois.apiSpecifications.components.securitySchemes).map((security) => ({
       oisTitle: ois.title,
       securitySchemeName: security,
@@ -73,7 +114,7 @@ const main = async () => {
     }))
   );
 
-  const oisSecrets = Object.values(ConfigurationData.ois).flatMap((ois: any) =>
+  const oisSecrets = Object.values(apiData.ois).flatMap((ois: any) =>
     Object.keys(ois.apiSpecifications.components.securitySchemes).map((security) =>
       `SS_${sanitiseFilename(security).toUpperCase()}=`.replace(/ /g, '_').replace(/\-/g, '_')
     )
@@ -93,71 +134,67 @@ const main = async () => {
     `STAGE=dev`,
   ];
 
-  const airkeeperSubscriptions: Subscriptions = Object.values(ConfigurationData.beacons)
-    .flatMap((beacon: any) =>
-      Object.entries(beacon.chains).map(([chainName, chain]: any) => {
-        const chainId = parseInt(operationsRepository.chains[chainName].id);
-        const dapiServerInteface = getDapiServerInterface();
-        const parameters = '0x';
-        const airnodeAddress = airnode;
-        const templateParameters = encode(beacon.template.decodedParameters);
-        const endpointId = ethers.utils.keccak256(
-          ethers.utils.defaultAbiCoder.encode(
-            ['string', 'string'],
-            [beacon.template.oisTitle, beacon.template.endpointName]
-          )
-        );
-        const templateId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [endpointId, templateParameters]);
-        const threshold = ethers.BigNumber.from(100000000)
-          .mul(chain.updateConditionPercentage * 100)
-          .div(10000);
-        const beaconUpdateSubscriptionConditionParameters = ethers.utils.defaultAbiCoder.encode(
-          ['uint256'],
-          [threshold]
-        );
-        const encodedBeaconUpdateSubscriptionConditions = encode([
-          {
-            type: 'bytes32',
-            name: '_conditionFunctionId',
-            value: ethers.utils.defaultAbiCoder.encode(
-              ['bytes4'],
-              [dapiServerInteface.getSighash('conditionPspBeaconUpdate')]
-            ),
-          },
-          { type: 'bytes', name: '_conditionParameters', value: beaconUpdateSubscriptionConditionParameters },
-        ]);
-        const dapiServerAddress = operationsRepository.chains[chainName].contracts.DapiServer;
-        const sponsor = chain.sponsor;
-        const beaconUpdateSubscriptionId = ethers.utils.keccak256(
-          ethers.utils.defaultAbiCoder.encode(
-            ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
-            [
-              chainId,
+  const airkeeperSubscriptions: Subscriptions = Object.values(apiData.beacons)
+    .flatMap((beacon) =>
+      Object.entries(beacon.chains)
+        .filter(([, chain]) => 'updateConditionPercentage' in chain)
+        .map(([chainName, chain]) => {
+          const chainId = parseInt(operationsRepository.chains[chainName].id);
+          const dapiServerInteface = getDapiServerInterface();
+          const parameters = '0x';
+          const airnodeAddress = beacon.airnodeAddress;
+          const templateId = beacon.templateId;
+
+          const threshold = ethers.BigNumber.from(100000000)
+            .mul(chain.updateConditionPercentage! * 100)
+            .div(10000);
+          const beaconUpdateSubscriptionConditionParameters = ethers.utils.defaultAbiCoder.encode(
+            ['uint256'],
+            [threshold]
+          );
+          const encodedBeaconUpdateSubscriptionConditions = encode([
+            {
+              type: 'bytes32',
+              name: '_conditionFunctionId',
+              value: ethers.utils.defaultAbiCoder.encode(
+                ['bytes4'],
+                [dapiServerInteface.getSighash('conditionPspBeaconUpdate')]
+              ),
+            },
+            { type: 'bytes', name: '_conditionParameters', value: beaconUpdateSubscriptionConditionParameters },
+          ]);
+          const dapiServerAddress = operationsRepository.chains[chainName].contracts.DapiServer;
+          const sponsor = chain.sponsor;
+          const beaconUpdateSubscriptionId = ethers.utils.keccak256(
+            ethers.utils.defaultAbiCoder.encode(
+              ['uint256', 'address', 'bytes32', 'bytes', 'bytes', 'address', 'address', 'address', 'bytes4'],
+              [
+                chainId,
+                airnodeAddress,
+                templateId,
+                parameters,
+                encodedBeaconUpdateSubscriptionConditions,
+                airnodeAddress,
+                sponsor,
+                dapiServerAddress,
+                dapiServerInteface.getSighash('fulfillPspBeaconUpdate'),
+              ]
+            )
+          );
+          return {
+            [beaconUpdateSubscriptionId]: {
+              chainId: `${chainId}`,
+              parameters,
               airnodeAddress,
               templateId,
-              parameters,
-              encodedBeaconUpdateSubscriptionConditions,
-              airnodeAddress,
+              conditions: encodedBeaconUpdateSubscriptionConditions,
+              relayer: airnodeAddress,
               sponsor,
-              dapiServerAddress,
-              dapiServerInteface.getSighash('fulfillPspBeaconUpdate'),
-            ]
-          )
-        );
-        return {
-          [beaconUpdateSubscriptionId]: {
-            chainId: `${chainId}`,
-            parameters,
-            airnodeAddress,
-            templateId,
-            conditions: encodedBeaconUpdateSubscriptionConditions,
-            relayer: airnodeAddress,
-            sponsor,
-            requester: dapiServerAddress,
-            fulfillFunctionId: dapiServerInteface.getSighash('fulfillPspBeaconUpdate'),
-          },
-        };
-      })
+              requester: dapiServerAddress,
+              fulfillFunctionId: dapiServerInteface.getSighash('fulfillPspBeaconUpdate'),
+            },
+          };
+        })
     )
     .reduce((subscriptionsObject, subscription) => ({ ...subscriptionsObject, ...subscription }), {});
 
@@ -166,37 +203,29 @@ const main = async () => {
     protoPsp: Object.keys(airkeeperSubscriptions),
   };
 
-  const airkeeperTemplates = Object.values(ConfigurationData.beacons)
-    .map((beacon: any) => beacon.template)
-    .reduce((templateObj: any, template: any) => {
-      const endpointId = ethers.utils.keccak256(
-        ethers.utils.defaultAbiCoder.encode(['string', 'string'], [template.oisTitle, template.endpointName])
-      );
-      const encodedParameters = encode(template.decodedParameters);
-      const templateId = ethers.utils.solidityKeccak256(['bytes32', 'bytes'], [endpointId, encodedParameters]);
-
-      return {
-        ...templateObj,
-        [templateId]: {
-          endpointId,
-          encodedParameters,
-        },
-      };
-    }, {}) as Templates;
-
-  const airkeeperEndpointArray = Object.values(ConfigurationData.ois).flatMap((ois: any) => {
-    return ois.endpoints.map((endpoint: any) => ({
-      [ethers.utils.keccak256(ethers.utils.defaultAbiCoder.encode(['string', 'string'], [ois.title, endpoint.name]))]: {
-        endpointName: endpoint.name,
-        oisTitle: ois.title,
+  const airkeeperTemplates: Templates = Object.values(apiData.templates).reduce(
+    (templateObj, template) => ({
+      ...templateObj,
+      [template.templateId]: {
+        endpointId: template.endpointId,
+        encodedParameters: template.parameters,
       },
-    }));
-  });
+    }),
+    {}
+  );
 
-  const AirkeeperEndpoints = airkeeperEndpointArray.reduce(
+  const airkeeperEndpointArray = await Promise.all(
+    Object.values(apiData.ois).flatMap((ois) => {
+      return ois.endpoints.map(async (endpoint) => ({
+        [await deriveEndpointId(ois.title, endpoint.name)]: { endpointName: endpoint.name, oisTitle: ois.title },
+      }));
+    })
+  );
+
+  const AirkeeperEndpoints: Endpoints = airkeeperEndpointArray.reduce(
     (endpointsObject, endpoint) => ({ ...endpointsObject, ...endpoint }),
     {}
-  ) as Endpoints;
+  );
 
   const airkeeper: Config = {
     chains: chains,
@@ -205,15 +234,19 @@ const main = async () => {
     subscriptions: airkeeperSubscriptions,
     templatesV1: airkeeperTemplates,
     endpoints: AirkeeperEndpoints,
-    ois: Object.values(ConfigurationData.ois),
+    ois: Object.values(apiData.ois),
     apiCredentials: apiCredentials,
   };
 
-  writeJsonFile(join(__dirname, 'airkeeper.json'), airkeeper);
-  writeJsonFile(join(__dirname, 'secrets'), { filename: '.env', content: airkeeperSecretsArray.join('\n') });
-  writeJsonFile(join(__dirname, 'aws'), { filename: '.env', content: awsSecretsArray.join('\n') });
-
-  console.log(airkeeper);
+  writeJsonFile(join(__dirname, '..', '..', 'config', 'airkeeper.json'), airkeeper);
+  writeJsonFile(join(__dirname, '..', '..', 'config', 'secrets'), {
+    filename: '.env',
+    content: airkeeperSecretsArray.join('\n'),
+  });
+  writeJsonFile(join(__dirname, '..', '..', 'config', 'aws'), {
+    filename: '.env',
+    content: awsSecretsArray.join('\n'),
+  });
 };
 
 if (require.main === module) runAndHandleErrors(main);

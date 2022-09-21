@@ -1,5 +1,4 @@
-import { writeFileSync, readdirSync, readFileSync, statSync } from 'fs';
-import { basename, extname, join } from 'path';
+import { writeFileSync } from 'fs';
 import * as protocol from '@api3/airnode-protocol-v1';
 import { format } from 'prettier';
 import { ethers } from 'ethers';
@@ -36,36 +35,6 @@ export const runAndHandleErrors = (fn: () => Promise<unknown>) => {
     console.log((error as Error).stack);
     process.exit(1);
   }
-};
-
-export const readJsonFile = (filePath: string) => JSON.parse(readFileSync(filePath).toString('utf8'));
-
-export const readConfigurationData = (target = join(__dirname, 'data')) => {
-  const rawConfigData = readFileOrDirectoryRecursively(target);
-
-  const ConfigData = {
-    ...rawConfigData,
-  };
-
-  return ConfigData;
-};
-
-export const readFileOrDirectoryRecursively = (target: string): any => {
-  const stats = statSync(target);
-  if (stats.isFile()) {
-    if (target.indexOf('.json') === -1) {
-      return { filename: basename(target), content: readFileSync(target).toString('binary') };
-    }
-
-    return readJsonFile(target);
-  }
-
-  return Object.fromEntries(
-    readdirSync(target).map((file) => [
-      basename(file, extname(file)),
-      readFileOrDirectoryRecursively(join(target, file)),
-    ])
-  );
 };
 
 export const writeJsonFile = (path: string, payload: any) => {
