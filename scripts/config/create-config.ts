@@ -12,8 +12,17 @@ import { Config, ChainConfig, NodeSettings, Subscriptions, Triggers, Templates, 
 const questions = (): PromptObject[] => {
   return [
     {
-      type: 'select',
+      type: 'multiselect',
       name: 'configurationType',
+      message: 'Which configurations do you want to generate?',
+      choices: [
+        { title: 'Proto-PSP', value: 'psp', selected: true },
+        { title: 'RRP Beacon Server', value: 'rrp', disabled: true },
+      ],
+    },
+    {
+      type: 'select',
+      name: 'dataType',
       message: 'Do you want to use Operations repository or use local data?',
       choices: [
         { title: 'Operations Repository', value: 'operations', selected: true },
@@ -21,7 +30,7 @@ const questions = (): PromptObject[] => {
       ],
     },
     {
-      type: (prev, values) => (values.configurationType.includes('local') ? 'confirm' : null),
+      type: (prev, values) => (values.dataType.includes('local') ? 'confirm' : null),
       name: 'localConfirm',
       message:
         'To use the scripts locally make sure your data is structured similar to the operations repository and is placed in "/scripts/config/data"',
@@ -33,8 +42,7 @@ const questions = (): PromptObject[] => {
       message: 'What is the name of the API Integration?',
       choices: (prev, values) =>
         Object.keys(
-          readOperationsRepository(values.configurationType.includes('local') ? join(__dirname, 'data') : undefined)
-            .apis
+          readOperationsRepository(values.dataType.includes('local') ? join(__dirname, 'data') : undefined).apis
         ).map((api) => ({ title: api, value: api })),
     },
   ];
@@ -199,6 +207,7 @@ const main = async () => {
     .reduce((subscriptionsObject, subscription) => ({ ...subscriptionsObject, ...subscription }), {});
 
   const airkeeperTriggers: Triggers = {
+    // TODO: Add rrpBeaconServer Triggers
     rrpBeaconServerKeeperJobs: [],
     protoPsp: Object.keys(airkeeperSubscriptions),
   };
