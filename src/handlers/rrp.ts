@@ -26,8 +26,6 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
   utils.logger.debug(`Event: ${JSON.stringify(event, null, 2)}`);
   utils.logger.debug(`Context: ${JSON.stringify(context, null, 2)}`);
 
-  const startedAt = new Date();
-
   // **************************************************************************
   // 1. Load config
   // **************************************************************************
@@ -47,6 +45,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
     meta: { 'Coordinator-ID': coordinatorId },
   });
 
+  const startedAt = new Date();
   utils.logger.info(`Airkeeper started at ${utils.formatDateTime(startedAt)}`);
 
   const { chains, nodeSettings, triggers, endpoints, ois, apiCredentials } = config;
@@ -165,6 +164,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
         });
         if (!currentBlock.success) {
           utils.logger.error('failed to fetch the blockNumber', currentBlock.error);
+          utils.removeMetadata(['Chain-ID', 'Provider']);
           return;
         }
 
@@ -203,6 +203,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
               'failed to fetch the keeperSponsorWallet transaction count',
               keeperSponsorWalletTransactionCount.error
             );
+            utils.removeMetadata(['Sponsor-Wallet']);
             return;
           }
           let nextNonce = keeperSponsorWalletTransactionCount.data;
@@ -281,7 +282,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
             // **************************************************************************
             // 3.2.3.5 Read beacon
             // **************************************************************************
-            utils.logger.debug('reading beacon value...', beaconIdLogOptions);
+            utils.logger.debug('reading onchain beacon value...', beaconIdLogOptions);
 
             // address(0) is considered whitelisted
             const voidSigner = new ethers.VoidSigner(ethers.constants.AddressZero, provider);
@@ -290,11 +291,7 @@ export const handler: ScheduledHandler = async (event: ScheduledEvent, context: 
               retries: RETRIES,
             });
             if (!beaconResponse.success) {
-              utils.logger.error(
-                `failed to read value for beaconId: ${beaconId}`,
-                beaconResponse.error,
-                beaconIdLogOptions
-              );
+              utils.logger.error(`failed to read on chain beacon value`, beaconResponse.error, beaconIdLogOptions);
               continue;
             }
             utils.logger.info(`beacon server value: ${beaconResponse.data.value.toString()}`, beaconIdLogOptions);

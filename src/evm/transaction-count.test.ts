@@ -1,7 +1,7 @@
 import * as node from '@api3/airnode-node';
+import * as protocol from '@api3/airnode-protocol';
 import { ethers } from 'ethers';
 import { getSponsorWalletAndTransactionCount } from './transaction-count';
-import { PROTOCOL_ID_PSP } from '../constants';
 
 describe('getSponsorWalletAndTransactionCount', () => {
   const airnodeWallet = ethers.Wallet.fromMnemonic(
@@ -20,7 +20,8 @@ describe('getSponsorWalletAndTransactionCount', () => {
 
     expect(getTransactionCountSpy).toHaveBeenNthCalledWith(
       1,
-      node.evm.deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, PROTOCOL_ID_PSP).address,
+      node.evm.deriveSponsorWalletFromMnemonic(airnodeWallet.mnemonic.phrase, sponsor, protocol.PROTOCOL_IDS.PSP)
+        .address,
       expect.any(Number)
     );
     expect(logs).toEqual(

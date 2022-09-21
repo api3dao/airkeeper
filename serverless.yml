@@ -2,12 +2,12 @@ service: airkeeper
 
 provider:
   name: aws
-  region: ${opt:region, env:REGION, 'us-east-1'}
-  stage: ${opt:stage, env:STAGE, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
   runtime: nodejs14.x
   memorySize: 512
   logRetentionInDays: 14
-  environment: ${file(load-secrets-env.js)}
+  environment: ${file(scripts/load-secrets-env.js)}
   iamRoleStatements:
     - Effect: 'Allow'
       Action:
@@ -16,7 +16,13 @@ provider:
 
 package:
   patterns:
-    - 'config/*.json'
+    - ./config/airkeeper.json
+    - '!.git/**'
+    - '!.github/**'
+    - '!.husky/**'
+    - '!src/**'
+    - '!test/**'
+    - '!.*'
 
 functions:
   rrp-beacon-update:
