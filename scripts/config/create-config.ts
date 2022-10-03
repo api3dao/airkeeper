@@ -134,13 +134,7 @@ const main = async () => {
     ...oisSecrets,
   ];
 
-  const awsSecretsArray = [
-    `AWS_ACCESS_KEY_ID=`,
-    `AWS_SECRET_ACCESS_KEY=`,
-    `AWS_SESSION_TOKEN=`,
-    `REGION=us-east-1`,
-    `STAGE=dev`,
-  ];
+  const awsSecretsArray = [`AWS_ACCESS_KEY_ID=`, `AWS_SECRET_ACCESS_KEY=`, `AWS_SESSION_TOKEN=`];
 
   const airkeeperSubscriptions: Subscriptions = Object.values(apiData.beacons)
     .flatMap((beacon) =>
