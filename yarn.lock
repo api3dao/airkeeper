@@ -18,6 +18,14 @@
     "@jridgewell/gen-mapping" "^0.1.0"
     "@jridgewell/trace-mapping" "^0.3.9"
 
+"@api3/airnode-abi@^0.7.5":
+  version "0.7.5"
+  resolved "https://registry.yarnpkg.com/@api3/airnode-abi/-/airnode-abi-0.7.5.tgz#f8d6ec2cad02e65105c74841adf77b0cd1e56ff4"
+  integrity sha512-RGey3Siz3iarK5u7dokGwssNRgRQnqZINLcT0O7+R6iM5G9ey5kLp8HMU8MWD+EUoRq/wc7rG6Cst51Z4uZbrw==
+  dependencies:
+    ethers "^5.4.5"
+    lodash "^4.17.21"
+
 "@api3/airnode-abi@^0.8.0":
   version "0.8.0"
   resolved "https://registry.yarnpkg.com/@api3/airnode-abi/-/airnode-abi-0.8.0.tgz#a4b7a19d8aaf677b8ee79eb349efd2d12c62b64a"
@@ -37,6 +45,33 @@
     bignumber.js "^9.1.0"
     ethers "^5.7.0"
     lodash "^4.17.21"
+
+"@api3/airnode-admin@0.8.0":
+  version "0.8.0"
+  resolved "https://registry.yarnpkg.com/@api3/airnode-admin/-/airnode-admin-0.8.0.tgz#c18f7bf72ca07a0291e62977ac6a64ebe0d47633"
+  integrity sha512-XQB/rO+7ZQq7+sl/vhKBB8GKg5tnt3xDnJNT0UnJ4UBy3XrAHAVKuLKnp7v2QQMagSwqRMwfNkxURSHt3yCdOg==
+  dependencies:
+    "@api3/airnode-abi" "^0.8.0"
+    "@api3/airnode-protocol" "^0.8.0"
+    "@api3/airnode-utilities" "^0.8.0"
+    "@api3/airnode-validator" "^0.8.0"
+    "@api3/promise-utils" "^0.3.0"
+    ethers "^5.7.0"
+    lodash "^4.17.21"
+    yargs "^17.5.1"
+
+"@api3/airnode-admin@^0.7.2":
+  version "0.7.5"
+  resolved "https://registry.yarnpkg.com/@api3/airnode-admin/-/airnode-admin-0.7.5.tgz#466bfe6e06b8f4168f3bd2eda1901add29ff564e"
+  integrity sha512-TwzloqW7utt9SvC1RgyHHko4hlX1GKm1DdLaXLdUFJhWgwar+dTkryQQMN2ijv1FHbBKXWS0xJMdv2VV3Phz3g==
+  dependencies:
+    "@api3/airnode-abi" "^0.7.5"
+    "@api3/airnode-protocol" "^0.7.5"
+    "@api3/airnode-utilities" "^0.7.5"
+    "@api3/airnode-validator" "^0.7.5"
+    ethers "^5.4.5"
+    lodash "^4.17.21"
+    yargs "^17.0.1"
 
 "@api3/airnode-node@^0.8.0":
   version "0.8.0"
@@ -67,6 +102,14 @@
   dependencies:
     "@openzeppelin/contracts" "^4.4.2"
 
+"@api3/airnode-protocol@^0.7.5":
+  version "0.7.5"
+  resolved "https://registry.yarnpkg.com/@api3/airnode-protocol/-/airnode-protocol-0.7.5.tgz#819186e6098d413dd5ee91da3d03c56103711ce2"
+  integrity sha512-Z5QEFlHPI1CfNewWmJt+6RW/tppbpXS9fSF+tIGchfiJQnZ50ojHDICZj40X38rdAu9QCnVjUAEPoNOb6pv0SQ==
+  dependencies:
+    "@openzeppelin/contracts" "4.4.2"
+    ethers "^5.4.5"
+
 "@api3/airnode-protocol@^0.8.0":
   version "0.8.0"
   resolved "https://registry.yarnpkg.com/@api3/airnode-protocol/-/airnode-protocol-0.8.0.tgz#5f7a08be3ba9601d8042cb39d5ec9aceda759c0b"
@@ -74,6 +117,15 @@
   dependencies:
     "@openzeppelin/contracts" "4.4.2"
     ethers "^5.7.0"
+
+"@api3/airnode-utilities@^0.7.5":
+  version "0.7.5"
+  resolved "https://registry.yarnpkg.com/@api3/airnode-utilities/-/airnode-utilities-0.7.5.tgz#5ae02514191af4849df3696809c71355f372a219"
+  integrity sha512-uiBxO/bvnAnaUMT7NxBD15oR+oO7mqQxAy8nKSx+1yQkM9Kbh6+ftuADUu0PzDnGLquKcZGbJm6ZNNOjWZ5/6w==
+  dependencies:
+    "@lifeomic/attempt" "^3.0.0"
+    date-fns "^2.16.1"
+    ethers "^5.4.5"
 
 "@api3/airnode-utilities@^0.8.0":
   version "0.8.0"
@@ -84,6 +136,20 @@
     "@api3/promise-utils" "^0.3.0"
     date-fns "^2.29.2"
     ethers "^5.7.0"
+
+"@api3/airnode-validator@^0.7.2", "@api3/airnode-validator@^0.7.5":
+  version "0.7.5"
+  resolved "https://registry.yarnpkg.com/@api3/airnode-validator/-/airnode-validator-0.7.5.tgz#3ca4d92e31e6a77214f5c3d73aa82c39cbb152ba"
+  integrity sha512-WXv5Qt5fgZRrTJXoIrpgmELmN6srKbNE5cWmMdFAu+bNHa0zkiiFeKR9zIf1X7QzjmA5E+XKk6vNssP5lhYEWg==
+  dependencies:
+    "@api3/airnode-utilities" "^0.7.5"
+    "@api3/promise-utils" "^0.3.0"
+    dotenv "^16.0.0"
+    ethers "^5.4.5"
+    lodash "^4.17.21"
+    ora "^5.4.1"
+    yargs "^17.0.1"
+    zod "^3.11.6"
 
 "@api3/airnode-validator@^0.8.0":
   version "0.8.0"
@@ -106,6 +172,15 @@
   dependencies:
     lodash "^4.17.21"
     zod "^3.17.3"
+
+"@api3/operations@^0.0.1-785b20f7ad527ae63c0f47f2a876da6c15c9a437":
+  version "0.0.1-785b20f7ad527ae63c0f47f2a876da6c15c9a437"
+  resolved "https://registry.yarnpkg.com/@api3/operations/-/operations-0.0.1-785b20f7ad527ae63c0f47f2a876da6c15c9a437.tgz#a15ee8d133eba8bd2c42660c4ac4d17c7352b8ce"
+  integrity sha512-xN6IAd7XX37U9yjGf9nvGIjvvSR0gN17yGL8ZcvGTDvlSdlecIgNiQUzfZVHRSEN1tJMeD6atkk0+884eIHUrA==
+  dependencies:
+    "@api3/airnode-admin" "^0.7.2"
+    "@api3/airnode-validator" "^0.7.2"
+    zod "^3.14.2"
 
 "@api3/promise-utils@^0.3.0":
   version "0.3.0"
@@ -1378,6 +1453,11 @@
   resolved "https://registry.yarnpkg.com/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz#8ace5259254426ccef57f3175bc64ed7095ed919"
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
+"@lifeomic/attempt@^3.0.0":
+  version "3.0.3"
+  resolved "https://registry.yarnpkg.com/@lifeomic/attempt/-/attempt-3.0.3.tgz#e742a5b85eb673e2f1746b0f39cb932cbc6145bb"
+  integrity sha512-GlM2AbzrErd/TmLL3E8hAHmb5Q7VhDJp35vIbyPVA5Rz55LZuRr8pwL3qrwwkVNo05gMX1J44gURKb4MHQZo7w==
+
 "@metamask/eth-sig-util@^4.0.0":
   version "4.0.1"
   resolved "https://registry.yarnpkg.com/@metamask/eth-sig-util/-/eth-sig-util-4.0.1.tgz#3ad61f6ea9ad73ba5b19db780d40d9aae5157088"
@@ -2177,6 +2257,13 @@
   version "2.6.3"
   resolved "https://registry.yarnpkg.com/@types/prettier/-/prettier-2.6.3.tgz#68ada76827b0010d0db071f739314fa429943d0a"
   integrity sha512-ymZk3LEC/fsut+/Q5qejp6R9O1rMxz3XaRHDV6kX8MrGAhOSPqVARbDi+EZvInBpw+BnCX3TD240byVkOfQsHg==
+
+"@types/prompts@^2.0.14":
+  version "2.0.14"
+  resolved "https://registry.yarnpkg.com/@types/prompts/-/prompts-2.0.14.tgz#10cb8899844bb0771cabe57c1becaaaca9a3b521"
+  integrity sha512-HZBd99fKxRWpYCErtm2/yxUZv6/PBI9J7N4TNFffl5JbrYMHBwF25DjQGTW3b3jmXq+9P6/8fCIb2ee57BFfYA==
+  dependencies:
+    "@types/node" "*"
 
 "@types/qs@*":
   version "6.9.7"
@@ -3615,7 +3702,7 @@ data-uri-to-buffer@3:
   resolved "https://registry.yarnpkg.com/data-uri-to-buffer/-/data-uri-to-buffer-3.0.1.tgz#594b8973938c5bc2c33046535785341abc4f3636"
   integrity sha512-WboRycPNsVw3B3TL559F7kuBUM4d8CgMEvk6xEJlOp7OBPjt6G7z8WMWlD2rOFZLk6OYfFIUGsCOWzcQH9K2og==
 
-date-fns@^2.29.2:
+date-fns@^2.16.1, date-fns@^2.29.2:
   version "2.29.2"
   resolved "https://registry.yarnpkg.com/date-fns/-/date-fns-2.29.2.tgz#0d4b3d0f3dff0f920820a070920f0d9662c51931"
   integrity sha512-0VNbwmWJDS/G3ySwFSJA3ayhbURMTJLtwM2DTxf9CWondCnh6DTNlO9JgRSq6ibf4eD0lfMJNBxUdEAHHix+bA==
@@ -3858,7 +3945,7 @@ dotenv@^10.0.0:
   resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-10.0.0.tgz#3d4227b8fb95f81096cdd2b66653fb2c7085ba81"
   integrity sha512-rlBi9d8jpv9Sf1klPjNfFAuWDjKLwTIJJ/VxtoTwIR6hnZxcEOQCZg2oIL3MWBYw5GpUDKOEnND7LXTbIpQ03Q==
 
-dotenv@^16.0.2:
+dotenv@^16.0.0, dotenv@^16.0.2:
   version "16.0.2"
   resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-16.0.2.tgz#0b0f8652c016a3858ef795024508cddc4bffc5bf"
   integrity sha512-JvpYKUmzQhYoIFgK2MOnF3bciIZoItIIoryihy0rIA+H4Jy0FmgyKYAHCTN98P5ybGSJcIFbh6QKeJdtZd1qhA==
@@ -4346,7 +4433,7 @@ ethereumjs-util@^6.0.0, ethereumjs-util@^6.2.1:
     ethjs-util "0.1.6"
     rlp "^2.2.3"
 
-ethers@^5.7.0:
+ethers@^5.4.5, ethers@^5.7.0:
   version "5.7.0"
   resolved "https://registry.yarnpkg.com/ethers/-/ethers-5.7.0.tgz#0055da174b9e076b242b8282638bc94e04b39835"
   integrity sha512-5Xhzp2ZQRi0Em+0OkOcRHxPzCfoBfgtOQA+RUylSkuHbhTEaQklnYi2hsWbRgs3ztJsXVXd9VKBcO1ScWL8YfA==
@@ -7533,7 +7620,7 @@ promptly@^2:
   dependencies:
     read "^1.0.4"
 
-prompts@^2.0.1:
+prompts@^2.0.1, prompts@^2.4.2:
   version "2.4.2"
   resolved "https://registry.yarnpkg.com/prompts/-/prompts-2.4.2.tgz#7b57e73b3a48029ad10ebd44f74b01722a4cb069"
   integrity sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q==
@@ -9143,7 +9230,7 @@ yargs@16.2.0:
     y18n "^5.0.5"
     yargs-parser "^20.2.2"
 
-yargs@^17.3.1, yargs@^17.5.1:
+yargs@^17.0.1, yargs@^17.3.1, yargs@^17.5.1:
   version "17.5.1"
   resolved "https://registry.yarnpkg.com/yargs/-/yargs-17.5.1.tgz#e109900cab6fcb7fd44b1d8249166feb0b36e58e"
   integrity sha512-t6YAJcxDkNX7NFYiVtKvWUz8l+PaKTLiL63mJYWR2GnHq2gjEWISzsLp9wg3aY36dY1j+gfIEL3pIF+XlJJfbA==
@@ -9182,6 +9269,11 @@ zip-stream@^4.1.0:
     archiver-utils "^2.1.0"
     compress-commons "^4.1.0"
     readable-stream "^3.6.0"
+
+zod@^3.11.6, zod@^3.14.2:
+  version "3.19.1"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-3.19.1.tgz#112f074a97b50bfc4772d4ad1576814bd8ac4473"
+  integrity sha512-LYjZsEDhCdYET9ikFu6dVPGp2YH9DegXjdJToSzD9rO6fy4qiRYFoyEYwps88OseJlPyl2NOe2iJuhEhL7IpEA==
 
 zod@^3.17.3:
   version "3.19.0"

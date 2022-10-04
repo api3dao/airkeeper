@@ -122,6 +122,18 @@ Make sure to have yarn installed, then run:
 yarn install
 ```
 
+### Generating Airkeeper config files
+
+Airkeeper config files can be generated using the following cli command:
+
+```sh
+yarn run create-config
+```
+
+a cli prompt will ask for the location of the reference data, you can choose to use the data in the
+[operations repository](https://github.com/api3dao/operations) or reference data stored locally in
+`/scripts/config/data`. The local data must follow the same directory structure as the operations repository.
+
 ### Running Airkeeper locally
 
 Follow these steps to run Airkeeper locally:

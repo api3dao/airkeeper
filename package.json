@@ -48,6 +48,7 @@
     "sls:invoke:psp-beacon-update": "sls invoke --function psp-beacon-update",
     "sls:invoke-local:psp-beacon-update": "yarn build && sls invoke local --function psp-beacon-update --param='provider=local'",
     "setup:psp-local": "node scripts/psp-beacon-local-setup.js",
+    "create-config": "ts-node scripts/config/create-config.ts",
     "test": "jest --selectProjects unit",
     "test:e2e": "SILENCE_LOGGER=true jest --selectProjects e2e",
     "prepare": "husky install"
@@ -60,6 +61,7 @@
     "@api3/airnode-protocol-v1": "^0.7.0",
     "@api3/airnode-utilities": "^0.8.0",
     "@api3/airnode-validator": "^0.8.0",
+    "@api3/airnode-admin": "0.8.0",
     "@api3/promise-utils": "^0.3.0",
     "aws-lambda": "^1.0.7",
     "dotenv-safe": "^8.2.0",
@@ -68,6 +70,7 @@
     "zod": "^3.17.3"
   },
   "devDependencies": {
+    "@api3/operations": "^0.0.1-785b20f7ad527ae63c0f47f2a876da6c15c9a437",
     "@nomiclabs/hardhat-ethers": "^2.1.1",
     "@types/aws-lambda": "^8.10.103",
     "@types/dotenv-safe": "^8.1.2",
@@ -75,6 +78,7 @@
     "@types/jest": "^29.0.0",
     "@types/lodash": "^4.14.184",
     "@types/morgan": "^1.9.3",
+    "@types/prompts": "^2.0.14",
     "@types/node": "^18.7.16",
     "@types/serverless": "^3.12.8",
     "@typescript-eslint/eslint-plugin": "^5.36.2",
@@ -86,6 +90,7 @@
     "eslint-plugin-jest": "^27.0.2",
     "express": "^4.17.3",
     "hardhat": "^2.11.1",
+    "prompts": "^2.4.2",
     "husky": "^8.0.1",
     "jest": "^29.0.2",
     "lint-staged": "^13.0.3",
